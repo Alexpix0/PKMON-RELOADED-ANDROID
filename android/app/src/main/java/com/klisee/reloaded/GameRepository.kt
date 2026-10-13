@@ -236,9 +236,10 @@ class GameRepository(private val context: Context) {
             val data = File(gameDir, "data")
             if (!data.isDirectory) error("Primero instala el juego.")
             var files = 0
-            // A save is a .savc file; the .data and .nfo beside it only describe it. Counting every
-            // file in the zip said "51 partidas" when there was really one.
             var saves = 0
+            val partidasFolder = File(data, "partidas").apply { mkdirs() }
+            val cleanedSlots = mutableSetOf<String>()
+
             context.contentResolver.openInputStream(uri)?.use { input ->
                 ZipInputStream(input.buffered()).use { zip ->
                     var entry = zip.nextEntry
@@ -247,6 +248,30 @@ class GameRepository(private val context: Context) {
                         if (name.startsWith("data/", ignoreCase = true)) {
                             name = name.substring(5)
                         }
+
+                        // Si los archivos están en la raíz del zip (ej: el usuario comprimió seleccionando
+                        // los archivos de la carpeta directamente: reloaded1.savc, reloaded1.nfo...)
+                        val isDirectSave = !name.contains('/') && (
+                            name.startsWith("reloaded", ignoreCase = true) ||
+                            name.endsWith(".savc", ignoreCase = true) ||
+                            name.endsWith(".data", ignoreCase = true) ||
+                            name.endsWith(".nfo", ignoreCase = true)
+                        )
+                        if (isDirectSave) {
+                            name = "partidas/$name"
+                        }
+
+                        // Limpiar copias de seguridad viejas (_bk) del slot antes de escribir
+                        val slotMatch = Regex("^partidas/reloaded(\\d+)[._]", RegexOption.IGNORE_CASE).find(name)
+                        if (slotMatch != null) {
+                            val slotNum = slotMatch.groupValues[1]
+                            if (cleanedSlots.add(slotNum)) {
+                                partidasFolder.listFiles().orEmpty()
+                                    .filter { it.name.startsWith("reloaded$slotNum.", ignoreCase = true) || it.name.startsWith("reloaded${slotNum}_", ignoreCase = true) }
+                                    .forEach { it.delete() }
+                            }
+                        }
+
                         val target = File(data, name)
                         // Only the save folders, and never a path that escapes them.
                         val wanted = saveFolders.any { name.startsWith("$it/", ignoreCase = true) }
