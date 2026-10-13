@@ -1763,8 +1763,8 @@ impl RendererTrait for RendererImpl {
                     texture: old_tex,
                     zbuf: old_zbuf,
                     fbo: old_fbo,
-                    width: old_width,
-                    height: old_height,
+                    width: old_width as u32,
+                    height: old_height as u32,
                 });
             } else {
                 // delete old texture and fbo
