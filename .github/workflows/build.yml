@@ -51,5 +51,5 @@ jobs:
       - name: Subir APK como artefacto descargable
         uses: actions/upload-artifact@v4
         with:
-          name: pokemon-reloaded-armando-release
+          name: pokemon-reloaded-0.3.1-EX-release
           path: android/app/build/outputs/apk/release/*.apk

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Warning
+import java.io.File
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -67,6 +68,9 @@ fun MySavesScreen(repo: GameRepository, onBack: () -> Unit) {
     // Which slot a pending export belongs to: the picker answers later, and only gives a file.
     var exporting by remember { mutableStateOf<Int?>(null) }
     var importing by remember { mutableStateOf<Int?>(null) }
+    var cloneSource by remember { mutableStateOf<Int?>(null) }
+    var showBackupsDialog by remember { mutableStateOf(false) }
+    var restoreBackupTarget by remember { mutableStateOf<File?>(null) }
     // Deleting asks twice, and the second time says plainly what it costs.
     var askFirst by remember { mutableStateOf<Int?>(null) }
     var askSecond by remember { mutableStateOf<Int?>(null) }
@@ -87,6 +91,120 @@ fun MySavesScreen(repo: GameRepository, onBack: () -> Unit) {
             }
             revision++
         }
+    }
+
+    cloneSource?.let { src ->
+        AlertDialog(
+            onDismissRequest = { cloneSource = null },
+            title = { Text("Clonar Partida $src") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Selecciona la ranura de destino a la que deseas duplicar esta partida:")
+                    (1..3).filter { it != src }.forEach { target ->
+                        TextButton(
+                            onClick = {
+                                val from = src
+                                cloneSource = null
+                                scope.launch {
+                                    val res = repo.cloneSlot(from, target)
+                                    snackbar.showSnackbar(
+                                        res.fold(
+                                            { "Partida duplicada en Slot $target exitosamente." },
+                                            { "Error al clonar: ${it.message}" }
+                                        )
+                                    )
+                                    revision++
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clonar a Slot $target")
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { cloneSource = null }) { Text("Cancelar") } },
+        )
+    }
+
+    if (showBackupsDialog) {
+        val backups = remember(revision) { repo.autoBackupsList() }
+        AlertDialog(
+            onDismissRequest = { showBackupsDialog = false },
+            title = { Text("Copias de seguridad automáticas") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (backups.isEmpty()) {
+                        Text("Aún no hay copias automáticas guardadas. Se crean de forma automática cada vez que inicias el juego desde el lanzador.")
+                    } else {
+                        Text("Historial de las últimas copias creadas antes de jugar:")
+                        backups.forEach { file ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            formatDate(file.lastModified()) + " " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(file.lastModified())),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(formatBytes(file.length()), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    TextButton(onClick = {
+                                        showBackupsDialog = false
+                                        restoreBackupTarget = file
+                                    }) {
+                                        Text("Restaurar")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBackupsDialog = false }) { Text("Cerrar") }
+            }
+        )
+    }
+
+    restoreBackupTarget?.let { file ->
+        AlertDialog(
+            onDismissRequest = { restoreBackupTarget = null },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+            title = { Text("¿Restaurar copia de seguridad?") },
+            text = {
+                Text("Esto reemplazará las partidas actuales con la copia del ${formatDate(file.lastModified())}. ¿Deseas continuar?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val targetFile = file
+                    restoreBackupTarget = null
+                    scope.launch {
+                        val res = repo.restoreAutoBackup(targetFile)
+                        snackbar.showSnackbar(
+                            res.fold(
+                                { "Partidas restauradas desde la copia automática ($it ranuras)." },
+                                { "Error al restaurar: ${it.message}" }
+                            )
+                        )
+                        revision++
+                    }
+                }) { Text("Restaurar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreBackupTarget = null }) { Text("Cancelar") }
+            }
+        )
     }
 
     askFirst?.let { index ->
@@ -224,6 +342,7 @@ fun MySavesScreen(repo: GameRepository, onBack: () -> Unit) {
                         importing = slot.index
                         restore.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
                     },
+                    onClone = { cloneSource = slot.index },
                     onDelete = { askFirst = slot.index },
                 )
             }
@@ -233,6 +352,10 @@ fun MySavesScreen(repo: GameRepository, onBack: () -> Unit) {
             // and out. One under the other, because side by side the longer label wrapped and left
             // the two buttons uneven.
             Column {
+                TextButton(
+                    onClick = { showBackupsDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Ver copias de seguridad automáticas") }
                 TextButton(
                     onClick = { saveAll.launch("partidas-reloaded.zip") },
                     modifier = Modifier.fillMaxWidth(),
@@ -254,6 +377,7 @@ private fun SaveSlotCard(
     slot: GameRepository.SaveSlot,
     onExport: () -> Unit,
     onImport: () -> Unit,
+    onClone: (() -> Unit)? = null,
     onDelete: () -> Unit,
 ) {
     val filled = slot.name != null
@@ -317,12 +441,17 @@ private fun SaveSlotCard(
                 TextButton(onClick = onExport, enabled = filled) {
                     Icon(Icons.Filled.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.size(8.dp))
-                    Text("Exportar partida")
+                    Text("Exportar")
                 }
                 TextButton(onClick = onImport) {
                     Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.size(8.dp))
-                    Text("Importar partida")
+                    Text("Importar")
+                }
+                if (filled && onClone != null) {
+                    TextButton(onClick = onClone) {
+                        Text("Clonar")
+                    }
                 }
             }
         }

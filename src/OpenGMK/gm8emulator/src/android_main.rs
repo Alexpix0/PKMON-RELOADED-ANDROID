@@ -179,6 +179,12 @@ fn load_controls() {
                 }
             } else if name.trim() == "haptics" {
                 set_haptics_enabled(value.trim() != "0");
+            } else if name.trim() == "deadzone" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_joystick_dead(pct);
+                }
+            } else if name.trim() == "num_keys" {
+                crate::touch_controls::set_num_keys_visible(value.trim() != "0");
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }

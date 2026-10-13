@@ -171,8 +171,24 @@ pub fn pad_active() -> bool {
     PAD_ACTIVE.load(Ordering::Relaxed)
 }
 
+static NUM_KEYS_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_num_keys_visible(visible: bool) {
+    NUM_KEYS_VISIBLE.store(visible, Ordering::Relaxed);
+}
+
+pub fn num_keys_visible() -> bool {
+    NUM_KEYS_VISIBLE.load(Ordering::Relaxed)
+}
+
 pub fn is_active(index: usize) -> bool {
-    !pad_active() && CONTROLS[index].contexts & current_context() != 0
+    if pad_active() || CONTROLS[index].contexts & current_context() == 0 {
+        return false;
+    }
+    if index < 6 && !num_keys_visible() {
+        return false;
+    }
+    true
 }
 
 /// The joystick drives the arrow keys, which is how the game's menus (the ones that still show
@@ -257,8 +273,15 @@ pub const JOYSTICK_CX: f32 = 0.135;
 pub const JOYSTICK_CY: f32 = 0.700;
 /// Radius as a fraction of the window *height*, so the base stays round on screen.
 pub const JOYSTICK_R: f32 = 0.200;
-/// Dead zone, as a fraction of the radius, before a direction registers.
-pub const JOYSTICK_DEAD: f32 = 0.35;
+static JOYSTICK_DEAD: AtomicU32 = AtomicU32::new(35);
+
+pub fn set_joystick_dead(pct: u32) {
+    JOYSTICK_DEAD.store(pct.clamp(10, 60), Ordering::Relaxed);
+}
+
+pub fn joystick_dead() -> f32 {
+    JOYSTICK_DEAD.load(Ordering::Relaxed) as f32 / 100.0
+}
 
 pub fn joystick_center() -> (f32, f32) {
     (JOYSTICK_CX + margin_x(), JOYSTICK_CY - margin_y())
@@ -292,11 +315,12 @@ pub fn joystick_dirs(nx: f32, ny: f32, ww: f32, wh: f32) -> [bool; 4] {
 /// the range -1..1, and this is the same dead zone the on-screen joystick uses - a physical pad's
 /// stick goes through here too, so both feel identical.
 pub fn stick_dirs(dx: f32, dy: f32) -> [bool; 4] {
+    let dead = joystick_dead();
     [
-        dy < -JOYSTICK_DEAD,
-        dy > JOYSTICK_DEAD,
-        dx < -JOYSTICK_DEAD,
-        dx > JOYSTICK_DEAD,
+        dy < -dead,
+        dy > dead,
+        dx < -dead,
+        dx > dead,
     ]
 }
 

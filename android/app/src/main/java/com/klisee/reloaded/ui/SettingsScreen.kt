@@ -71,6 +71,7 @@ fun SettingsScreen(
     var status by remember(revision) { mutableStateOf(repo.status()) }
     var keepScreenOn by remember { mutableStateOf(prefs.keepScreenOn) }
     var keepAspect by remember { mutableStateOf(prefs.keepAspect) }
+    var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
     var checking by remember { mutableStateOf(false) }
     val appVersion = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
@@ -200,6 +201,21 @@ fun SettingsScreen(
                     onCheckedChange = {
                         keepScreenOn = it
                         prefs.keepScreenOn = it
+                    },
+                )
+            }
+
+            SettingsGroup("Rendimiento") {
+                SwitchRow(
+                    icon = Icons.Filled.Memory,
+                    title = "Modo Ahorro de Energía",
+                    subtitle = "Optimiza consumo térmico y batería para sesiones largas",
+                    checked = batterySaver,
+                    items = 1,
+                    index = 0,
+                    onCheckedChange = {
+                        batterySaver = it
+                        prefs.batterySaver = it
                     },
                 )
             }

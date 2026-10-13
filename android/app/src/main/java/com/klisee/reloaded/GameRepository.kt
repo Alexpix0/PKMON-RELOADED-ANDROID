@@ -241,6 +241,100 @@ class GameRepository(private val context: Context) {
         }.getOrDefault(false)
     }
 
+    /** Returns list of auto-backup zip files, ordered newest to oldest. */
+    fun autoBackupsList(): List<File> {
+        val backupRoot = File(files, "backups_auto")
+        if (!backupRoot.isDirectory) return emptyList()
+        return backupRoot.listFiles()?.filter { it.extension.equals("zip", ignoreCase = true) }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
+    }
+
+    /** Restores an automatic backup zip file directly. */
+    suspend fun restoreAutoBackup(zipFile: File): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val data = File(gameDir, "data")
+            if (!data.isDirectory) error("Primero instala el juego.")
+            if (!zipFile.isFile) error("No se encontró el archivo de copia.")
+            var filesCount = 0
+            var saves = 0
+            val partidasFolder = File(data, "partidas").apply { mkdirs() }
+            val cleanedSlots = mutableSetOf<String>()
+
+            ZipInputStream(zipFile.inputStream().buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    var name = entry.name.replace('\\', '/')
+                    if (name.startsWith("data/", ignoreCase = true)) {
+                        name = name.substring(5)
+                    }
+                    val isDirectSave = !name.contains('/') && (
+                        name.startsWith("reloaded", ignoreCase = true) ||
+                        name.endsWith(".savc", ignoreCase = true) ||
+                        name.endsWith(".data", ignoreCase = true) ||
+                        name.endsWith(".nfo", ignoreCase = true)
+                    )
+                    if (isDirectSave) {
+                        name = "partidas/$name"
+                    }
+                    val slotMatch = Regex("^partidas/reloaded(\\d+)[._]", RegexOption.IGNORE_CASE).find(name)
+                    if (slotMatch != null) {
+                        val slotNum = slotMatch.groupValues[1]
+                        if (cleanedSlots.add(slotNum)) {
+                            partidasFolder.listFiles().orEmpty()
+                                .filter { it.name.startsWith("reloaded$slotNum.", ignoreCase = true) || it.name.startsWith("reloaded${slotNum}_", ignoreCase = true) }
+                                .forEach { it.delete() }
+                        }
+                    }
+                    val target = File(data, name)
+                    val wanted = saveFolders.any { name.startsWith("$it/", ignoreCase = true) }
+                    val safe = target.canonicalPath.startsWith(data.canonicalPath + File.separator)
+                    if (!entry.isDirectory && wanted && safe) {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { zip.copyTo(it) }
+                        filesCount++
+                        val isSlot = name.startsWith("partidas/", ignoreCase = true) &&
+                            name.endsWith(".savc", ignoreCase = true) &&
+                            !name.contains("_bk", ignoreCase = true)
+                        if (isSlot) saves++
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+            if (filesCount == 0) error("La copia de seguridad no contenía partidas válidas.")
+            saves
+        }
+    }
+
+    /**
+     * Clones an existing save slot into a target slot (e.g. slot 1 to slot 2).
+     */
+    suspend fun cloneSlot(fromIndex: Int, toIndex: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (fromIndex == toIndex) return@runCatching
+            val folder = File(gameDir, "data/partidas")
+            if (!folder.isDirectory) error("Primero instala el juego.")
+            val prefix = "reloaded$fromIndex"
+            val sourceFiles = folder.listFiles().orEmpty()
+                .filter { it.name.startsWith("$prefix.", ignoreCase = true) || it.name.startsWith("${prefix}_", ignoreCase = true) }
+            if (sourceFiles.isEmpty()) error("La ranura $fromIndex está vacía.")
+
+            // Delete target slot files first
+            val targetPrefix = "reloaded$toIndex"
+            folder.listFiles().orEmpty()
+                .filter { it.name.startsWith("$targetPrefix.", ignoreCase = true) || it.name.startsWith("${targetPrefix}_", ignoreCase = true) }
+                .forEach { it.delete() }
+
+            // Copy each file with new slot name
+            sourceFiles.forEach { src ->
+                val rest = src.name.substring(prefix.length)
+                val targetFile = File(folder, "$targetPrefix$rest")
+                src.copyTo(targetFile, overwrite = true)
+            }
+        }
+    }
+
     /** Zips the saves into the cache, ready to be handed to a file picker. */
     suspend fun exportSaves(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {

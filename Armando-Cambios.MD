@@ -191,6 +191,38 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 
 ### E. Rediseño e Identidad Visual del Lanzador
 * **Archivos:** [`HomeScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/HomeScreen.kt), [`AboutScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/AboutScreen.kt), [`strings.xml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/values/strings.xml)
-* **Mejora:** Nombre oficial de la aplicación actualizado a **Pokemon Reloaded EX**, insignia visual destacada `0.3.0 EX` en la barra superior de la pantalla de inicio, y créditos de la edición EX en la pantalla Acerca de.
+* **Mejora:** Nombre oficial de la aplicación actualizado a **Pokemon Reloaded EX**, insignia visual destacada en la barra superior de la pantalla de inicio, y créditos de la edición EX en la pantalla Acerca de.
+
+---
+
+## 9. Versión 0.3.1 EX — Edición Definitiva QoL y Rendimiento (Alexpix0 / Armando)
+
+* **Versión oficial:** `versionCode = 8`, `versionName = "0.3.1 EX"`.
+* **Firma permanente unificada:** `release.keystore` configurado tanto en builds `release` como `debug` para garantizar que cualquier APK compilada instale encima sin conflictos de firma.
+
+### A. Tarjeta "Continuar Partida" (Quick Resume) en Inicio
+* **Archivo:** [`HomeScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/HomeScreen.kt)
+* **Mejora:** Detección automática de la partida guardada activa. Se muestra un panel visual destacado con el nombre del entrenador, ranura, ubicación del juego y progreso de Pokédex (Vistos / Capturados) sin necesidad de entrar a menús secundarios.
+
+### B. Gestor y Restaurador de Copias de Seguridad Automáticas
+* **Archivos:** [`GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt), [`MySavesScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/MySavesScreen.kt)
+* **Mejora:** En "Mis partidas", nuevo visor de historial con las últimas 5 copias de seguridad generadas automáticamente antes de cada sesión de juego. Permite restaurar el estado completo de las partidas en 1 solo toque si ocurrió algún error o pérdida involuntaria.
+
+### C. Clonación y Duplicación de Ranuras de Partida (Slot Cloning)
+* **Archivos:** [`GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt), [`MySavesScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/MySavesScreen.kt)
+* **Mejora:** Botón "Clonar" en cada ranura ocupada que permite copiar directamente la partida (archivos `.savc`, `.data`, `.nfo`) a cualquiera de las otras dos ranuras (Slot 1, 2 o 3) para probar rutas alternativas, legendarios o tener respaldos manuales.
+
+### D. Zona Muerta Configurable del Joystick Táctil (Deadzone)
+* **Archivos:** [`touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs), [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs), [`ControlsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/ControlsScreen.kt), [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+* **Mejora:** Control deslizante (slider) del 15% al 50% para calibrar la sensibilidad del joystick virtual analógico. Los porcentajes bajos dan giros instantáneos en combate y los porcentajes más altos previenen pasos falsos al interactuar.
+
+### E. Ocultación / Visibilidad de Atajos Numéricos (1 al 6)
+* **Archivos:** [`touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs), [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs), [`ControlsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/ControlsScreen.kt), [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+* **Mejora:** Interruptor en Ajustes de Controles para ocultar la hilera superior de botones numéricos (1 a 6) para quienes prefieran una pantalla más limpia y despejada durante la exploración.
+
+### F. Modo Ahorro de Energía en Ajustes
+* **Archivos:** [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt), [`SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Mejora:** Nuevo ajuste de consumo para mantener el procesador y la batería en rangos óptimos de temperatura durante sesiones prolongadas en dispositivos con chips MediaTek Helio.
+
 
 

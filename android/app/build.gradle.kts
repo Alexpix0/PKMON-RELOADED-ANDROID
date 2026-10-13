@@ -39,8 +39,8 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.3.0 EX"
+        versionCode = 8
+        versionName = "0.3.1 EX"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -65,6 +65,9 @@ android {
         release {
             isMinifyEnabled = false
             // Always signed with the repository release key so all updates can install seamlessly over each other
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
             signingConfig = signingConfigs.getByName("release")
         }
     }

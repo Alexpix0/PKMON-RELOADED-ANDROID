@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -133,7 +135,7 @@ fun HomeScreen(
                             shape = MaterialTheme.shapes.small,
                         ) {
                             Text(
-                                text = "0.3.0 EX",
+                                text = "0.3.1 EX",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -153,11 +155,14 @@ fun HomeScreen(
         bottomBar = bottomBar,
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
+        val activeSlot = remember(revision, status) {
+            if (installed != null) repo.saveSlots().firstOrNull { it.name != null } else null
+        }
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                 when {
                     loadingPost -> NewsPlaceholder()
@@ -173,6 +178,46 @@ fun HomeScreen(
                         onAction = { blogAttempt++ },
                     )
                     else -> NoticeCard(text = "El blog no devolvio ninguna entrada.", action = "Reintentar", onAction = { blogAttempt++ })
+                }
+
+                activeSlot?.let { slot ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    shape = MaterialTheme.shapes.small,
+                                ) {
+                                    Text(
+                                        text = "PARTIDA GUARDADA",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Slot ${slot.index}: ${slot.name.orEmpty()}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "${slot.place ?: "Región Star"} • Vistos: ${slot.seen ?: "?"} • Capturados: ${slot.caught ?: "?"}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
                 }
             }
 

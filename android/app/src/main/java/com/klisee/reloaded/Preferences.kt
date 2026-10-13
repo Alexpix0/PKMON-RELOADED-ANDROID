@@ -79,15 +79,36 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("touchHaptics", value).apply()
         }
 
+    /** Joystick deadzone in percentage (10 to 60, default 35). */
+    var touchDeadzone: Int
+        get() = prefs.getInt("touchDeadzone", 35)
+        set(value) {
+            prefs.edit().putInt("touchDeadzone", value).apply()
+        }
+
+    /** Whether to show the top 1-6 party/shortcut buttons on screen. */
+    var showNumKeys: Boolean
+        get() = prefs.getBoolean("showNumKeys", true)
+        set(value) {
+            prefs.edit().putBoolean("showNumKeys", value).apply()
+        }
+
     /** Mirrors the current controls into the file the emulator reads at startup. */
     fun writeControls(filesDir: File, padConnected: Boolean) =
-        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY, touchHaptics)
+        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY, touchHaptics, touchDeadzone, showNumKeys)
 
     /** Keep the shape the game was drawn for, with bands at the sides, instead of filling the screen. */
     var keepAspect: Boolean
         get() = prefs.getBoolean("keepAspect", false)
         set(value) {
             prefs.edit().putBoolean("keepAspect", value).apply()
+        }
+
+    /** Battery saver mode to keep CPU and GPU cool on prolonged gaming sessions. */
+    var batterySaver: Boolean
+        get() = prefs.getBoolean("batterySaver", false)
+        set(value) {
+            prefs.edit().putBoolean("batterySaver", value).apply()
         }
 
     /** Mirrors the video mode into the file the emulator reads at startup. */
