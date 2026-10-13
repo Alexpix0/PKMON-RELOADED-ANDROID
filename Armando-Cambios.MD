@@ -61,6 +61,13 @@ Documento de seguimiento de todos los cambios, correcciones y optimizaciones rea
 
 ---
 
+### H. Completitud de campos en inicializadores de RendererImpl y Framebuffer
+* **Archivo modificado:** [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+* **Problema:** Faltaba asignar el campo `current_atlas` en el constructor de `RendererImpl` y los campos `width` y `height` en `stored_framebuffer` dentro de `resize_framebuffer`.
+* **Solución:** Se inicializó `current_atlas: 0` y se mapearon `width: old_width`, `height: old_height`.
+
+---
+
 ## 2. Optimización de Rendimiento y Tiempos de Carga
 
 ### A. Subida por lotes de texturas del Atlas (`push_atlases`)

@@ -669,6 +669,7 @@ impl RendererImpl {
                 texture_rects: vec![],
                 stock_texture_count: 0,
                 stock_atlas_count: 0,
+                current_atlas: 0,
                 framebuffer: Framebuffer {
                     texture: framebuffer_texture,
                     zbuf: framebuffer_zbuf,
@@ -1758,7 +1759,13 @@ impl RendererTrait for RendererImpl {
                     self.gl.DeleteTextures(1, &framebuffer.zbuf);
                     self.gl.DeleteFramebuffers(1, &framebuffer.fbo);
                 }
-                self.stored_framebuffer = Some(Framebuffer { texture: old_tex, zbuf: old_zbuf, fbo: old_fbo });
+                self.stored_framebuffer = Some(Framebuffer {
+                    texture: old_tex,
+                    zbuf: old_zbuf,
+                    fbo: old_fbo,
+                    width: old_width,
+                    height: old_height,
+                });
             } else {
                 // delete old texture and fbo
                 self.gl.DeleteTextures(1, &old_tex);
