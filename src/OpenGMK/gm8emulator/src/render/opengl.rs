@@ -206,6 +206,8 @@ pub struct RendererImpl {
     stock_texture_count: usize,
     stock_atlas_count: u32,
     current_atlas: u32,
+    current_texture: Option<GLuint>,
+    last_filter_mode: Option<GLenum>,
     framebuffer: Framebuffer,
     stored_framebuffer: Option<Framebuffer>,
     zbuf_format: GLint,
@@ -670,6 +672,8 @@ impl RendererImpl {
                 stock_texture_count: 0,
                 stock_atlas_count: 0,
                 current_atlas: 0,
+                current_texture: None,
+                last_filter_mode: None,
                 framebuffer: Framebuffer {
                     texture: framebuffer_texture,
                     zbuf: framebuffer_zbuf,
@@ -845,10 +849,18 @@ impl RendererImpl {
             self.gl.BindVertexArray(self.vao);
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.commands_vbo);
 
-            self.gl.BindTexture(gl::TEXTURE_2D, self.texture_ids[atlas_id as usize].unwrap());
+            let tex_id = self.texture_ids[atlas_id as usize].unwrap();
             let filter_mode = if self.queue_render_state.interpolate_pixels.into() { gl::LINEAR } else { gl::NEAREST };
-            self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, filter_mode as _);
-            self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, filter_mode as _);
+            if self.current_texture != Some(tex_id) {
+                self.gl.BindTexture(gl::TEXTURE_2D, tex_id);
+                self.current_texture = Some(tex_id);
+                self.last_filter_mode = None;
+            }
+            if self.last_filter_mode != Some(filter_mode) {
+                self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, filter_mode as _);
+                self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, filter_mode as _);
+                self.last_filter_mode = Some(filter_mode);
+            }
 
             self.gl.BufferData(
                 gl::ARRAY_BUFFER,
@@ -2870,6 +2882,7 @@ impl RendererTrait for RendererImpl {
             debug_assert_eq!(self.gl.GetError(), 0);
 
             // Draw framebuffer to screen
+            self.current_texture = None;
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
             debug_assert_eq!(self.gl.GetError(), 0);
             self.clear_view((0.0, 0.0, 0.0).into(), 1.0); // to avoid weird strobe lights (???)

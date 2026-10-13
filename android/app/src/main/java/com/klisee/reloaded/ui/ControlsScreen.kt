@@ -94,6 +94,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     var scale by remember { mutableStateOf(prefs.touchScale.toFloat()) }
     var marginX by remember { mutableStateOf(prefs.touchMarginX.toFloat()) }
     var marginY by remember { mutableStateOf(prefs.touchMarginY.toFloat()) }
+    var haptics by remember { mutableStateOf(prefs.touchHaptics) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
@@ -106,6 +107,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         newScale: Int = scale.toInt(),
         newMarginX: Int = marginX.toInt(),
         newMarginY: Int = marginY.toInt(),
+        newHaptics: Boolean = haptics,
     ) {
         bindings = newBindings
         stick = newStick
@@ -113,12 +115,14 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         scale = newScale.toFloat()
         marginX = newMarginX.toFloat()
         marginY = newMarginY.toFloat()
+        haptics = newHaptics
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
         prefs.touchOpacity = newOpacity
         prefs.touchScale = newScale
         prefs.touchMarginX = newMarginX
         prefs.touchMarginY = newMarginY
+        prefs.touchHaptics = newHaptics
         writeControlsFile(
             filesDir,
             newBindings,
@@ -128,6 +132,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
             newScale,
             newMarginX,
             newMarginY,
+            newHaptics,
         )
     }
 
@@ -324,11 +329,21 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                             steps = 14,
                         )
                     }
+
+                    SwitchRow(
+                        icon = Icons.Filled.SportsEsports,
+                        title = "Respuesta háptica (Vibración)",
+                        subtitle = "Vibración suave y precisa al tocar los botones táctiles en pantalla",
+                        checked = haptics,
+                        items = 1,
+                        index = 0,
+                        onCheckedChange = { store(newHaptics = it) },
+                    )
                 }
             }
 
             Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                TextButton(onClick = { store(emptyMap(), true, 70, 100, 0, 0) }) {
+                TextButton(onClick = { store(emptyMap(), true, 70, 100, 0, 0, true) }) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null)
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     Text("Restaurar los controles por defecto")

@@ -204,6 +204,43 @@ class GameRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Automatic backup of saves into `files/backups_auto/` before starting the game.
+     * Keeps up to 5 historical rollbacks so saves can never be lost if the device powers off.
+     */
+    fun autoBackupSaves(): Boolean {
+        return runCatching {
+            val data = File(gameDir, "data")
+            if (!data.isDirectory) return false
+            val backupRoot = File(files, "backups_auto").apply { mkdirs() }
+            val time = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val targetZip = File(backupRoot, "reloaded_backup_$time.zip")
+            val existing = backupRoot.listFiles()?.filter { it.extension == "zip" }?.sortedBy { it.lastModified() }
+            if (existing != null && existing.size >= 5) {
+                existing.take(existing.size - 4).forEach { it.delete() }
+            }
+            var written = 0
+            ZipOutputStream(targetZip.outputStream().buffered()).use { zip ->
+                saveFolders.forEach { folder ->
+                    val root = File(data, folder)
+                    if (!root.isDirectory) return@forEach
+                    root.walkTopDown().filter { it.isFile }.forEach { file ->
+                        zip.putNextEntry(ZipEntry("$folder/" + file.relativeTo(root).invariantSeparatorsPath))
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                        written++
+                    }
+                }
+            }
+            if (written == 0) {
+                targetZip.delete()
+                false
+            } else {
+                true
+            }
+        }.getOrDefault(false)
+    }
+
     /** Zips the saves into the cache, ready to be handed to a file picker. */
     suspend fun exportSaves(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {

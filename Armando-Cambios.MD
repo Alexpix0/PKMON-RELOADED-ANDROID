@@ -168,3 +168,29 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 * **Archivo modificado:** [`android/app/src/main/AndroidManifest.xml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/AndroidManifest.xml)
 * **Mejora:** Se solicitó `android:largeHeap="true"` para que el sistema Android conceda la máxima memoria de montículo disponible al proceso, evitando pausas del recolector de basura (GC) y previniendo cierres inesperados por falta de memoria al descomprimir atlas de texturas grandes o reproducir efectos de sonido pesados.
 
+---
+
+## 8. Versión 0.3.0 EX — Edición Personalizada (Alexpix0 / Armando)
+
+### A. Firma criptográfica fija (`android/release.keystore`)
+* **Archivos:** `android/release.keystore`, [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+* **Problema:** En compilaciones anteriores de CI en GitHub Actions, la clave de firma variaba si no había un almacén fijo, impidiendo actualizar sobre una app ya instalada (provocando el error de Android *"El paquete entra en conflicto con una versión existente"*).
+* **Solución:** Se generó y fijó un keystore de producción permanente en el repositorio (`android/release.keystore`) con alias `reloaded`. A partir de esta versión, **todas las actualizaciones se instalan directamente encima** sin necesidad de volver a desinstalar la app. Se incrementó la versión a `versionCode = 7` y `versionName = "0.3.0 EX"`.
+
+### B. Respuesta Háptica / Vibración al pulsar botones táctiles (`Haptic Feedback`)
+* **Archivos:** [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs), [`Controls.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Controls.kt), [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt), [`ControlsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/ControlsScreen.kt)
+* **Mejora:** Invocación nativa a `Vibrator` mediante JNI en Rust cada vez que se presiona un botón virtual o cambia la dirección del joystick. Se añadió un interruptor en Ajustes → Controles para activar/desactivar la vibración táctil según la preferencia del jugador.
+
+### C. Sistema de Auto-Backup de Partidas antes de Jugar
+* **Archivos:** [`GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt), [`HomeScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/HomeScreen.kt)
+* **Mejora:** Cada vez que el usuario presiona "Jugar", el lanzador crea en milisegundos una copia comprimida de seguridad de todas las carpetas de partidas (`files/backups_auto/reloaded_backup_YYYYMMDD_HHMMSS.zip`), conservando hasta 5 puntos de restauración automáticos contra cualquier apagón accidental o corrupción.
+
+### D. Caché de Texturas y Filtrado en Renderizador OpenGL ES
+* **Archivo modificado:** [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+* **Mejora:** En `draw_buffer`, se añadió seguimiento de estado (`current_texture` y `last_filter_mode`). Solo se realizan llamadas al driver de GPU (`glBindTexture` y `glTexParameteri`) cuando la textura o el modo de filtrado realmente cambian, ahorrando miles de cambios de estado redundantes por segundo en la GPU PowerVR Rogue GE8320.
+
+### E. Rediseño e Identidad Visual del Lanzador
+* **Archivos:** [`HomeScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/HomeScreen.kt), [`AboutScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/AboutScreen.kt), [`strings.xml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/values/strings.xml)
+* **Mejora:** Nombre oficial de la aplicación actualizado a **Pokemon Reloaded EX**, insignia visual destacada `0.3.0 EX` en la barra superior de la pantalla de inicio, y créditos de la edición EX en la pantalla Acerca de.
+
+

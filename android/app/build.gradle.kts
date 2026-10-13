@@ -39,14 +39,20 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.2.4"
+        versionCode = 7
+        versionName = "0.3.0 EX"
         ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
         create("release") {
-            if (!keystoreProperties.isEmpty) {
+            val repoKeystore = rootProject.file("release.keystore")
+            if (repoKeystore.exists()) {
+                storeFile = repoKeystore
+                storePassword = "pokemonreloaded"
+                keyAlias = "reloaded"
+                keyPassword = "pokemonreloaded"
+            } else if (!keystoreProperties.isEmpty) {
                 storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -58,13 +64,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the project's own key when it is present, so the APK shipped as a release
-            // is a real release build and not a debug one.
-            signingConfig = if (!keystoreProperties.isEmpty) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Always signed with the repository release key so all updates can install seamlessly over each other
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

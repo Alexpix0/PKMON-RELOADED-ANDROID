@@ -124,7 +124,24 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pokemon Reloaded", style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Pokemon Reloaded", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.width(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                        ) {
+                            Text(
+                                text = "0.3.0 EX",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            )
+                        }
+                    }
+                },
                 actions = {
                     IconButton(onClick = onLog) { Icon(Icons.Filled.Article, contentDescription = "Logs") }
                     IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, contentDescription = "Ajustes") }
@@ -163,7 +180,10 @@ fun HomeScreen(
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(modifier = Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
-                        onClick = onLaunch,
+                        onClick = {
+                            repo.autoBackupSaves()
+                            onLaunch()
+                        },
                         enabled = installed != null && !busy && !launching,
                         modifier = Modifier.fillMaxWidth().height(72.dp),
                         shape = MaterialTheme.shapes.extraLarge,

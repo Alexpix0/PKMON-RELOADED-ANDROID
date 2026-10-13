@@ -177,6 +177,8 @@ fn load_controls() {
                 if let Ok(pct) = value.trim().parse::<u32>() {
                     crate::touch_controls::set_margin_y(pct);
                 }
+            } else if name.trim() == "haptics" {
+                set_haptics_enabled(value.trim() != "0");
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }
@@ -221,6 +223,7 @@ fn stick_update(x: f32, y: f32) {
         let bit = 1u32 << index;
         let was = state & bit != 0;
         if *held && !was {
+            jni_vibrate(12);
             android::push_input(ramen::platform::android::InputEvent::KeyDown { key: JOYSTICK_KEYS[index], text: None });
         } else if !*held && was {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key: JOYSTICK_KEYS[index] });
@@ -267,8 +270,56 @@ fn key_code_value(keycode: &android_activity::input::Keycode) -> i32 {
 /// the right control. Keyed by Android pointer id.
 static POINTER_CONTROLS: Mutex<Option<HashMap<i32, usize>>> = Mutex::new(None);
 
+static HAPTICS_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_haptics_enabled(enabled: bool) {
+    HAPTICS_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn haptics_enabled() -> bool {
+    HAPTICS_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn jni_vibrate(duration_ms: i64) {
+    if !haptics_enabled() {
+        return;
+    }
+    let ctx = ndk_context::android_context();
+    let vm = match unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) } {
+        Ok(vm) => vm,
+        Err(_) => return,
+    };
+    let mut env = match vm.attach_current_thread() {
+        Ok(env) => env,
+        Err(_) => return,
+    };
+    let _ = (|| -> jni::errors::Result<()> {
+        let activity = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
+        let name = env.new_string("vibrator")?;
+        let vibrator = env
+            .call_method(
+                &activity,
+                "getSystemService",
+                "(Ljava/lang/String;)Ljava/lang/Object;",
+                &[jni::objects::JValue::Object(&name)],
+            )?
+            .l()?;
+        if vibrator.is_null() {
+            return Ok(())
+        }
+        env.call_method(
+            &vibrator,
+            "vibrate",
+            "(J)V",
+            &[jni::objects::JValue::Long(duration_ms)],
+        )?;
+        Ok(())
+    })();
+}
+
 fn control_key_down(index: usize) {
     crate::touch_controls::set_pressed(index, true);
+    jni_vibrate(18);
     android::push_input(ramen::platform::android::InputEvent::KeyDown {
         key: crate::touch_controls::CONTROLS[index].key,
         text: None,

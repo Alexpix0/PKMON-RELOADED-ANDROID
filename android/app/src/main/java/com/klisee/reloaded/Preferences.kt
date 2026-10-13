@@ -72,9 +72,16 @@ class Preferences(context: Context) {
             prefs.edit().putInt("touchMarginY", value).apply()
         }
 
+    /** Whether haptic feedback (vibration) is triggered on touch button presses. */
+    var touchHaptics: Boolean
+        get() = prefs.getBoolean("touchHaptics", true)
+        set(value) {
+            prefs.edit().putBoolean("touchHaptics", value).apply()
+        }
+
     /** Mirrors the current controls into the file the emulator reads at startup. */
     fun writeControls(filesDir: File, padConnected: Boolean) =
-        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY)
+        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY, touchHaptics)
 
     /** Keep the shape the game was drawn for, with bands at the sides, instead of filling the screen. */
     var keepAspect: Boolean

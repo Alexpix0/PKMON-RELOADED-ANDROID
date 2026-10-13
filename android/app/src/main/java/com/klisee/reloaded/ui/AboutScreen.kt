@@ -58,9 +58,10 @@ fun AboutScreen(onBack: () -> Unit) {
             )
 
             SettingsGroup("Quien lo hizo") {
-                InfoRow(Icons.Filled.Person, "El juego", "Fer Productions", items = 3, index = 0)
-                InfoRow(Icons.Filled.Memory, "El motor", "OpenGMK, reimplementacion en Rust", items = 3, index = 1)
-                InfoRow(Icons.Filled.Favorite, "Este port", "Comunidad, sin animo de lucro", items = 3, index = 2)
+                InfoRow(Icons.Filled.Person, "El juego", "Fer Productions", items = 4, index = 0)
+                InfoRow(Icons.Filled.Memory, "El motor", "OpenGMK, reimplementacion en Rust", items = 4, index = 1)
+                InfoRow(Icons.Filled.Favorite, "Port Android", "Comunidad, sin animo de lucro", items = 4, index = 2)
+                InfoRow(Icons.Filled.Favorite, "Edicion EX", "v0.3.0 EX (Alexpix0 / Armando)", items = 4, index = 3)
             }
 
             SettingsGroup("Licencias y avisos") {
