@@ -113,3 +113,11 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 1. Instalar el APK generado.
 2. Iniciar el juego: la pantalla de carga ya no demora 90 segundos (inicia en ~1-2 segundos).
 3. La pantalla muestra la interfaz visual completa de Pokémon Reloaded (menú de inicio, gráficos, textos y superposición de botones táctiles).
+
+---
+
+## 5. Estado de Validación en Hardware Real
+
+* **Dispositivo probado:** Infinix Hot 20i (4 GB RAM, MediaTek Helio G25 MT6762G, GPU PowerVR Rogue GE8320).
+* **Fecha:** 13 de Octubre de 2026.
+* **Resultado:** **Éxito verificado.** El fallo de la pantalla negra quedó completamente resuelto. La aplicación inicia con fluidez, carga todos los recursos gráficos y los controles táctiles responden correctamente.
