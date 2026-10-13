@@ -135,15 +135,26 @@ class GameRepository(private val context: Context) {
             val folder = File(gameDir, "data/partidas")
             if (!folder.isDirectory) error("Primero instala el juego.")
             val numbered = Regex("^reloaded\\d+(\\.|_)(.*)$", RegexOption.IGNORE_CASE)
+
+            // Limpiar la partida anterior y sus copias de seguridad (_bk) antes de importar
+            // para evitar que el juego restaure el estado viejo por fecha o inconsistencia.
+            folder.listFiles().orEmpty()
+                .filter { it.name.startsWith("reloaded$index.", ignoreCase = true) || it.name.startsWith("reloaded${index}_", ignoreCase = true) }
+                .forEach { it.delete() }
+
             var written = 0
             context.contentResolver.openInputStream(uri)?.use { input ->
                 ZipInputStream(input.buffered()).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
-                        val file = entry.name.substringAfterLast('/')
+                        val name = entry.name.replace('\\', '/')
+                        val file = name.substringAfterLast('/')
                         val match = numbered.find(file)
-                        // Only a slot's own files, and only from the saves folder.
-                        if (!entry.isDirectory && entry.name.startsWith("partidas/") && match != null) {
+                        // Aceptar si está en partidas/, data/partidas/ o en la raíz del zip
+                        val inPartidas = name.startsWith("partidas/", ignoreCase = true) ||
+                            name.startsWith("data/partidas/", ignoreCase = true) ||
+                            !name.contains('/')
+                        if (!entry.isDirectory && inPartidas && match != null) {
                             val separator = match.groupValues[1]
                             val rest = match.groupValues[2]
                             val target = File(folder, "reloaded$index$separator$rest")
@@ -232,10 +243,13 @@ class GameRepository(private val context: Context) {
                 ZipInputStream(input.buffered()).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
-                        val name = entry.name
+                        var name = entry.name.replace('\\', '/')
+                        if (name.startsWith("data/", ignoreCase = true)) {
+                            name = name.substring(5)
+                        }
                         val target = File(data, name)
                         // Only the save folders, and never a path that escapes them.
-                        val wanted = saveFolders.any { name.startsWith("$it/") }
+                        val wanted = saveFolders.any { name.startsWith("$it/", ignoreCase = true) }
                         val safe = target.canonicalPath.startsWith(data.canonicalPath + File.separator)
                         if (!entry.isDirectory && wanted && safe) {
                             target.parentFile?.mkdirs()
@@ -243,7 +257,7 @@ class GameRepository(private val context: Context) {
                             files++
                             // Backups (`reloaded1_bk.savc`) sit beside the real slot, so they are not
                             // counted as separate saves.
-                            val isSlot = name.startsWith("partidas/") &&
+                            val isSlot = name.startsWith("partidas/", ignoreCase = true) &&
                                 name.endsWith(".savc", ignoreCase = true) &&
                                 !name.contains("_bk", ignoreCase = true)
                             if (isSlot) saves++

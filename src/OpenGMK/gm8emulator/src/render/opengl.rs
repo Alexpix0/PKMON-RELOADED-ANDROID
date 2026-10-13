@@ -1028,6 +1028,7 @@ impl RendererImpl {
         let overlay = self.overlay_program();
         let (ww, wh) = (window_width as f32, window_height as f32);
 
+        let opacity = touch_controls::opacity();
         let mut verts: Vec<f32> = Vec::new();
         for (i, c) in touch_controls::CONTROLS.iter().enumerate() {
             if !touch_controls::is_active(i) {
@@ -1035,9 +1036,9 @@ impl RendererImpl {
             }
             let pressed = touch_controls::is_pressed(i);
             let (fill, border, ink) = if pressed {
-                ([1.0, 0.80, 0.10, 0.55], [1.0, 1.0, 0.70, 0.95], [0.10, 0.10, 0.10, 0.95])
+                ([1.0, 0.80, 0.10, 0.60 * opacity], [1.0, 1.0, 0.70, 0.95 * opacity], [0.10, 0.10, 0.10, 0.95 * opacity])
             } else {
-                ([0.10, 0.10, 0.16, 0.28], [1.0, 1.0, 1.0, 0.60], [1.0, 1.0, 1.0, 0.90])
+                ([0.10, 0.10, 0.16, 0.35 * opacity], [1.0, 1.0, 1.0, 0.65 * opacity], [1.0, 1.0, 1.0, 0.90 * opacity])
             };
             match c.shape {
                 touch_controls::Shape::Rect { cx, cy, w, h } => {
@@ -1069,12 +1070,12 @@ impl RendererImpl {
         if touch_controls::joystick_active() {
             let (cx, cy) = (touch_controls::JOYSTICK_CX * ww, touch_controls::JOYSTICK_CY * wh);
             let r = touch_controls::JOYSTICK_R * wh;
-            push_circle(&mut verts, ww, wh, cx, cy, r, [0.10, 0.10, 0.16, 0.22]);
-            push_ring(&mut verts, ww, wh, cx, cy, r, 4.0, [1.0, 1.0, 1.0, 0.45]);
+            push_circle(&mut verts, ww, wh, cx, cy, r, [0.10, 0.10, 0.16, 0.28 * opacity]);
+            push_ring(&mut verts, ww, wh, cx, cy, r, 4.0, [1.0, 1.0, 1.0, 0.50 * opacity]);
             let (ox, oy) = touch_controls::joystick_offset();
             let (kx, ky) = (cx + ox * r * 0.72, cy + oy * r * 0.72);
-            push_circle(&mut verts, ww, wh, kx, ky, r * 0.40, [0.85, 0.85, 0.92, 0.50]);
-            push_ring(&mut verts, ww, wh, kx, ky, r * 0.40, 3.0, [1.0, 1.0, 1.0, 0.75]);
+            push_circle(&mut verts, ww, wh, kx, ky, r * 0.40, [0.85, 0.85, 0.92, 0.55 * opacity]);
+            push_ring(&mut verts, ww, wh, kx, ky, r * 0.40, 3.0, [1.0, 1.0, 1.0, 0.80 * opacity]);
         }
 
         if verts.is_empty() {

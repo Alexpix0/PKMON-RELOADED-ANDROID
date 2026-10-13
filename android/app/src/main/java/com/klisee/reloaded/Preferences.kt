@@ -44,9 +44,16 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("stickEnabled", value).apply()
         }
 
+    /** On-screen controls opacity in percentage (20 to 100, default 70). */
+    var touchOpacity: Int
+        get() = prefs.getInt("touchOpacity", 70)
+        set(value) {
+            prefs.edit().putInt("touchOpacity", value).apply()
+        }
+
     /** Mirrors the current controls into the file the emulator reads at startup. */
     fun writeControls(filesDir: File, padConnected: Boolean) =
-        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected)
+        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity)
 
     /** Keep the shape the game was drawn for, with bands at the sides, instead of filling the screen. */
     var keepAspect: Boolean

@@ -267,3 +267,13 @@ pub fn set_joystick_offset(dx: f32, dy: f32) {
 pub fn joystick_offset() -> (f32, f32) {
     *JOYSTICK_OFFSET.lock().unwrap()
 }
+
+static OPACITY: AtomicU32 = AtomicU32::new(70);
+
+pub fn set_opacity(pct: u32) {
+    OPACITY.store(pct.clamp(10, 100), Ordering::Relaxed);
+}
+
+pub fn opacity() -> f32 {
+    OPACITY.load(Ordering::Relaxed) as f32 / 100.0
+}

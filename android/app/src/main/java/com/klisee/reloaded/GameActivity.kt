@@ -1,6 +1,7 @@
 package com.klisee.reloaded
 
 import android.app.NativeActivity
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.core.view.WindowCompat
@@ -9,11 +10,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * The emulator activity: a plain `NativeActivity` (that is what loads `libgm8emulator.so`),
- * subclassed to hide the system bars and to honour the launcher's screen setting.
- *
- * Hiding has to be done here rather than from Rust: the Context that `android-activity` publishes
- * for JNI is the *Application*, which has no `getWindow()`, so the native attempt always failed
- * with a NoSuchMethodError and the navigation bar stayed on screen.
+ * subclassed to hide the system bars, support display cutout and honour the launcher's screen setting.
  */
 class GameActivity : NativeActivity() {
 
@@ -22,6 +19,10 @@ class GameActivity : NativeActivity() {
         if (Preferences(applicationContext).keepScreenOn) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
         hideSystemBars()
     }
 
@@ -29,6 +30,13 @@ class GameActivity : NativeActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Terminates the isolated :game process so no background native threads stay running
+        // and in-memory save state is completely cleared.
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     private fun hideSystemBars() {

@@ -90,17 +90,20 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     val context = LocalContext.current
     var bindings by remember { mutableStateOf(prefs.controlBindings) }
     var stick by remember { mutableStateOf(prefs.stickEnabled) }
+    var opacity by remember { mutableStateOf(prefs.touchOpacity.toFloat()) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
     var pads by remember { mutableStateOf(connectedPads(context)) }
 
-    fun store(newBindings: Map<ControlAction, Int>, newStick: Boolean) {
+    fun store(newBindings: Map<ControlAction, Int>, newStick: Boolean, newOpacity: Int = opacity.toInt()) {
         bindings = newBindings
         stick = newStick
+        opacity = newOpacity.toFloat()
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
-        writeControlsFile(filesDir, newBindings, newStick, connectedPads(context).isNotEmpty())
+        prefs.touchOpacity = newOpacity
+        writeControlsFile(filesDir, newBindings, newStick, connectedPads(context).isNotEmpty(), newOpacity)
     }
 
     // Pads come and go while this screen is open, so the list is kept current.
@@ -211,8 +214,31 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                 )
             }
 
+            SettingsGroup("Controles en pantalla", modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Opacidad de botones: ${opacity.toInt()}%",
+                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "Ajusta qué tan transparentes se ven los botones táctiles y el joystick",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    androidx.compose.material3.Slider(
+                        value = opacity,
+                        onValueChange = {
+                            opacity = it
+                            store(bindings, stick, it.toInt())
+                        },
+                        valueRange = 20f..100f,
+                        steps = 7,
+                    )
+                }
+            }
+
             Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                TextButton(onClick = { store(emptyMap(), true) }) {
+                TextButton(onClick = { store(emptyMap(), true, 70) }) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null)
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     Text("Restaurar los botones por defecto")

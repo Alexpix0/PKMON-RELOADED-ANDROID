@@ -121,3 +121,23 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 * **Dispositivo probado:** Infinix Hot 20i (4 GB RAM, MediaTek Helio G25 MT6762G, GPU PowerVR Rogue GE8320).
 * **Fecha:** 13 de Octubre de 2026.
 * **Resultado:** **Éxito verificado.** El fallo de la pantalla negra quedó completamente resuelto. La aplicación inicia con fluidez, carga todos los recursos gráficos y los controles táctiles responden correctamente.
+
+---
+
+## 6. Mejoras de Sistema, Guardado y Controles
+
+### A. Corrección en la importación de partidas (`GameRepository.kt`)
+* **Problema:** Al importar partidas encima de una ranura existente, copias de seguridad anteriores (`_bk.savc`) o archivos residuales provocaban que el juego restaurara la partida vieja por fecha o inconsistencia. Además, archivos `.zip` provenientes de PC con rutas `data/partidas/` o archivos en la raíz eran omitidos silenciosamente.
+* **Solución:**
+  * Se limpia completamente la ranura previa (eliminando `.savc`, `.data`, `.nfo` y copias `_bk`) antes de escribir los datos importados.
+  * Se flexibilizó el análisis de rutas dentro del archivo `.zip` para admitir indistintamente `partidas/`, `data/partidas/` o archivos directos en la raíz, ignorando mayúsculas/minúsculas.
+
+### B. Aislamiento y cierre limpio del emulador (`AndroidManifest.xml`, `GameActivity.kt`)
+* **Mejora:** Se trasladó `GameActivity` a su propio proceso aislado (`android:process=":game"`) y se aseguró la terminación de hilos nativos en `onDestroy()`. De esta forma, al salir del juego no quedan hilos de Rust en segundo plano ni partidas en caché de RAM.
+
+### C. Pantalla completa inmersiva con soporte de recorte de cámara / notch (`GameActivity.kt`)
+* **Mejora:** Se habilitó `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` para pantallas con notch/corte de cámara, aprovechando el panel extendido del Infinix Hot 20i sin barras negras forzadas.
+
+### D. Control de opacidad y transparencia de controles táctiles
+* **Archivos:** [`touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs), [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs), [`opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs), [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt), [`Controls.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Controls.kt), [`ControlsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/ControlsScreen.kt)
+* **Mejora:** Deslizador de opacidad en Ajustes → Controles (de 20% a 100%) que modula dinámicamente el alfa del joystick y todos los botones virtuales para no obstruir los gráficos durante la exploración y combate.

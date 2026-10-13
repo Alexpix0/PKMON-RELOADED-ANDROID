@@ -161,6 +161,10 @@ fn load_controls() {
                 // A pad was connected when the game started, so start with the controls out of the
                 // way; touching the screen brings them back.
                 crate::touch_controls::set_pad_active(value.trim() != "0");
+            } else if name.trim() == "opacity" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_opacity(pct);
+                }
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }
