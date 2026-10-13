@@ -51,9 +51,30 @@ class Preferences(context: Context) {
             prefs.edit().putInt("touchOpacity", value).apply()
         }
 
+    /** On-screen controls scale in percentage (60 to 140, default 100). */
+    var touchScale: Int
+        get() = prefs.getInt("touchScale", 100)
+        set(value) {
+            prefs.edit().putInt("touchScale", value).apply()
+        }
+
+    /** On-screen controls horizontal margin / offset (0 to 15%, default 0). */
+    var touchMarginX: Int
+        get() = prefs.getInt("touchMarginX", 0)
+        set(value) {
+            prefs.edit().putInt("touchMarginX", value).apply()
+        }
+
+    /** On-screen controls vertical margin / offset (0 to 15%, default 0). */
+    var touchMarginY: Int
+        get() = prefs.getInt("touchMarginY", 0)
+        set(value) {
+            prefs.edit().putInt("touchMarginY", value).apply()
+        }
+
     /** Mirrors the current controls into the file the emulator reads at startup. */
     fun writeControls(filesDir: File, padConnected: Boolean) =
-        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity)
+        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY)
 
     /** Keep the shape the game was drawn for, with bands at the sides, instead of filling the screen. */
     var keepAspect: Boolean

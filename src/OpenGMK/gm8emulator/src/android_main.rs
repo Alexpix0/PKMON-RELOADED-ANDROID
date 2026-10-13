@@ -165,6 +165,18 @@ fn load_controls() {
                 if let Ok(pct) = value.trim().parse::<u32>() {
                     crate::touch_controls::set_opacity(pct);
                 }
+            } else if name.trim() == "scale" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_scale(pct);
+                }
+            } else if name.trim() == "margin_x" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_margin_x(pct);
+                }
+            } else if name.trim() == "margin_y" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_margin_y(pct);
+                }
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }

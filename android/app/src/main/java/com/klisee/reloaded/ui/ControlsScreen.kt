@@ -91,19 +91,44 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     var bindings by remember { mutableStateOf(prefs.controlBindings) }
     var stick by remember { mutableStateOf(prefs.stickEnabled) }
     var opacity by remember { mutableStateOf(prefs.touchOpacity.toFloat()) }
+    var scale by remember { mutableStateOf(prefs.touchScale.toFloat()) }
+    var marginX by remember { mutableStateOf(prefs.touchMarginX.toFloat()) }
+    var marginY by remember { mutableStateOf(prefs.touchMarginY.toFloat()) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
     var pads by remember { mutableStateOf(connectedPads(context)) }
 
-    fun store(newBindings: Map<ControlAction, Int>, newStick: Boolean, newOpacity: Int = opacity.toInt()) {
+    fun store(
+        newBindings: Map<ControlAction, Int> = bindings,
+        newStick: Boolean = stick,
+        newOpacity: Int = opacity.toInt(),
+        newScale: Int = scale.toInt(),
+        newMarginX: Int = marginX.toInt(),
+        newMarginY: Int = marginY.toInt(),
+    ) {
         bindings = newBindings
         stick = newStick
         opacity = newOpacity.toFloat()
+        scale = newScale.toFloat()
+        marginX = newMarginX.toFloat()
+        marginY = newMarginY.toFloat()
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
         prefs.touchOpacity = newOpacity
-        writeControlsFile(filesDir, newBindings, newStick, connectedPads(context).isNotEmpty(), newOpacity)
+        prefs.touchScale = newScale
+        prefs.touchMarginX = newMarginX
+        prefs.touchMarginY = newMarginY
+        writeControlsFile(
+            filesDir,
+            newBindings,
+            newStick,
+            connectedPads(context).isNotEmpty(),
+            newOpacity,
+            newScale,
+            newMarginX,
+            newMarginY,
+        )
     }
 
     // Pads come and go while this screen is open, so the list is kept current.
@@ -215,33 +240,98 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
             }
 
             SettingsGroup("Controles en pantalla", modifier = Modifier.padding(horizontal = 16.dp)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Opacidad de botones: ${opacity.toInt()}%",
-                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "Ajusta qué tan transparentes se ven los botones táctiles y el joystick",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    androidx.compose.material3.Slider(
-                        value = opacity,
-                        onValueChange = {
-                            opacity = it
-                            store(bindings, stick, it.toInt())
-                        },
-                        valueRange = 20f..100f,
-                        steps = 7,
-                    )
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column {
+                        Text(
+                            "Opacidad de botones: ${opacity.toInt()}%",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Ajusta qué tan transparentes se ven los botones táctiles y el joystick",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        androidx.compose.material3.Slider(
+                            value = opacity,
+                            onValueChange = {
+                                opacity = it
+                                store(newOpacity = it.toInt())
+                            },
+                            valueRange = 20f..100f,
+                            steps = 7,
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            "Tamaño de botones: ${scale.toInt()}%",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Agranda o reduce los botones táctiles y el joystick en pantalla",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        androidx.compose.material3.Slider(
+                            value = scale,
+                            onValueChange = {
+                                scale = it
+                                store(newScale = it.toInt())
+                            },
+                            valueRange = 70f..140f,
+                            steps = 6,
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            "Margen lateral (separación de bordes): ${marginX.toInt()}%",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Mueve los botones y el joystick hacia el centro o hacia los bordes",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        androidx.compose.material3.Slider(
+                            value = marginX,
+                            onValueChange = {
+                                marginX = it
+                                store(newMarginX = it.toInt())
+                            },
+                            valueRange = 0f..15f,
+                            steps = 14,
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            "Margen inferior (altura): ${marginY.toInt()}%",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "Eleva los controles respecto al borde inferior de la pantalla",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        androidx.compose.material3.Slider(
+                            value = marginY,
+                            onValueChange = {
+                                marginY = it
+                                store(newMarginY = it.toInt())
+                            },
+                            valueRange = 0f..15f,
+                            steps = 14,
+                        )
+                    }
                 }
             }
 
             Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                TextButton(onClick = { store(emptyMap(), true, 70) }) {
+                TextButton(onClick = { store(emptyMap(), true, 70, 100, 0, 0) }) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null)
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
-                    Text("Restaurar los botones por defecto")
+                    Text("Restaurar los controles por defecto")
                 }
             }
         }

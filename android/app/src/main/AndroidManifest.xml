@@ -12,6 +12,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Reloaded"
         android:allowBackup="true"
+        android:largeHeap="true"
         android:supportsRtl="true">
 
         <!-- The launcher UI (Jetpack Compose, Material 3 Expressive). -->

@@ -809,7 +809,7 @@ impl RendererImpl {
                     (&self.queue_render_state as *const RenderState).cast(),
                     gl::STATIC_DRAW,
                 );
-                assert_eq!(self.gl.GetError(), 0);
+                debug_assert_eq!(self.gl.GetError(), 0);
             }
         }
     }
@@ -834,7 +834,8 @@ impl RendererImpl {
         }
 
         unsafe {
-            // if something else broke check here just in case
+            // if something else broke check here just in case (only in debug builds to prevent mobile GPU stalls)
+            #[cfg(debug_assertions)]
             match self.gl.GetError() {
                 0 => (),
                 err => panic!("OpenGL threw an error somewhere (error code {})", err),
@@ -855,7 +856,7 @@ impl RendererImpl {
                 buffer.as_ptr().cast(),
                 gl::STREAM_DRAW,
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.DrawArrays(shape.into(), 0, buffer.len() as i32);
         }
@@ -1031,16 +1032,16 @@ impl RendererImpl {
         let opacity = touch_controls::opacity();
         let mut verts: Vec<f32> = Vec::new();
         for (i, c) in touch_controls::CONTROLS.iter().enumerate() {
-            if !touch_controls::is_active(i) {
-                continue
-            }
+            let Some(shape) = touch_controls::effective_shape(i) else {
+                continue;
+            };
             let pressed = touch_controls::is_pressed(i);
             let (fill, border, ink) = if pressed {
                 ([1.0, 0.80, 0.10, 0.60 * opacity], [1.0, 1.0, 0.70, 0.95 * opacity], [0.10, 0.10, 0.10, 0.95 * opacity])
             } else {
                 ([0.10, 0.10, 0.16, 0.35 * opacity], [1.0, 1.0, 1.0, 0.65 * opacity], [1.0, 1.0, 1.0, 0.90 * opacity])
             };
-            match c.shape {
+            match shape {
                 touch_controls::Shape::Rect { cx, cy, w, h } => {
                     let (cx, cy) = (cx * ww, cy * wh);
                     let (w, h) = (w * ww, h * wh);
@@ -1068,8 +1069,9 @@ impl RendererImpl {
 
         // Movement joystick: base ring + knob that follows the thumb.
         if touch_controls::joystick_active() {
-            let (cx, cy) = (touch_controls::JOYSTICK_CX * ww, touch_controls::JOYSTICK_CY * wh);
-            let r = touch_controls::JOYSTICK_R * wh;
+            let (jcx, jcy) = touch_controls::joystick_center();
+            let (cx, cy) = (jcx * ww, jcy * wh);
+            let r = touch_controls::joystick_radius() * wh;
             push_circle(&mut verts, ww, wh, cx, cy, r, [0.10, 0.10, 0.16, 0.28 * opacity]);
             push_ring(&mut verts, ww, wh, cx, cy, r, 4.0, [1.0, 1.0, 1.0, 0.50 * opacity]);
             let (ox, oy) = touch_controls::joystick_offset();
@@ -2612,7 +2614,7 @@ impl RendererTrait for RendererImpl {
         let mut fb_current = 0;
         unsafe {
             self.gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut fb_current);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
         if fb_current == self.framebuffer.fbo as _ {
             // Set viewport (gl::Viewport, gl::Scissor)
@@ -2620,7 +2622,7 @@ impl RendererTrait for RendererImpl {
                 unsafe {
                     self.gl.Viewport(port_x, port_y, port_w, port_h);
                     self.gl.Scissor(port_x, port_y, port_w, port_h);
-                    assert_eq!(self.gl.GetError(), 0);
+                    debug_assert_eq!(self.gl.GetError(), 0);
                 }
             }
         }
@@ -2636,7 +2638,7 @@ impl RendererTrait for RendererImpl {
         unsafe {
             self.gl.ClearColor(colour.r as f32, colour.g as f32, colour.b as f32, alpha as f32);
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 
@@ -2645,7 +2647,7 @@ impl RendererTrait for RendererImpl {
         unsafe {
             self.gl.ClearColor(colour.r as f32, colour.g as f32, colour.b as f32, alpha as f32);
             self.gl.Clear(gl::COLOR_BUFFER_BIT);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 
@@ -2865,15 +2867,15 @@ impl RendererTrait for RendererImpl {
             // Remember old framebuffer so we can rebind it after we're done
             let mut fb_old = 0;
             self.gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut fb_old);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             // Draw framebuffer to screen
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.clear_view((0.0, 0.0, 0.0).into(), 1.0); // to avoid weird strobe lights (???)
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.BlitFramebuffer(
                 0,
                 fb_height,
@@ -2892,13 +2894,13 @@ impl RendererTrait for RendererImpl {
                     gl::NEAREST
                 },
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, fb_old as u32);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.Enable(gl::SCISSOR_TEST);
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             // On-screen touch controls (Android): drawn on top of the presented frame.
             #[cfg(target_os = "android")]
@@ -2937,7 +2939,7 @@ impl RendererTrait for RendererImpl {
             // Remember old framebuffer so we can rebind it after we're done
             let mut fb_old = 0;
             self.gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut fb_old);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             // Draw framebuffer to screen
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, self.framebuffer.fbo);
@@ -2956,7 +2958,7 @@ impl RendererTrait for RendererImpl {
             );
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, fb_old as u32);
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 

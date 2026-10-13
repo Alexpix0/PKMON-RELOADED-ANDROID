@@ -72,7 +72,16 @@ fun buttonName(code: Int): String = when (code) {
  * Only the buttons the player actually changed are written, so everything they did not touch keeps
  * the built-in layout (which, for instance, accepts either stick press for `E`).
  */
-fun writeControlsFile(filesDir: File, bindings: Map<ControlAction, Int>, stick: Boolean, padConnected: Boolean, opacity: Int = 70) {
+fun writeControlsFile(
+    filesDir: File,
+    bindings: Map<ControlAction, Int>,
+    stick: Boolean,
+    padConnected: Boolean,
+    opacity: Int = 70,
+    scale: Int = 100,
+    marginX: Int = 0,
+    marginY: Int = 0,
+) {
     val text = buildString {
         appendLine("# Escrito por la pantalla de Controles. El emulador lo lee al arrancar.")
         for (action in ControlAction.entries) {
@@ -83,6 +92,9 @@ fun writeControlsFile(filesDir: File, bindings: Map<ControlAction, Int>, stick: 
         // brings them back.
         appendLine("pad=${if (padConnected) 1 else 0}")
         appendLine("opacity=$opacity")
+        appendLine("scale=$scale")
+        appendLine("margin_x=$marginX")
+        appendLine("margin_y=$marginY")
     }
     runCatching { File(filesDir, "controls.conf").writeText(text) }
 }

@@ -1,14 +1,22 @@
 use crate::{gml::Value, math::Real};
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
-/// Sleep for T minus 1 millisecond, and busywait for the rest of the duration.
+/// Sleep without pegging mobile CPU cores at 100%.
+#[cfg(target_os = "android")]
 pub fn sleep(dur: std::time::Duration) {
-    // TODO: find a more precise way to sleep?
+    std::thread::sleep(dur);
+}
+
+/// Sleep for T minus 1 millisecond, and busywait for the rest of the duration.
+#[cfg(not(target_os = "android"))]
+pub fn sleep(dur: std::time::Duration) {
     let begin = std::time::Instant::now();
     if let Some(sleep_time) = dur.checked_sub(std::time::Duration::from_millis(1)) {
         std::thread::sleep(sleep_time);
     }
-    while std::time::Instant::now() < begin + dur {}
+    while std::time::Instant::now() < begin + dur {
+        std::hint::spin_loop();
+    }
 }
 
 fn epoch() -> PrimitiveDateTime {

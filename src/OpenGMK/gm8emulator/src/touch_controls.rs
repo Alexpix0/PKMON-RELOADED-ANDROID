@@ -181,13 +181,46 @@ pub fn joystick_active() -> bool {
     !pad_active() && current_context() & (WORLD | BATTLE) != 0
 }
 
+/// Calculates the effective shape and position of a control accounting for scale and margins.
+pub fn effective_shape(index: usize) -> Option<Shape> {
+    if !is_active(index) {
+        return None;
+    }
+    let c = &CONTROLS[index];
+    let s = scale();
+    let mx = margin_x();
+    let my = margin_y();
+
+    let (mut cx, mut cy) = match c.shape {
+        Shape::Circle { cx, cy, .. } => (cx, cy),
+        Shape::Rect { cx, cy, .. } => (cx, cy),
+    };
+
+    // Lateral margins: controls on the right move inward (left), controls on the left move inward (right).
+    if cx > 0.55 {
+        cx -= mx;
+    } else if cx < 0.45 {
+        cx += mx;
+    }
+
+    // Vertical margins: controls in the lower half move upward.
+    if cy > 0.50 {
+        cy -= my;
+    }
+
+    match c.shape {
+        Shape::Circle { r, .. } => Some(Shape::Circle { cx, cy, r: r * s }),
+        Shape::Rect { w, h, .. } => Some(Shape::Rect { cx, cy, w: w * s, h: h * s }),
+    }
+}
+
 /// Returns the index of the control containing the normalised point, if any.
 pub fn hit(nx: f32, ny: f32) -> Option<usize> {
-    CONTROLS.iter().enumerate().position(|(index, c)| {
-        if !is_active(index) {
-            return false
-        }
-        match c.shape {
+    CONTROLS.iter().enumerate().position(|(index, _)| {
+        let Some(shape) = effective_shape(index) else {
+            return false;
+        };
+        match shape {
             Shape::Circle { cx, cy, r } => {
                 let (dx, dy) = (nx - cx, ny - cy);
                 dx * dx + dy * dy <= r * r
@@ -227,21 +260,31 @@ pub const JOYSTICK_R: f32 = 0.200;
 /// Dead zone, as a fraction of the radius, before a direction registers.
 pub const JOYSTICK_DEAD: f32 = 0.35;
 
+pub fn joystick_center() -> (f32, f32) {
+    (JOYSTICK_CX + margin_x(), JOYSTICK_CY - margin_y())
+}
+
+pub fn joystick_radius() -> f32 {
+    JOYSTICK_R * scale()
+}
+
 pub fn joystick_hit(nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
     if !joystick_active() {
         return false
     }
-    let r = JOYSTICK_R * wh;
-    let dx = (nx - JOYSTICK_CX) * ww;
-    let dy = (ny - JOYSTICK_CY) * wh;
+    let (cx, cy) = joystick_center();
+    let r = joystick_radius() * wh;
+    let dx = (nx - cx) * ww;
+    let dy = (ny - cy) * wh;
     dx * dx + dy * dy <= r * r
 }
 
 /// `[up, down, left, right]` to hold for a stick at (nx, ny).
 pub fn joystick_dirs(nx: f32, ny: f32, ww: f32, wh: f32) -> [bool; 4] {
-    let r = JOYSTICK_R * wh;
-    let dx = (nx - JOYSTICK_CX) * ww;
-    let dy = (ny - JOYSTICK_CY) * wh;
+    let (cx, cy) = joystick_center();
+    let r = joystick_radius() * wh;
+    let dx = (nx - cx) * ww;
+    let dy = (ny - cy) * wh;
     stick_dirs(dx / r, dy / r)
 }
 
@@ -277,3 +320,34 @@ pub fn set_opacity(pct: u32) {
 pub fn opacity() -> f32 {
     OPACITY.load(Ordering::Relaxed) as f32 / 100.0
 }
+
+static SCALE: AtomicU32 = AtomicU32::new(100);
+
+pub fn set_scale(pct: u32) {
+    SCALE.store(pct.clamp(60, 150), Ordering::Relaxed);
+}
+
+pub fn scale() -> f32 {
+    SCALE.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+static MARGIN_X: AtomicU32 = AtomicU32::new(0);
+
+pub fn set_margin_x(pct: u32) {
+    MARGIN_X.store(pct.clamp(0, 20), Ordering::Relaxed);
+}
+
+pub fn margin_x() -> f32 {
+    MARGIN_X.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+static MARGIN_Y: AtomicU32 = AtomicU32::new(0);
+
+pub fn set_margin_y(pct: u32) {
+    MARGIN_Y.store(pct.clamp(0, 20), Ordering::Relaxed);
+}
+
+pub fn margin_y() -> f32 {
+    MARGIN_Y.load(Ordering::Relaxed) as f32 / 100.0
+}
+
