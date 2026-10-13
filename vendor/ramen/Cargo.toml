@@ -1,0 +1,32 @@
+[package]
+name = "ramen"
+version = "0.0.3"
+authors = ["viri <hi@viri.moe>"]
+edition = "2021"
+rust-version = "1.57"
+description = "Cross-platform windowing crate, built for performance."
+documentation = "https://docs.rs/ramen"
+readme = "misc/CRATES-IO.md"
+homepage = "https://github.com/viriuwu/ramen"
+repository = "https://github.com/viriuwu/ramen"
+license = "Zlib"
+keywords = ["gamedev", "graphics", "windowing"]
+categories = ["api-bindings", "game-development", "game-engines", "gui"]
+# build = ...
+include = ["/src", "LICENCE.org", "README.org"]
+
+[dependencies]
+parking_lot = { version = "0.12", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[features]
+default = ["input"]
+input = []
+nightly-rustdoc = []
+parking-lot = ["parking_lot"]
+
+[package.metadata.docs.rs]
+features = ["nightly-rustdoc"]
+targets = ["x86_64-unknown-linux-gnu"]

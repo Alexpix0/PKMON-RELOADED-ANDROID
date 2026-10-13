@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Themed-icon layer (Android 13+): the system paints this with the wallpaper's colours, so it is a
+  single-colour silhouette of the ball rather than the full drawing. Anything transparent stays
+  transparent, which is why the band and the button are cut out of the shape instead of drawn.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M54,28 A26,26 0 1,1 54,80 A26,26 0 1,1 54,28 Z
+            M28,50.5 h52 v7 h-52 z
+            M54,46 A8,8 0 1,1 54,62 A8,8 0 1,1 54,46 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,50.5 A3.5,3.5 0 1,1 54,57.5 A3.5,3.5 0 1,1 54,50.5 Z" />
+</vector>

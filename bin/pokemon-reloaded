@@ -1,0 +1,4 @@
+#!/bin/bash
+# Pokemon Reloaded - runner nativo Linux (OpenGMK, reimplementation del runner de Game Maker 8)
+GAMEDIR="$HOME/Descargas/Proyecto Reloaded The Last Beta 1.9.2.2 Full"
+exec "$HOME/.local/bin/gm8emulator" "$GAMEDIR/Proyecto Reloaded The Last Beta 1.9.2.2 Full.exe" "$@"

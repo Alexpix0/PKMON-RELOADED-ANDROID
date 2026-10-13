@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+exclude = ["gm8emulator-wow64"]
+members = [
+    # main projects
+    "gm8emulator",
+    "gm8decompiler",
+    "gml-parser",
+    "gm8exe",
+]
+
+[profile.release]
+codegen-units = 1
+opt-level = 3
+lto = 'thin'
+strip = true
+panic = "abort"

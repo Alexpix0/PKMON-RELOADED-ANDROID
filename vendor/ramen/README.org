@@ -1,0 +1,17 @@
+#+title: ramen
+
+This is a windowing library that was once meant to be pretty nice but now serves as a backbone for OpenGMK, mostly hacked together in a few weeks. I do not recommend using it for any purpose.
+
+* Features
+- =input= :: Enabled by default, provides events for keyboard and mouse input.
+- =parking-lot= :: Replaces the synchronisation primitives with those from [[https://github.com/Amanieu/parking_lot][parking_lot]] for improved performance. Recommended in release mode.
+* Building
+/ramen/ is purposefully minimal on dependencies, so for the most part, you'll be able to just add it as a dependency for your project with no extra hassle. To build with the X11 backend (usually when building for Linux), you'll need the *development files* installed for the following libraries:
+- libX11
+- libxcb
+If the =input= feature is enabled:
+- libxcb-xinput
+- libxkbcommon
+The corresponding libraries will also need to be installed on the target machine - otherwise you'll get an =Unsupported= error from =Connection::new()=.
+* Licence
+Due to the proprietary nature of games, ramen is available under the short and permissive [[./LICENCE.org][zlib/libpng licence]].

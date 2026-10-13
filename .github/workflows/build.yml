@@ -1,0 +1,51 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Instalar Rust y target Android
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Instalar cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Configurar Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+          add-to-path: true
+
+      - name: Compilar motor nativo Rust (libgm8emulator.so)
+        run: |
+          cd src/OpenGMK
+          cargo ndk -t arm64-v8a --platform 29 build -p gm8emulator --release
+
+      - name: Compilar APK de Android
+        run: |
+          cd android
+          gradle :app:assembleRelease --no-daemon
+
+      - name: Subir APK como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokemon-reloaded-armando-release
+          path: android/app/build/outputs/apk/release/*.apk

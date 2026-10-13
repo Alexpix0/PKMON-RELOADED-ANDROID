@@ -1,0 +1,574 @@
+pub mod midi;
+#[cfg(target_os = "android")]
+mod aaudio;
+mod mixer;
+mod mp3;
+
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    io::Write,
+    process::{self, Child, Stdio},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        mpsc::{self, Receiver, Sender},
+        Arc,
+    },
+};
+use udon::{
+    cycle::Cycle,
+    rechanneler::Rechanneler,
+    resampler::Resampler,
+    session::{Api, Session},
+    source::{ChannelCount, Sample, SampleRate, Source},
+    wav::WavPlayer,
+};
+
+pub use self::midi::MidiHandle;
+use self::{
+    mixer::{Mixer, MixerHandle},
+    mp3::Mp3Player,
+};
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Mp3Handle {
+    player: Mp3Player,
+    id: i32,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct WavHandle {
+    player: WavPlayer,
+    params: Arc<SoundParams>,
+    _use_3d: bool,
+    exclusive: bool,
+    id: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SoundParams {
+    pub volume: AtomicU32,
+}
+
+pub struct AudioManager {
+    mixer: Option<Mixer>,
+    sample_sender: Option<Sender<Sample>>,
+    mixer_handle: MixerHandle,
+    mixer_channel_count: ChannelCount,
+    mixer_sample_rate: SampleRate,
+    do_output: bool,
+    global_volume: Arc<AtomicU32>,
+    end_times: HashMap<i32, Option<u128>>,
+    multimedia_end: Option<(i32, Option<u128>)>,
+    audio_recorder: Option<Child>,
+    /// Raw `AAudioStream*` kept alive for the process lifetime on Android.
+    aaudio_stream: Option<usize>,
+}
+
+pub struct InterprocessSource {
+    receiver: Receiver<Sample>,
+    channels: ChannelCount,
+    sample_rate: SampleRate,
+}
+
+impl InterprocessSource {
+    pub fn new(receiver: Receiver<Sample>, channels: ChannelCount, sample_rate: SampleRate) -> InterprocessSource {
+        Self { receiver, channels, sample_rate }
+    }
+}
+
+impl Source for InterprocessSource {
+    fn channel_count(&self) -> ChannelCount {
+        self.channels
+    }
+
+    fn sample_rate(&self) -> SampleRate {
+        self.sample_rate
+    }
+
+    fn write_samples(&mut self, buffer: &mut [Sample]) -> usize {
+        buffer.fill_with(|| self.receiver.recv().unwrap_or_default());
+
+        buffer.len()
+    }
+
+    fn reset(&mut self) {}
+}
+
+#[cfg(target_os = "android")]
+fn session_api() -> Api {
+    Api::Dummy
+}
+
+#[cfg(not(target_os = "android"))]
+fn session_api() -> Api {
+    Api::SoundIo
+}
+
+impl AudioManager {
+    /// An audio manager that produces no output. Used on platforms without an audio backend yet.
+    #[cfg(target_os = "android")]
+    fn disabled() -> Self {
+        Self {
+            mixer: None,
+            sample_sender: None,
+            mixer_handle: MixerHandle::new_silent(),
+            mixer_channel_count: ChannelCount::new(2).unwrap(),
+            mixer_sample_rate: SampleRate::new(48000).unwrap(),
+            do_output: false,
+            global_volume: Arc::new(AtomicU32::from(1.0f32.to_bits())),
+            end_times: HashMap::new(),
+            multimedia_end: None,
+            audio_recorder: None,
+            aaudio_stream: None,
+        }
+    }
+
+    /// Android audio: drives the mixer from a native AAudio output stream.
+    #[cfg(target_os = "android")]
+    fn new_android(do_output: bool) -> Self {
+        let global_volume = Arc::new(AtomicU32::from(1.0f32.to_bits()));
+        if !do_output {
+            return Self::disabled();
+        }
+        match aaudio::open(global_volume.clone()) {
+            Ok((stream, channels, sample_rate, mixer_handle)) => Self {
+                mixer: None,
+                sample_sender: None,
+                mixer_handle,
+                mixer_channel_count: channels,
+                mixer_sample_rate: sample_rate,
+                do_output,
+                global_volume,
+                end_times: HashMap::new(),
+                multimedia_end: None,
+                audio_recorder: None,
+                aaudio_stream: Some(stream),
+            },
+            Err(e) => {
+                eprintln!("[aaudio] no se pudo abrir la salida de audio: {}", e);
+                Self::disabled()
+            },
+        }
+    }
+
+    pub fn new(do_output: bool, capture_audio: bool) -> Self {
+        #[cfg(target_os = "android")]
+        {
+            Self::new_android(do_output)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Self::new_desktop(do_output, capture_audio)
+        }
+    }
+
+    /// Desktop audio: pulls from the mixer with udon's SoundIo session.
+    #[cfg(not(target_os = "android"))]
+    fn new_desktop(do_output: bool, capture_audio: bool) -> Self {
+        // TODO: not all these unwraps
+        let session = Session::new(session_api()).unwrap();
+        let device = match session.default_output_device() {
+            Ok(device) => device,
+            Err(_) => {
+                #[cfg(not(target_os = "android"))]
+                panic!("no se pudo obtener el dispositivo de audio de salida");
+                #[cfg(target_os = "android")]
+                return Self::disabled();
+            },
+        };
+        let sample_rate = device.sample_rate();
+        let channel_count = device.channel_count();
+        let global_volume = Arc::new(AtomicU32::from(1.0f32.to_bits()));
+        let (mixer, mixer_handle) = Mixer::new(sample_rate, channel_count, global_volume.clone());
+        let (sample_sender, sample_receiver) = mpsc::channel();
+
+        let interprocess_source = InterprocessSource::new(sample_receiver, channel_count, sample_rate);
+
+        let audio_recorder = capture_audio.then(|| {
+            process::Command::new("ffmpeg")
+                .arg("-y")
+                .arg("-f")
+                .arg("f32le")
+                .arg("-ar")
+                .arg(sample_rate.to_string())
+                .arg("-ac")
+                .arg(channel_count.to_string())
+                .arg("-i")
+                .arg("-")
+                .arg("capture.flac")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("Failed to open FFmpeg stdin")
+        });
+
+        if capture_audio {
+            std::thread::spawn(move || {
+                let stream = session.open_output_stream(device).unwrap();
+
+                stream.play(interprocess_source).unwrap();
+            });
+
+            return Self {
+                mixer: Some(mixer),
+                sample_sender: Some(sample_sender),
+                mixer_handle,
+                mixer_channel_count: channel_count,
+                mixer_sample_rate: sample_rate,
+                do_output,
+                global_volume,
+                end_times: HashMap::new(),
+                multimedia_end: None,
+                audio_recorder: audio_recorder,
+                aaudio_stream: None,
+            };
+        } else {
+            std::thread::spawn(move || {
+                let stream = session.open_output_stream(device).unwrap();
+
+                stream.play(mixer).unwrap();
+            });
+
+            Self {
+                mixer: None,
+                sample_sender: None,
+                mixer_handle,
+                mixer_channel_count: channel_count,
+                mixer_sample_rate: sample_rate,
+                do_output,
+                global_volume,
+                end_times: HashMap::new(),
+                multimedia_end: None,
+                audio_recorder: audio_recorder,
+                aaudio_stream: None,
+            }
+        }
+    }
+
+    pub fn capture_audio(&mut self) {
+        if let Some(mixer) = &mut self.mixer {
+            // samplerate / framerate * channels
+            const AUDIO_SAMPLES_PER_FRAME: usize = 48000 / 50 * 2;
+            let mut audio_output: [Sample; AUDIO_SAMPLES_PER_FRAME] = [0.0; AUDIO_SAMPLES_PER_FRAME];
+
+            let stdin = self.audio_recorder.as_mut().unwrap().stdin.as_mut().expect("Failed to open stdin");
+            mixer.write_samples(&mut audio_output);
+
+            unsafe {
+                let samples = std::slice::from_raw_parts(audio_output.as_ptr() as *const u8, audio_output.len() * 4);
+                stdin.write_all(samples).unwrap();
+            }
+
+            if let Some(sample_sender) = &self.sample_sender {
+                audio_output.iter().for_each(|s| {
+                    sample_sender.send(*s).unwrap();
+                })
+            }
+        }
+    }
+
+    pub fn stop_audio_capture(&mut self) {
+        if let Some(recorder) = self.audio_recorder.take() {
+            recorder.wait_with_output().expect("audio recorder should close");
+        }
+    }
+
+    pub fn add_mp3(&mut self, file: Box<[u8]>, sound_id: i32) -> Option<Mp3Handle> {
+        Mp3Player::new(file).map(|player| Mp3Handle { player, id: sound_id }).ok()
+    }
+    pub fn add_wav(
+        &mut self,
+        file: Box<[u8]>,
+        sound_id: i32,
+        volume: f64,
+        use_3d: bool,
+        exclusive: bool,
+    ) -> Option<WavHandle> {
+        WavPlayer::new(file)
+            .map(|player| WavHandle {
+                player,
+                params: Arc::new(SoundParams { volume: AtomicU32::new(make_volume(volume).to_bits()) }),
+                _use_3d: use_3d,
+                exclusive,
+                id: sound_id,
+            })
+            .ok()
+    }
+
+    /// Loads a MIDI file. Nothing is synthesized here: the song is rendered block by block while
+    /// it plays, so changing the music costs a parse rather than a full render.
+    pub fn add_midi(&mut self, data: Box<[u8]>, sound_id: i32, volume: f64, exclusive: bool) -> Option<MidiHandle> {
+        MidiHandle::new(data, sound_id, volume, exclusive)
+    }
+
+    pub fn play_mp3(&mut self, handle: &Mp3Handle, start_time: u128) {
+        let end_time = length_to_ns(
+            handle.player.length(),
+            handle.player.sample_rate().into(),
+            1, // mp3 length() already takes channels into account
+        ) + start_time;
+        self.multimedia_end = Some((handle.id, Some(end_time)));
+        if self.do_output {
+            let _ = self.mixer_handle.add_exclusive(
+                Rechanneler::new(
+                    Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                    self.mixer_channel_count,
+                ),
+                handle.id,
+            );
+        }
+    }
+
+    pub fn play_wav(&mut self, handle: &WavHandle, start_time: u128) {
+        let end_time = length_to_ns(
+            handle.player.length(),
+            handle.player.sample_rate().into(),
+            handle.player.channel_count().into(),
+        ) + start_time;
+        if handle.exclusive {
+            self.multimedia_end = Some((handle.id, Some(end_time)));
+        } else if self.end_times.get(&handle.id) != Some(&None) {
+            self.end_times.insert(handle.id, Some(end_time));
+        }
+
+        if self.do_output {
+            if handle.exclusive {
+                let _ = self.mixer_handle.add_exclusive(
+                    Rechanneler::new(
+                        Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                        self.mixer_channel_count,
+                    ),
+                    handle.id,
+                );
+            } else {
+                let _ = self.mixer_handle.add(
+                    Rechanneler::new(
+                        Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                        self.mixer_channel_count,
+                    ),
+                    handle.params.clone(),
+                    handle.id,
+                );
+            }
+        }
+    }
+
+    pub fn play_midi(&mut self, handle: &MidiHandle, start_time: u128) {
+        let end_time = length_to_ns(handle.length(), handle.sample_rate(), handle.channel_count()) + start_time;
+        if handle.exclusive {
+            self.multimedia_end = Some((handle.id, Some(end_time)));
+        } else if self.end_times.get(&handle.id) != Some(&None) {
+            self.end_times.insert(handle.id, Some(end_time));
+        }
+
+        if self.do_output {
+            if let Some(source) = handle.source(false) {
+                if handle.exclusive {
+                    let _ = self.mixer_handle.add_exclusive(
+                        Rechanneler::new(
+                            Resampler::new(source, self.mixer_sample_rate),
+                            self.mixer_channel_count,
+                        ),
+                        handle.id,
+                    );
+                } else {
+                    let _ = self.mixer_handle.add(
+                        Rechanneler::new(
+                            Resampler::new(source, self.mixer_sample_rate),
+                            self.mixer_channel_count,
+                        ),
+                        handle.params.clone(),
+                        handle.id,
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn loop_midi(&mut self, handle: &MidiHandle) {
+        if handle.exclusive {
+            self.multimedia_end = Some((handle.id, None));
+        } else {
+            self.end_times.insert(handle.id, None);
+        }
+
+        if self.do_output {
+            // The sequencer loops the file itself, so this source never ends and there is no need
+            // to cycle it at the mixer.
+            if let Some(source) = handle.source(true) {
+                if handle.exclusive {
+                    let _ = self.mixer_handle.add_exclusive(
+                        Rechanneler::new(
+                            Resampler::new(source, self.mixer_sample_rate),
+                            self.mixer_channel_count,
+                        ),
+                        handle.id,
+                    );
+                } else {
+                    let _ = self.mixer_handle.add(
+                        Rechanneler::new(
+                            Resampler::new(source, self.mixer_sample_rate),
+                            self.mixer_channel_count,
+                        ),
+                        handle.params.clone(),
+                        handle.id,
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn loop_mp3(&mut self, handle: &Mp3Handle) {
+        self.multimedia_end = Some((handle.id, None));
+        eprintln!("[mixer] loop_mp3 id={} do_output={}", handle.id, self.do_output);
+        if self.do_output {
+            let res = self.mixer_handle.add_exclusive(
+                Cycle::new(Rechanneler::new(
+                    Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                    self.mixer_channel_count,
+                )),
+                handle.id,
+            );
+            eprintln!("[mixer] add_exclusive mp3 loop id={} -> {:?}", handle.id, res);
+        }
+    }
+
+    pub fn loop_wav(&mut self, handle: &WavHandle) {
+        if handle.exclusive {
+            self.multimedia_end = Some((handle.id, None));
+        } else {
+            self.end_times.insert(handle.id, None);
+        }
+
+        if self.do_output {
+            if handle.exclusive {
+                let res = self.mixer_handle.add_exclusive(
+                    Cycle::new(Rechanneler::new(
+                        Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                        self.mixer_channel_count,
+                    )),
+                    handle.id,
+                );
+                eprintln!("[mixer] add_exclusive loop id={} -> {:?}", handle.id, res);
+            } else {
+                let res = self.mixer_handle.add(
+                    Cycle::new(Rechanneler::new(
+                        Resampler::new(handle.player.clone(), self.mixer_sample_rate),
+                        self.mixer_channel_count,
+                    )),
+                    handle.params.clone(),
+                    handle.id,
+                );
+                eprintln!("[mixer] add loop id={} -> {:?}", handle.id, res);
+            }
+        }
+    }
+
+    pub fn stop_sound(&mut self, id: i32) {
+        self.end_times.remove(&id);
+        if self.multimedia_end.map(|(x, _)| x) == Some(id) {
+            self.multimedia_end = None;
+        }
+        if self.do_output {
+            let _ = self.mixer_handle.stop(id);
+        }
+    }
+
+    pub fn stop_all(&mut self) {
+        self.end_times.clear();
+        self.multimedia_end = None;
+        if self.do_output {
+            let _ = self.mixer_handle.stop_all();
+        }
+    }
+
+    pub fn set_global_volume(&self, vol: f64) {
+        self.global_volume.store(make_volume(vol).to_bits(), Ordering::Release)
+    }
+
+    pub fn sound_playing(&self, sound_id: i32, current_time: u128) -> bool {
+        self.mp3_playing(sound_id, current_time) || self.wav_playing(sound_id, current_time)
+    }
+
+    fn mp3_playing(&self, sound_id: i32, current_time: u128) -> bool {
+        self.multimedia_end
+            .map(|(id, end_time)| id == sound_id && end_time.map(|x| x > current_time).unwrap_or(true))
+            .unwrap_or(false)
+    }
+
+    fn wav_playing(&self, sound_id: i32, current_time: u128) -> bool {
+        match self.end_times.get(&sound_id) {
+            Some(&Some(x)) => x > current_time,
+            Some(None) => true,
+            None => false,
+        }
+    }
+
+    pub fn state(&self) -> AudioState {
+        AudioState {
+            global_volume: self.global_volume.clone(),
+            end_times: self.end_times.clone(),
+            multimedia_end: self.multimedia_end,
+        }
+    }
+
+    pub fn set_state(&mut self, state: AudioState) {
+        self.global_volume = state.global_volume;
+        self.end_times = state.end_times;
+        self.multimedia_end = state.multimedia_end;
+    }
+}
+
+impl WavHandle {
+    pub fn set_volume(&self, vol: f64) {
+        self.params.volume.store(make_volume(vol).to_bits(), Ordering::Release);
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AudioState {
+    global_volume: Arc<AtomicU32>,
+    end_times: HashMap<i32, Option<u128>>,
+    multimedia_end: Option<(i32, Option<u128>)>,
+}
+
+fn length_to_ns(sample_count: usize, sample_rate: u32, channels: u16) -> u128 {
+    (sample_count as u128 * 1_000_000_000) / (u128::from(sample_rate) * u128::from(channels))
+}
+
+/// Some of the game's `.wav` files are really MP3 streams carrying a WAVE header (format tag
+/// 0x0055, MPEG Layer 3), which the WAV decoder rejects with UnknownFormat. They have to go to
+/// the MP3 decoder instead.
+pub(crate) fn wav_is_mp3(data: &[u8]) -> bool {
+    data.len() >= 22 && &data[0..4] == b"RIFF" && &data[8..12] == b"WAVE" && data[20] == 0x55 && data[21] == 0x00
+}
+
+/// Decodes a WAV/MP3 exactly like playback would, but without needing an audio device. Used by
+/// the `--scan-assets` diagnostic to catch sounds the game would fail to load.
+pub(crate) fn check_wav(file: Box<[u8]>) -> Result<(), String> {
+    if wav_is_mp3(&file) {
+        return check_mp3(file)
+    }
+    WavPlayer::new(file).map(|_| ()).map_err(|e| format!("{:?}", e))
+}
+
+pub(crate) fn check_mp3(file: Box<[u8]>) -> Result<(), String> {
+    Mp3Player::new(file).map(|_| ()).map_err(|_| "no pude decodificar el MP3".to_string())
+}
+
+/// Stops and resumes the audio output when the app goes to the background and comes back.
+pub fn set_output_paused(paused: bool) {
+    #[cfg(target_os = "android")]
+    aaudio::set_paused(paused);
+    #[cfg(not(target_os = "android"))]
+    let _ = paused;
+}
+
+// This function takes a volume between 0.0 and 1.0 and converts it to the logarithmic scale used by DirectMusic.
+// This is, roughly, the same function used by GM8/DirectMusic.
+// Note that the minimum possible output from this function is 0.001. I think that's accurate to GM8.
+pub(crate) fn make_volume(vol: f64) -> f32 {
+    1000.0f64.powf(vol.clamp(0.0, 1.0) - 1.0) as f32
+}

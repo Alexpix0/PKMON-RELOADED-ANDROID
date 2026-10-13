@@ -1,0 +1,37 @@
+# Build output
+target/
+**/target/
+
+# Game data (copyrighted; not part of the port)
+# NOTE: anchored to the repo root on purpose — a bare `game/` would also ignore the
+# emulator's own `src/game/` module.
+/game/
+
+# Built binaries and packaged artifacts
+bin/gm8emulator
+android/apk/build/
+android/apk/work/
+android/apk/*.apk
+android/apk/*.idsig
+android-probe/build/
+android-probe/work/
+
+# Gradle launcher app
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+# The signing key and its passwords stay on the machine that builds the release.
+android/keystore/
+android/keystore.properties
+# The .so here is copied from target/ by the Gradle build, not a source file.
+android/app/src/main/jniLibs/
+
+# Rust/Cargo misc
+**/*.rs.bk
+
+# Editor/OS
+.DS_Store
+
+# The built APK goes to the GitHub release, not into git.
+pokemon-reloaded-*.apk

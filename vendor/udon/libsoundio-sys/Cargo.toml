@@ -1,0 +1,20 @@
+[package]
+name = "libsoundio-sys"
+edition = "2021"
+version = "0.3.0"
+authors = ["Tim Hutt <tdhutt@gmail.com>", "Ramy <RamiHg@users.noreply.github.com>", "viri <hi@viri.moe>"]
+links = "soundio"
+build = "build.rs"
+license = "MIT"
+description = "Native bindings to the libsoundio library."
+keywords = ["audio", "media", "soundio"]
+categories = ["multimedia", "multimedia::audio"]
+
+[lib]
+name = "libsoundio_sys"
+path = "lib.rs"
+
+[build-dependencies]
+pkg-config = "0.3"
+cmake = "0.1"
+cc = "1.0"

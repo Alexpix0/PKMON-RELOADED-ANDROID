@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The game's ball, drawn the way the logo draws it: a very thin light grey rim around it, an orange
+  top, a pale body, a dark band and a pale button. Centred on 54,54 with r=26, inside the adaptive
+  icon's safe zone.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- the thin lighter rim that surrounds the ball -->
+    <path
+        android:strokeColor="#9E9E9E"
+        android:strokeWidth="1.6"
+        android:pathData="M54,25.6 A28.4,28.4 0 1,1 53.9,25.6 Z" />
+    <!-- pale body -->
+    <path
+        android:fillColor="#F1F1F1"
+        android:pathData="M54,28.6 A25.4,25.4 0 1,1 54,79.4 A25.4,25.4 0 1,1 54,28.6 Z" />
+    <!-- orange top half -->
+    <path
+        android:fillColor="#F26A1B"
+        android:pathData="M28.6,54 A25.4,25.4 0 0,1 79.4,54 Z" />
+    <!-- dark band -->
+    <path
+        android:fillColor="#1C1C1C"
+        android:pathData="M28.6,50.8 h50.8 v6.4 h-50.8 z" />
+    <!-- centre button -->
+    <path
+        android:fillColor="#1C1C1C"
+        android:pathData="M54,46.4 A7.6,7.6 0 1,1 54,61.6 A7.6,7.6 0 1,1 54,46.4 Z" />
+    <path
+        android:fillColor="#F1F1F1"
+        android:pathData="M54,50.4 A3.6,3.6 0 1,1 54,57.6 A3.6,3.6 0 1,1 54,50.4 Z" />
+</vector>

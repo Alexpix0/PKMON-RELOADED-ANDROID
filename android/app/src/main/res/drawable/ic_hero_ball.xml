@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The ball used on the welcome screen. The top half is the dark one and the bottom half is light,
+  which is the way the game draws it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- pale ball -->
+    <path
+        android:fillColor="#EDEDED"
+        android:pathData="M54,28 A26,26 0 1,1 54,80 A26,26 0 1,1 54,28 Z" />
+    <!-- dark top half -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M28,54 A26,26 0 0,1 80,54 Z" />
+    <!-- dark band -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M28,50.5 h52 v7 h-52 z" />
+    <!-- centre button -->
+    <path
+        android:fillColor="#2A2A2A"
+        android:pathData="M54,46 A8,8 0 1,1 54,62 A8,8 0 1,1 54,46 Z" />
+    <path
+        android:fillColor="#EDEDED"
+        android:pathData="M54,50 A4,4 0 1,1 54,58 A4,4 0 1,1 54,50 Z" />
+</vector>

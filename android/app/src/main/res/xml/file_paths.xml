@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The downloaded update lives in the cache, and the system installer is handed a content:// URI to
+  it, which is the only way an app is allowed to install a package from its own storage.
+-->
+<paths>
+    <!--
+      The whole cache directory, not one file by name. Naming the files matched nothing and the
+      lookup failed with "Failed to find configured root", which left the installer with no file to
+      open; the log written for sharing lives in here too.
+    -->
+    <cache-path name="cache" path="." />
+</paths>

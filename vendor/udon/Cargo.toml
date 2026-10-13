@@ -1,0 +1,27 @@
+[package]
+name = "udon"
+version = "0.0.1"
+authors = ["Adam <classygopher@gmail.com>"]
+edition = "2018"
+description = "Audio playback library designed with game engines in mind"
+repository = "https://github.com/Adamcake/Kou/"
+license = "GPL-2.0-only"
+keywords = ["audio", "gamedev", "playback"]
+include = ["src/**/*", "Cargo.toml"]
+
+[features]
+default = []
+#alsa = ["alsa_rs"]
+#wasapi = []
+wav = []
+serde-derives = ["serde"]
+
+[dependencies]
+
+serde = { version = "1.0", features = ["derive", "rc"], optional = true }
+
+#[target.'cfg(any(target_os = "dragonfly", target_os = "freebsd", target_os = "linux"))'.dependencies]
+#alsa_rs = { package = "alsa", version = "0.5", optional = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+libsoundio-sys = { path = "./libsoundio-sys" }

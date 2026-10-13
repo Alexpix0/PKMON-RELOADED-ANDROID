@@ -1,0 +1,10 @@
+/target
+/libsoundio-sys/target
+**/*.rs.bk
+**/*.exe
+/src/bin
+
+/.idea
+/.vscode
+
+Cargo.lock

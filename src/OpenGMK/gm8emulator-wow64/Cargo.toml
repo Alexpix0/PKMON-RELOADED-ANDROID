@@ -1,0 +1,14 @@
+[package]
+name = "gm8emulator-wow64"
+version = "0.2.0"
+authors = ["The OpenGMK Project Developers"]
+edition = "2021"
+rust-version = "1.77"
+resolver = "2"
+
+[dependencies]
+bincode = "1.3.3"
+byteorder = "1.5"
+crc32fast = "1.2"
+libffi = "3.1.0"
+serde = { version = "1.0", features = ["derive"] }

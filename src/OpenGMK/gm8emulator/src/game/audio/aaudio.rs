@@ -1,0 +1,144 @@
+//! Native Android audio output via AAudio.
+//!
+//! The rest of the engine feeds a `Mixer` (an `udon::Source`). On desktop, `udon`'s SoundIo
+//! session pulls from it; there is no such backend for Android, so here we open an AAudio output
+//! stream and drive the very same `Mixer` straight from its data callback.
+//!
+//! AAudio lives in `libaaudio.so` (linked from the NDK sysroot), so this is plain FFI — no extra
+//! crates and no C++ toolchain.
+
+use std::{
+    ffi::c_void,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Mutex,
+    },
+    sync::Arc,
+};
+
+use udon::source::{ChannelCount, Sample, SampleRate, Source};
+
+use super::mixer::{Mixer, MixerHandle};
+
+// aaudio/AAudio.h
+const AAUDIO_OK: i32 = 0;
+const AAUDIO_DIRECTION_OUTPUT: i32 = 0;
+const AAUDIO_FORMAT_PCM_FLOAT: i32 = 2;
+const AAUDIO_PERFORMANCE_MODE_LOW_LATENCY: i32 = 12;
+const AAUDIO_CALLBACK_RESULT_CONTINUE: i32 = 0;
+
+/// The mixer currently being pulled by the AAudio callback, if any.
+static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
+
+/// The output stream, so it can be stopped and resumed when the app goes to the background and
+/// comes back. Set by [open].
+static STREAM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Stops or resumes the output. Without this the music keeps playing behind the home screen, which
+/// is both wrong and how a game that never really paused gives itself away.
+pub fn set_paused(paused: bool) {
+    let stream = STREAM.load(Ordering::Relaxed) as *mut c_void;
+    if stream.is_null() {
+        return
+    }
+    unsafe {
+        if paused {
+            AAudioStream_requestPause(stream);
+            // Drop what is already queued, so the silence arrives now instead of draining first.
+            AAudioStream_requestFlush(stream);
+        } else {
+            let _ = AAudioStream_requestStart(stream);
+        }
+    }
+}
+
+extern "C" {
+    fn AAudio_createStreamBuilder(builder: *mut *mut c_void) -> i32;
+    fn AAudioStreamBuilder_setDirection(builder: *mut c_void, direction: i32);
+    fn AAudioStreamBuilder_setFormat(builder: *mut c_void, format: i32);
+    fn AAudioStreamBuilder_setChannelCount(builder: *mut c_void, channel_count: i32);
+    fn AAudioStreamBuilder_setSampleRate(builder: *mut c_void, sample_rate: i32);
+    fn AAudioStreamBuilder_setPerformanceMode(builder: *mut c_void, mode: i32);
+    fn AAudioStreamBuilder_setDataCallback(
+        builder: *mut c_void,
+        callback: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, i32) -> i32,
+        user_data: *mut c_void,
+    );
+    fn AAudioStreamBuilder_openStream(builder: *mut c_void, stream: *mut *mut c_void) -> i32;
+    fn AAudioStreamBuilder_delete(builder: *mut c_void) -> i32;
+    fn AAudioStream_requestStart(stream: *mut c_void) -> i32;
+    fn AAudioStream_requestPause(stream: *mut c_void) -> i32;
+    fn AAudioStream_requestFlush(stream: *mut c_void) -> i32;
+    fn AAudioStream_getChannelCount(stream: *mut c_void) -> i32;
+    fn AAudioStream_getSampleRate(stream: *mut c_void) -> i32;
+}
+
+/// Pulls `num_frames` of interleaved f32 audio out of the mixer. AAudio calls this from its own
+/// real-time thread, so a failed `try_lock` just yields silence instead of blocking that thread.
+extern "C" fn data_callback(
+    _stream: *mut c_void,
+    _user_data: *mut c_void,
+    audio_data: *mut c_void,
+    num_frames: i32,
+) -> i32 {
+    let Ok(mut guard) = MIXER.try_lock() else {
+        return AAUDIO_CALLBACK_RESULT_CONTINUE
+    };
+    let channels = guard.as_ref().map(|m| m.channel_count().get() as usize).unwrap_or(2);
+    let len = (num_frames.max(0) as usize) * channels;
+    // SAFETY: AAudio guarantees `audio_data` points to `num_frames * channels` f32 samples.
+    let buffer = unsafe { std::slice::from_raw_parts_mut(audio_data as *mut Sample, len) };
+    match guard.as_mut() {
+        Some(mixer) => {
+            let count = mixer.write_samples(buffer);
+            if count < len {
+                buffer[count..].iter_mut().for_each(|x| *x = 0.0);
+            }
+        },
+        None => buffer.iter_mut().for_each(|x| *x = 0.0),
+    }
+    AAUDIO_CALLBACK_RESULT_CONTINUE
+}
+
+fn check(result: i32, what: &str) -> Result<(), String> {
+    if result == AAUDIO_OK {
+        Ok(())
+    } else {
+        Err(format!("{} fallo (AAudio error {})", what, result))
+    }
+}
+
+/// Opens the output stream and hands the mixer over to its callback. Returns the raw stream
+/// pointer (keep it alive for the process lifetime), the device channel count, its sample rate,
+/// and the handle used to add sounds.
+pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, SampleRate, MixerHandle), String> {
+    unsafe {
+        let mut builder: *mut c_void = std::ptr::null_mut();
+        check(AAudio_createStreamBuilder(&mut builder), "AAudio_createStreamBuilder")?;
+
+        AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
+        AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_FLOAT);
+        AAudioStreamBuilder_setChannelCount(builder, 2);
+        AAudioStreamBuilder_setSampleRate(builder, 48000);
+        AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+        AAudioStreamBuilder_setDataCallback(builder, data_callback, std::ptr::null_mut());
+
+        let mut stream: *mut c_void = std::ptr::null_mut();
+        let result = AAudioStreamBuilder_openStream(builder, &mut stream);
+        AAudioStreamBuilder_delete(builder);
+        check(result, "AAudioStreamBuilder_openStream")?;
+
+        let channels = AAudioStream_getChannelCount(stream).max(1) as u32;
+        let sample_rate = AAudioStream_getSampleRate(stream).max(8000) as u32;
+        let channels = ChannelCount::new(channels as u16).ok_or("canal de audio invalido")?;
+        let sample_rate = SampleRate::new(sample_rate).ok_or("frecuencia de audio invalida")?;
+
+        let (mixer, handle) = Mixer::new(sample_rate, channels, global_volume);
+        *MIXER.lock().unwrap() = Some(mixer);
+        STREAM.store(stream as usize, Ordering::Relaxed);
+
+        check(AAudioStream_requestStart(stream), "AAudioStream_requestStart")?;
+        eprintln!("[aaudio] salida abierta: {} canales @ {} Hz", channels.get(), sample_rate.get());
+        Ok((stream as usize, channels, sample_rate, handle))
+    }
+}
