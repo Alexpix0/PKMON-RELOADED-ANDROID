@@ -54,6 +54,13 @@ Documento de seguimiento de todos los cambios, correcciones y optimizaciones rea
 
 ---
 
+### G. Corrección de toolchain y target en compilación cruzada (CI)
+* **Archivos modificados:** [`src/OpenGMK/rust-toolchain.toml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/rust-toolchain.toml), [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+* **Problema:** En `rust-toolchain.toml` se había especificado `channel = "1.99.0"`, impidiendo que `cargo-ndk` encontrara el crate `core` para el target `aarch64-linux-android`.
+* **Solución:** Se corrigió a `channel = "stable"` con `targets = ["aarch64-linux-android"]` y se añadieron las rutas del NDK y llamada explícita a `rustup target add aarch64-linux-android` en GitHub Actions.
+
+---
+
 ## 2. Optimización de Rendimiento y Tiempos de Carga
 
 ### A. Subida por lotes de texturas del Atlas (`push_atlases`)

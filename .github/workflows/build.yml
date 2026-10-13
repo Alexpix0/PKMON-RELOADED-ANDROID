@@ -35,14 +35,18 @@ jobs:
           add-to-path: true
 
       - name: Compilar motor nativo Rust (libgm8emulator.so)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           cd src/OpenGMK
+          rustup target add aarch64-linux-android
           cargo ndk -t arm64-v8a --platform 29 build -p gm8emulator --release
 
       - name: Compilar APK de Android
         run: |
           cd android
-          gradle :app:assembleRelease --no-daemon
+          gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: Subir APK como artefacto descargable
         uses: actions/upload-artifact@v4
