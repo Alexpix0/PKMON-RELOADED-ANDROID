@@ -614,6 +614,75 @@ class GameRepository(private val context: Context) {
         )
     }
 
+    /**
+     * Applies a lightweight patch or mod (.zip) directly over the game or custom_assets folder
+     * without re-downloading or reinstalling the full 700MB base package.
+     */
+    suspend fun applyPatchOrMod(uri: Uri): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (!gameDir.isDirectory) error("Primero instala el juego base antes de aplicar mods o parches.")
+            val tempZip = File(context.cacheDir, "incoming_patch.zip")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                tempZip.outputStream().use { input.copyTo(it) }
+            } ?: error("No se pudo leer el archivo seleccionado.")
+
+            val customAssetsDir = File(gameDir, "custom_assets").apply { mkdirs() }
+            var updatedCount = 0
+
+            ZipFile(tempZip).use { zip ->
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    val name = entry.name
+                    if (entry.isDirectory || name.startsWith("__MACOSX") || name.startsWith(".")) continue
+
+                    // Determine destination:
+                    // If the zip explicitly contains "custom_assets/", extract relative to gameDir.
+                    // If it contains "data/", extract directly into gameDir.
+                    // If it's loose mod assets (e.g. "pkmnbattle/", "músic/", "image/"), extract into custom_assets/
+                    val destFile = if (name.startsWith("custom_assets/", ignoreCase = true) || name.startsWith("data/", ignoreCase = true)) {
+                        File(gameDir, name)
+                    } else if (name.endsWith(".exe", ignoreCase = true) || name.endsWith(".dll", ignoreCase = true)) {
+                        File(gameDir, name)
+                    } else {
+                        File(customAssetsDir, name)
+                    }
+
+                    destFile.parentFile?.mkdirs()
+                    zip.getInputStream(entry).use { inStream ->
+                        destFile.outputStream().use { inStream.copyTo(it) }
+                    }
+                    updatedCount++
+                }
+            }
+            tempZip.delete()
+            trace("patch: aplicado con éxito ($updatedCount archivos actualizados)")
+            updatedCount
+        }
+    }
+
+    /**
+     * Reads the crash dump if the game engine panicked during the last session.
+     */
+    fun getCrashDump(): String? {
+        val dumpFile = File(files, "crash_dump.txt")
+        if (dumpFile.isFile && dumpFile.length() > 0) {
+            return runCatching { dumpFile.readText() }.getOrNull()
+        }
+        val altDump = File(gameDir, "crash_dump.txt")
+        if (altDump.isFile && altDump.length() > 0) {
+            return runCatching { altDump.readText() }.getOrNull()
+        }
+        return null
+    }
+
+    /** Clears the crash dump file. */
+    fun clearCrashDump(): Boolean {
+        var ok = File(files, "crash_dump.txt").delete()
+        ok = File(gameDir, "crash_dump.txt").delete() || ok
+        return ok
+    }
+
     /** Zips the saves into the cache, ready to be handed to a file picker. */
     suspend fun exportSaves(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {

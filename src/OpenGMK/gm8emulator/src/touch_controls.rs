@@ -20,9 +20,10 @@ use ramen::input::Key;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering},
     Mutex,
 };
+use std::time::{Duration, Instant};
 
 /// Which game states a control is shown in.
 pub const MENU: u8 = 1;
@@ -65,6 +66,7 @@ pub struct Control {
 
 /// The joystick is not a button but is customised (and saved) the same way.
 pub const JOYSTICK_NAME: &str = "joystick";
+pub const RADIAL_MENU_NAME: &str = "radial_menu";
 pub const TURBO_NAME: &str = "turbo";
 pub const MUTE_NAME: &str = "mute";
 pub const EDIT_NAME: &str = "edit";
@@ -72,12 +74,8 @@ pub const GUIDE_NAME: &str = "guide";
 pub const LOG_NAME: &str = "log";
 
 pub const CONTROLS: &[Control] = &[
-    // Utility quick buttons (top right, discrete and non-intrusive)
-    Control { name: LOG_NAME, key: Key::F2, shape: Shape::Circle { cx: 0.685, cy: 0.055, r: 0.022 }, label: Label::Text("LOG"), contexts: WORLD | BATTLE },
-    Control { name: GUIDE_NAME, key: Key::F1, shape: Shape::Circle { cx: 0.750, cy: 0.055, r: 0.022 }, label: Label::Text("TIP"), contexts: WORLD | BATTLE },
-    Control { name: EDIT_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.815, cy: 0.055, r: 0.022 }, label: Label::Text("EDT"), contexts: WORLD | BATTLE },
-    Control { name: TURBO_NAME, key: Key::Pause, shape: Shape::Circle { cx: 0.880, cy: 0.055, r: 0.022 }, label: Label::Text(">>"), contexts: WORLD | BATTLE },
-    Control { name: MUTE_NAME, key: Key::NumLock, shape: Shape::Circle { cx: 0.945, cy: 0.055, r: 0.022 }, label: Label::Text("MUT"), contexts: WORLD | BATTLE },
+    // Trigger button for the Drastic-style Radial Quick-Menu (at the bottom center)
+    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.958, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
     // Menu / misc keys (second row along the top).
     Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
@@ -100,9 +98,9 @@ pub const CONTROLS: &[Control] = &[
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
     Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD },
     Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD },
-    // Menu keys.
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | BATTLE },
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE },
+    // Menu keys (START & SELECT flanking the center quick menu arrow).
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.405, cy: 0.940, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.595, cy: 0.940, r: 0.026 }, label: Label::Text("OK"), contexts: WORLD | BATTLE },
     // While a dialogue box is open the overlay steps aside and leaves only this, so the text and the
     // portrait are not buried under buttons. Its position is measured from the game image (not the
     // window), so it sits on the box whatever the screen's shape is. It sends the key the game
@@ -283,7 +281,7 @@ pub fn show_num_keys() -> bool {
 
 pub fn effective_shape(index: usize) -> Shape {
     let c = &CONTROLS[index];
-    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME || c.name == GUIDE_NAME || c.name == LOG_NAME {
+    if c.contexts & DIALOG != 0 || c.name == RADIAL_MENU_NAME {
         return c.shape;
     }
     let s = scale();
@@ -749,4 +747,152 @@ pub fn wheel_item_at(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
         }
     }
     best
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drastic-style Radial Quick-Menu (Wheel Menu) & In-Game Utilities.
+
+static RADIAL_MENU: AtomicBool = AtomicBool::new(false);
+static RADIAL_HOVER_SECTOR: AtomicI32 = AtomicI32::new(-1);
+
+pub fn radial_menu_open() -> bool {
+    RADIAL_MENU.load(Ordering::Relaxed)
+}
+
+pub fn set_radial_menu_open(open: bool) {
+    RADIAL_MENU.store(open, Ordering::Relaxed);
+    if !open {
+        RADIAL_HOVER_SECTOR.store(-1, Ordering::Relaxed);
+    }
+}
+
+pub fn toggle_radial_menu() -> bool {
+    let was = radial_menu_open();
+    set_radial_menu_open(!was);
+    !was
+}
+
+pub fn radial_hover_sector() -> i32 {
+    RADIAL_HOVER_SECTOR.load(Ordering::Relaxed)
+}
+
+pub fn set_radial_hover_sector(sector: i32) {
+    RADIAL_HOVER_SECTOR.store(sector, Ordering::Relaxed);
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum RadialAction {
+    None,
+    Turbo,     // Center disc
+    Mute,      // Sector 0 (Top)
+    Log,       // Sector 1 (Top-Right)
+    Snapshot,  // Sector 2 (Right)
+    Fps,       // Sector 3 (Bottom-Right)
+    Close,     // Sector 4 (Bottom)
+    Bezel,     // Sector 5 (Bottom-Left)
+    Guide,     // Sector 6 (Left)
+    Edit,      // Sector 7 (Top-Left)
+    Outside,   // Touched outside the wheel -> dismiss
+}
+
+pub const RADIAL_SECTORS_COUNT: usize = 8;
+
+pub fn radial_menu_center(ww: f32, wh: f32) -> (f32, f32) {
+    (ww * 0.5, wh * 0.5)
+}
+
+pub fn radial_menu_inner_radius(ww: f32, wh: f32) -> f32 {
+    ww.min(wh) * 0.14
+}
+
+pub fn radial_menu_outer_radius(ww: f32, wh: f32) -> f32 {
+    ww.min(wh) * 0.40
+}
+
+pub fn radial_menu_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> RadialAction {
+    let (cx, cy) = radial_menu_center(ww, wh);
+    let r_inner = radial_menu_inner_radius(ww, wh);
+    let r_outer = radial_menu_outer_radius(ww, wh);
+    let dx = tx - cx;
+    let dy = ty - cy;
+    let dist = (dx * dx + dy * dy).sqrt();
+
+    if dist <= r_inner {
+        return RadialAction::Turbo;
+    }
+    if dist > r_outer * 1.08 {
+        return RadialAction::Outside;
+    }
+
+    // Angle in radians (-PI..PI). Top is -PI/2.
+    let angle = dy.atan2(dx);
+    // Shift so Top (-PI/2) maps to 0
+    let rel_angle = (angle + std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU) % std::f32::consts::TAU;
+    let sector = (((rel_angle + std::f32::consts::FRAC_PI_8) / std::f32::consts::FRAC_PI_4) as usize) % RADIAL_SECTORS_COUNT;
+
+    match sector {
+        0 => RadialAction::Mute,
+        1 => RadialAction::Log,
+        2 => RadialAction::Snapshot,
+        3 => RadialAction::Fps,
+        4 => RadialAction::Close,
+        5 => RadialAction::Bezel,
+        6 => RadialAction::Guide,
+        7 => RadialAction::Edit,
+        _ => RadialAction::None,
+    }
+}
+
+// Dynamic FPS overlay toggle
+static SHOW_FPS: AtomicBool = AtomicBool::new(false);
+
+pub fn show_fps() -> bool {
+    SHOW_FPS.load(Ordering::Relaxed)
+}
+
+pub fn toggle_fps() -> bool {
+    let next = !show_fps();
+    SHOW_FPS.store(next, Ordering::Relaxed);
+    next
+}
+
+pub fn set_show_fps(show: bool) {
+    SHOW_FPS.store(show, Ordering::Relaxed);
+}
+
+// Dynamic Bezel Art cycle
+static CURRENT_BEZEL: AtomicU32 = AtomicU32::new(0); // 0 = oled, 1 = retro_slate, 2 = reloaded_blue
+
+pub fn current_bezel() -> &'static str {
+    match CURRENT_BEZEL.load(Ordering::Relaxed) % 3 {
+        0 => "oled",
+        1 => "retro_slate",
+        _ => "reloaded_blue",
+    }
+}
+
+pub fn cycle_bezel() -> &'static str {
+    let next = (CURRENT_BEZEL.load(Ordering::Relaxed) + 1) % 3;
+    CURRENT_BEZEL.store(next, Ordering::Relaxed);
+    current_bezel()
+}
+
+// In-Game HUD Toast Banners
+static TOAST_MSG: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+
+pub fn show_toast(msg: &str) {
+    if let Ok(mut lock) = TOAST_MSG.lock() {
+        *lock = Some((msg.to_string(), Instant::now()));
+    }
+}
+
+pub fn get_active_toast() -> Option<String> {
+    if let Ok(lock) = TOAST_MSG.lock() {
+        if let Some((msg, time)) = lock.as_ref() {
+            if time.elapsed() < Duration::from_millis(2500) {
+                return Some(msg.clone());
+            }
+        }
+    }
+    None
 }

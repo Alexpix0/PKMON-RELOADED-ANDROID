@@ -91,9 +91,39 @@ where
     Ok(false)
 }
 
-/// Converts a GML string into a valid filepath by replacing backslashes with file separators
+/// Converts a GML string into a valid filepath by replacing backslashes with file separators.
+/// Transparently prioritizes custom mod assets in `custom_assets/` over the base game directory.
 pub fn to_path(path: &str) -> std::borrow::Cow<str> {
-    path.replace("\\", std::path::MAIN_SEPARATOR_STR).into()
+    let normalized = path.replace("\\", std::path::MAIN_SEPARATOR_STR);
+
+    // Fast check: does an override exist in custom_assets?
+    // 1. Direct path check: custom_assets/<normalized>
+    let custom_direct = format!("custom_assets{}{}", std::path::MAIN_SEPARATOR_STR, normalized);
+    if std::path::Path::new(&custom_direct).is_file() {
+        return custom_direct.into();
+    }
+
+    // 2. Stripped "data/" prefix: custom_assets/<stripped>
+    let stripped = if normalized.starts_with("data/") || normalized.starts_with("data\\") {
+        &normalized[5..]
+    } else {
+        &normalized
+    };
+    let custom_stripped = format!("custom_assets{}{}", std::path::MAIN_SEPARATOR_STR, stripped);
+    if std::path::Path::new(&custom_stripped).is_file() {
+        return custom_stripped.into();
+    }
+
+    // 3. Android private storage path: /data/data/com.klisee.reloaded/files/game/custom_assets/<stripped>
+    #[cfg(target_os = "android")]
+    {
+        let android_custom = format!("/data/data/com.klisee.reloaded/files/game/custom_assets/{}", stripped);
+        if std::path::Path::new(&android_custom).is_file() {
+            return android_custom.into();
+        }
+    }
+
+    normalized.into()
 }
 
 impl TextHandle {

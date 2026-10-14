@@ -1440,7 +1440,11 @@ impl RendererImpl {
             } else {
                 ([0.10, 0.10, 0.16, 0.28 * opacity], [1.0, 1.0, 1.0, 0.60 * opacity], [1.0, 1.0, 1.0, 0.90 * opacity])
             };
-            if c.name == touch_controls::TURBO_NAME && touch_controls::fast_forward_active() {
+            if c.name == touch_controls::RADIAL_MENU_NAME && touch_controls::radial_menu_open() {
+                fill = [0.20, 0.75, 1.0, 0.85 * opacity];
+                border = [0.40, 0.90, 1.0, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
+            } else if c.name == touch_controls::TURBO_NAME && touch_controls::fast_forward_active() {
                 fill = [1.0, 0.65, 0.05, 0.80 * opacity];
                 border = [1.0, 0.90, 0.30, 0.95 * opacity];
                 ink = [1.0, 1.0, 1.0, 1.0];
@@ -1502,6 +1506,8 @@ impl RendererImpl {
                             text
                         };
                         push_text(&mut verts, ww, wh, label_str, cx, cy, r * 0.24, ink);
+                    } else if let touch_controls::Label::Arrow(dir) = c.label {
+                        push_arrow(&mut verts, ww, wh, cx, cy, r * 0.45, dir, ink);
                     }
                 },
             }
@@ -1598,7 +1604,7 @@ impl RendererImpl {
             }
         }
 
-        if std::env::var_os("OPENGMK_SHOW_FPS").map_or(false, |v| v == "1") {
+        if touch_controls::show_fps() || std::env::var_os("OPENGMK_SHOW_FPS").map_or(false, |v| v == "1") {
             let fps = FPS_VALUE.load(std::sync::atomic::Ordering::Relaxed);
             let fps_text = format!("{} FPS", fps);
             let pill_x = 16.0;
@@ -1707,7 +1713,9 @@ impl RendererImpl {
         }
 
         // Bezel art decoration on 4:3 pillarbox side bars
-        let bezel = std::env::var("OPENGMK_BEZEL").unwrap_or_else(|_| "oled".to_string());
+        let dyn_bezel = touch_controls::current_bezel();
+        let env_bezel = std::env::var("OPENGMK_BEZEL").unwrap_or_else(|_| "oled".to_string());
+        let bezel = if dyn_bezel != "oled" { dyn_bezel } else { env_bezel.as_str() };
         let (vx, _vy, vw, _vh) = touch_controls::viewport();
         let wx1 = vx * ww;
         let wx2 = (vx + vw) * ww;
@@ -1727,6 +1735,80 @@ impl RendererImpl {
                 push_quad(&mut verts, ww, wh, 0.0, 0.0, wx1 - 3.0, wh, [0.10, 0.11, 0.13, 0.50]);
                 push_quad(&mut verts, ww, wh, wx2 + 3.0, 0.0, ww, wh, [0.10, 0.11, 0.13, 0.50]);
             }
+        }
+
+        // Drastic-style Radial Quick-Menu (Wheel Menu)
+        if touch_controls::radial_menu_open() {
+            // Dark modal backdrop
+            push_quad(&mut verts, ww, wh, 0.0, 0.0, ww, wh, [0.0, 0.0, 0.0, 0.65]);
+
+            let (cx, cy) = touch_controls::radial_menu_center(ww, wh);
+            let r_inner = touch_controls::radial_menu_inner_radius(ww, wh);
+            let r_outer = touch_controls::radial_menu_outer_radius(ww, wh);
+            let r_mid = (r_inner + r_outer) * 0.5;
+
+            // Outer circular disk
+            push_circle(&mut verts, ww, wh, cx, cy, r_outer, [0.10, 0.12, 0.18, 0.94]);
+            // Outer rim
+            push_ring(&mut verts, ww, wh, cx, cy, r_outer, 3.5, [0.40, 0.52, 0.70, 0.95]);
+
+            // Radial dividing spokes between 8 sectors
+            for i in 0..8 {
+                let spoke_angle = -std::f32::consts::FRAC_PI_2 + (i as f32) * (std::f32::consts::TAU / 8.0) - std::f32::consts::FRAC_PI_8;
+                let (cos_s, sin_s) = (spoke_angle.cos(), spoke_angle.sin());
+                let (x1, y1) = (cx + r_inner * cos_s, cy + r_inner * sin_s);
+                let (x2, y2) = (cx + r_outer * cos_s, cy + r_outer * sin_s);
+                // Draw spoke as a narrow quad
+                let (px, py) = (-sin_s * 1.2, cos_s * 1.2);
+                push_tri(&mut verts, ww, wh, (x1 - px, y1 - py), (x2 - px, y2 - py), (x2 + px, y2 + py), [0.30, 0.40, 0.55, 0.75]);
+                push_tri(&mut verts, ww, wh, (x1 - px, y1 - py), (x2 + px, y2 + py), (x1 + px, y1 + py), [0.30, 0.40, 0.55, 0.75]);
+            }
+
+            // Outer sector items
+            let sector_labels: [(&str, [f32; 4]); 8] = [
+                if touch_controls::is_audio_muted() { ("MUT", [1.0, 0.35, 0.35, 1.0]) } else { ("MUT", [0.90, 0.94, 1.0, 0.95]) }, // 0: Top
+                ("LOG", [0.90, 0.94, 1.0, 0.95]),                                                                                       // 1: Top-Right
+                ("SNAP", [0.35, 0.95, 0.55, 1.0]),                                                                                      // 2: Right
+                ("FPS", [1.0, 0.85, 0.25, 1.0]),                                                                                        // 3: Bottom-Right
+                ("CLOSE", [0.75, 0.82, 0.92, 0.95]),                                                                                    // 4: Bottom
+                ("BEZEL", [0.40, 0.85, 1.0, 0.95]),                                                                                     // 5: Bottom-Left
+                ("TIP", [0.35, 0.95, 0.75, 1.0]),                                                                                       // 6: Left
+                ("EDT", [0.25, 0.85, 1.0, 1.0]),                                                                                        // 7: Top-Left
+            ];
+
+            for (idx, (label, col)) in sector_labels.iter().enumerate() {
+                let sector_angle = -std::f32::consts::FRAC_PI_2 + (idx as f32) * (std::f32::consts::TAU / 8.0);
+                let (cos_a, sin_a) = (sector_angle.cos(), sector_angle.sin());
+                let (ix, iy) = (cx + r_mid * cos_a, cy + r_mid * sin_a);
+                push_text(&mut verts, ww, wh, label, ix, iy, r_inner * 0.20, *col);
+            }
+
+            // Center Disc: Fast-Forward / Turbo (>>)
+            let turbo_active = touch_controls::fast_forward_active();
+            let (c_fill, c_ring, c_ink) = if turbo_active {
+                ([1.0, 0.65, 0.05, 0.96], [1.0, 0.90, 0.30, 1.0], [1.0, 1.0, 1.0, 1.0])
+            } else {
+                ([0.14, 0.22, 0.34, 0.96], [0.35, 0.70, 0.95, 0.90], [0.45, 0.85, 1.0, 1.0])
+            };
+            push_circle(&mut verts, ww, wh, cx, cy, r_inner, c_fill);
+            push_ring(&mut verts, ww, wh, cx, cy, r_inner, 3.2, c_ring);
+            push_text(&mut verts, ww, wh, ">>", cx, cy, r_inner * 0.36, c_ink);
+        }
+
+        // In-game Toast Notification Banner
+        if let Some(msg) = touch_controls::get_active_toast() {
+            let bw = (ww * 0.65).min(380.0);
+            let bh = 30.0;
+            let bx1 = (ww - bw) / 2.0;
+            let by1 = 16.0;
+            let bx2 = bx1 + bw;
+            let by2 = by1 + bh;
+            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by2, [0.06, 0.12, 0.22, 0.94]);
+            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by1 + 1.8, [0.25, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, bx1, by2 - 1.8, bx2, by2, [0.25, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, bx1, by1, bx1 + 1.8, by2, [0.25, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, bx2 - 1.8, by1, bx2, by2, [0.25, 0.80, 1.0, 0.95]);
+            push_text(&mut verts, ww, wh, &msg, (bx1 + bx2) / 2.0, by1 + bh / 2.0, 2.0, [1.0, 1.0, 1.0, 1.0]);
         }
 
         if verts.is_empty() && sprites.is_empty() && party_sprites.is_empty() && guide_sprites.is_empty() {

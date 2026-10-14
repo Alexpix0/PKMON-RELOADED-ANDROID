@@ -38,10 +38,16 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Warning
+import android.content.ClipboardManager
+import android.content.ClipData
+import android.content.Context
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -114,6 +120,31 @@ fun SettingsScreen(
     var showHealthDialog by remember { mutableStateOf(false) }
     var runningHealthCheck by remember { mutableStateOf(false) }
     var healthReport by remember { mutableStateOf<GameRepository.HealthReport?>(null) }
+
+    // Mod and Crash Dump state
+    var installingMod by remember { mutableStateOf(false) }
+    var showCrashDumpDialog by remember { mutableStateOf(false) }
+    var currentCrashDump by remember { mutableStateOf(repo.getCrashDump()) }
+
+    val modPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            installingMod = true
+            scope.launch {
+                val result = repo.applyPatchOrMod(uri)
+                installingMod = false
+                result.fold(
+                    onSuccess = { count ->
+                        snackbar.showSnackbar("¡Parche/Mod aplicado con éxito! ($count archivos actualizados)")
+                    },
+                    onFailure = { err ->
+                        snackbar.showSnackbar("Error al instalar parche/mod: ${err.message}")
+                    }
+                )
+            }
+        }
+    }
 
     val appVersion = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
@@ -307,6 +338,50 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showSnapshotsDialog = false }) { Text("Cerrar") }
+            }
+        )
+    }
+
+    if (showCrashDumpDialog) {
+        val dumpText = currentCrashDump ?: "No hay reporte disponible."
+        AlertDialog(
+            onDismissRequest = { showCrashDumpDialog = false },
+            icon = { Icon(Icons.Filled.BugReport, contentDescription = null) },
+            title = { Text("Reporte de Fallo (Crash Dump)") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        dumpText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Crash Dump", dumpText))
+                    scope.launch { snackbar.showSnackbar("Reporte copiado al portapapeles.") }
+                }) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text("Copiar")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        repo.clearCrashDump()
+                        currentCrashDump = null
+                        showCrashDumpDialog = false
+                        scope.launch { snackbar.showSnackbar("Reporte eliminado.") }
+                    }) {
+                        Text("Eliminar")
+                    }
+                    TextButton(onClick = { showCrashDumpDialog = false }) {
+                        Text("Cerrar")
+                    }
+                }
             }
         )
     }
@@ -629,7 +704,7 @@ fun SettingsScreen(
                     } else {
                         "Consulta, exporta o gestiona tus archivos de guardado"
                     },
-                    items = 4,
+                    items = 5,
                     index = 0,
                     enabled = installed != null,
                     onClick = onMySaves,
@@ -639,7 +714,7 @@ fun SettingsScreen(
                     title = "Escudo Scoped Storage Shield",
                     subtitle = "Réplica en Documents/PokemonReloadedSaves/ para no perder partidas si desinstalas el APK",
                     checked = persistentShield,
-                    items = 4,
+                    items = 5,
                     index = 1,
                     onCheckedChange = { enabled ->
                         persistentShield = enabled
@@ -656,7 +731,7 @@ fun SettingsScreen(
                     icon = Icons.Filled.CameraAlt,
                     title = "Puntos de Retorno (Instant Snapshots)",
                     subtitle = "Crea copias de seguridad instantáneas antes de eventos clave o combates difíciles",
-                    items = 4,
+                    items = 5,
                     index = 2,
                     enabled = installed != null,
                     onClick = {
@@ -668,12 +743,21 @@ fun SettingsScreen(
                     icon = Icons.Filled.HealthAndSafety,
                     title = "Diagnóstico de Integridad del Juego",
                     subtitle = "Verifica los más de 34.000 archivos, sprites de combate, MIDIs y ejecutables",
-                    items = 4,
+                    items = 5,
                     index = 3,
                     enabled = installed != null,
                     onClick = {
                         showHealthDialog = true
                     },
+                )
+                NavRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Instalar Mod o Parche (.zip)",
+                    subtitle = if (installingMod) "Instalando parche/mod..." else "Aplica packs de música, sprites .gif o parches a custom_assets/ sin reinstalar",
+                    items = 5,
+                    index = 4,
+                    enabled = installed != null && !installingMod,
+                    onClick = { modPickerLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                 )
             }
 
@@ -734,10 +818,20 @@ fun SettingsScreen(
                     icon = Icons.Filled.Info,
                     title = "Acerca de",
                     subtitle = "Versión, créditos y aviso de Pokémon Reloaded Android",
-                    items = 3,
+                    items = if (currentCrashDump != null) 4 else 3,
                     index = 2,
                     onClick = onAbout,
                 )
+                if (currentCrashDump != null) {
+                    NavRow(
+                        icon = Icons.Filled.BugReport,
+                        title = "Reporte de Fallo (Crash Dump)",
+                        subtitle = "Se detectó un informe de error del motor. Toca para ver y copiar",
+                        items = 4,
+                        index = 3,
+                        onClick = { showCrashDumpDialog = true },
+                    )
+                }
             }
 
             Spacer(Modifier.height(BottomNavSpace))

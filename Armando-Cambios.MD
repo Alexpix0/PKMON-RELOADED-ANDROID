@@ -472,6 +472,104 @@ La **Fase 3** del Roadmap v0.4.0 EX se enfoca en el rendimiento crítico del mot
 | [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md) | Actualización de tabla de estados (Fase 4 completada, Fase 5 siguiente) |
 | [`Armando-Cambios.MD`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/Armando-Cambios.MD) | Documentación técnica exhaustiva de la Sección 13 (Fase 4) |
 
+---
+
+## 14. Fase 5: Mods, Rueda Radial Drastic DS, Crash Dump & Nuevo Icono Oficial 3D (v0.4.0 EX Final)
+
+La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, robustez, ergonomía y soporte de modificaciones del proyecto, incorporando un menú radial flotante al más puro estilo de Drastic DS, soporte transparente de packs de assets externos (`custom_assets/`), un instalador de parches ligeros, sistema de telemetría y volcado de fallos (Crash Dump) nativo, y la integración definitiva del nuevo icono 3D oficial para Android.
+
+---
+
+### A. Menú Rápido Radial Flotante (Rueda estilo Drastic DS)
+* **Archivos modificados:**
+  * [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  * [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  * [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+* **Problema:** Los botones rápidos añadidos en fases previas (`>>`, `MUT`, `EDT`, `TIP`, `LOG`) estaban dispersos en la barra superior de la pantalla. Aunque eran útiles, restaban inmersión y saturaban la visión en dispositivos móviles.
+* **Solución técnica implementada:**
+  1. **Botón de activación ergonómico (Trigger Button):** Se reemplazaron los 5 botones superiores por un único botón circular discreto con una flecha hacia abajo (`▼`) situado en el centro inferior de la pantalla (`cx: 0.500, cy: 0.958, r: 0.024`), flanqueado armoniosamente por los botones de menú `ESC` y `OK`.
+  2. **Rueda Radial Centrada en Pantalla:** Al pulsar el botón disparador, se despliega una rueda circular con fondo translúcido (65% oscurecido) que suspende las acciones de fondo y permite seleccionar cualquier opción con un toque o deslizamiento.
+  3. **Distribución geométrica de 8 sectores + Disco central:**
+     * **Botón Central (`r_inner`):** Turbo / Fast-Forward (`>>`), con iluminación dinámica dorada cuando está activo y azul metálico cuando está apagado.
+     * **Sector 0 (Arriba):** Silenciador de audio (`MUT`), con indicación roja si está silenciado.
+     * **Sector 1 (Arriba-Derecha):** Historial de diálogos recientes (`LOG`).
+     * **Sector 2 (Derecha):** Guardado instantáneo de seguridad (`SNAP` - Punto de Retorno).
+     * **Sector 3 (Abajo-Derecha):** Alternar contador de FPS en tiempo real (`FPS`).
+     * **Sector 4 (Abajo):** Cerrar rueda radial (`CLOSE` / `▼`).
+     * **Sector 5 (Abajo-Izquierda):** Alternar estilo de bordes 4:3 (`BEZEL`: AMOLED, Retro Slate, Reloaded Blue).
+     * **Sector 6 (Izquierda):** Visor in-game de la tabla de tipos (`TIP` - `Efectividades.png`).
+     * **Sector 7 (Arriba-Izquierda):** Modo edición de controles táctiles (`EDT`).
+  4. **Píldora de Notificación In-Game (HUD Toasts):** Se implementó un banner HUD superior estilizado que informa al jugador en tiempo real ante eventos instantáneos (ej. *"PUNTO DE RETORNO GUARDADO"*, *"TURBO: ACTIVADO"*, *"FPS: MOSTRAR"*).
+
+---
+
+### B. Soporte de Mods y Assets Personalizados en `custom_assets/`
+* **Archivos modificados:**
+  * [`src/OpenGMK/gm8emulator/src/gml/file.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/file.rs)
+  * [`src/OpenGMK/gm8emulator/src/asset/sprite_cache.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/asset/sprite_cache.rs)
+* **Solución técnica implementada:**
+  1. **Enrutamiento transparente en `file::to_path`:** Toda petición de recursos realizada por GameMaker (música `.ogg`, pistas MIDI, soundfonts `.sf2`, imágenes `.png`, o sprites `.gmspr` / `.gif`) pasa por `to_path`.
+  2. Se configuró una jerarquía de prioridades:
+     * Si el archivo existe en `custom_assets/<ruta_relativa>` o `custom_assets/<sin_prefijo_data>`, el motor lo carga de inmediato.
+     * Si no existe en la carpeta de mods, se recurre de forma transparente al archivo original de `data/`.
+  3. Esto permite a la comunidad instalar paquetes de bandas sonoras orquestadas, SoundFonts de alta fidelidad o sprites animados personalizados sin modificar ni poner en riesgo la instalación base de 700MB.
+
+---
+
+### C. Instalador de Parches Ligeros y Mods (.zip / .patch)
+* **Archivos modificados:**
+  * [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Solución técnica implementada:**
+  1. **Método `applyPatchOrMod(uri: Uri)`:** Procesa archivos comprimidos seleccionados mediante el Storage Access Framework de Android.
+  2. Extrae de forma selectiva los recursos a `custom_assets/` o `game/`, preservando íntegramente las partidas guardadas, configuraciones y assets existentes.
+  3. Muestra una notificación con el recuento exacto de archivos instalados o actualizados.
+
+---
+
+### D. Volcado de Fallos Nativo (Crash Dump & Telemetría Local)
+* **Archivos modificados:**
+  * [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  * [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Solución técnica implementada:**
+  1. **Gancho de pánico nativo (`std::panic::set_hook`):** Si el emulador sufre un error imprevisto, se intercepta antes del cierre y se genera un informe detallado con:
+     * Causa o carga del pánico.
+     * Archivo fuente, línea y columna exacta.
+     * ID de la sala (`room`) y contexto de juego activo (`WORLD`, `BATTLE`, `MENU`).
+     * Marca de tiempo UTC.
+  2. Persistencia en `files/crash_dump.txt`.
+  3. **Visualizador en 1 toque en Ajustes:** Si se detecta un informe de fallo, aparece una tarjeta en "Actualizaciones y Ayuda" que permite revisar el reporte, copiarlo al portapapeles con un solo toque para enviarlo a soporte, o eliminarlo.
+
+---
+
+### E. Integración del Nuevo Icono Oficial 3D (Variante 2)
+* **Archivos modificados:**
+  * [`android/app/src/main/res/drawable/ic_launcher_background.png`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/drawable/ic_launcher_background.png) (512x512)
+  * [`android/app/src/main/res/drawable/ic_launcher_foreground.png`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/drawable/ic_launcher_foreground.png) (512x512)
+  * [`android/app/src/main/res/mipmap-mdpi/ic_launcher.png`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/mipmap-mdpi/ic_launcher.png) a `mipmap-xxxhdpi/`
+  * [`android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml)
+  * [`android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml)
+* **Detalles estéticos:**
+  * Fondo azul Reloaded con gradiente esférico 3D y viñeta sutil.
+  * Logo de EMURELOADED nítido, centrado con proporción áurea sin cortes en los bordes seguros (Safe Zone) de Android 8+.
+  * Soporte para iconos adaptativos circulares, cuadrados y de bordes redondeados.
+
+---
+
+### F. Resumen de Archivos Afectados en la Fase 5
+
+| Archivo | Rol en Fase 5 |
+|---|---|
+| [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs) | Menú radial (geometría, cálculo de sectores, disparo por flecha), control atómico de FPS, Bezel y Toasts |
+| [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs) | Renderizado OpenGL de la rueda radial Drastic DS, divisores radiales, disco central Turbo y banner HUD Toast |
+| [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs) | Interceptación de toques del menú radial, gancho de pánico para Crash Dump y función `perform_quick_snapshot` |
+| [`src/OpenGMK/gm8emulator/src/gml/file.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/file.rs) | Resolución y priorización de mods externos en `custom_assets/` en la función `to_path` |
+| [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt) | Instalador modular de parches (.zip) y lectura/borrado de `crash_dump.txt` |
+| [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt) | Interfaz Compose para instalación de mods y visor/copiado de Crash Dump |
+| [`android/app/src/main/res/drawable/`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/drawable/) y `mipmap-*/` | Activos del nuevo icono oficial 3D adaptativo de alta resolución |
+| [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md) | Cierre definitivo de la Fase 5 y finalización del 100% del Roadmap v0.4.0 EX |
+
 
 
 

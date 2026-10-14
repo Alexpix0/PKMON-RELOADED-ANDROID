@@ -361,6 +361,42 @@ fn control_key_up(index: usize) {
 static SWALLOWED_INPUTS: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
 static DRAGGED_ITEM: Mutex<Option<(String, f32, f32)>> = Mutex::new(None);
 
+fn perform_quick_snapshot() {
+    let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
+    let relative_saves = std::path::Path::new("data/partidas");
+    let src_dir = if internal_saves.is_dir() {
+        internal_saves
+    } else if relative_saves.is_dir() {
+        relative_saves
+    } else {
+        crate::touch_controls::show_toast("ERROR: NO SE HALLARON PARTIDAS");
+        return;
+    };
+
+    let snapshot_dir = std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/snapshots");
+    let _ = std::fs::create_dir_all(&snapshot_dir);
+
+    let mut copied = 0;
+    if let Ok(entries) = std::fs::read_dir(src_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case("sav") || ext.eq_ignore_ascii_case("nfo") {
+                    let dest = snapshot_dir.join(format!("quick_return_{}", path.file_name().unwrap().to_string_lossy()));
+                    if std::fs::copy(&path, &dest).is_ok() {
+                        copied += 1;
+                    }
+                }
+            }
+        }
+    }
+    if copied > 0 {
+        crate::touch_controls::show_toast("PUNTO DE RETORNO GUARDADO");
+    } else {
+        crate::touch_controls::show_toast("NO HAY PARTIDAS ACTIVAS");
+    }
+}
+
 /// A touch on an on-screen control presses the key that control maps to; any other touch is
 /// forwarded to the game as a mouse, exactly as before.
 fn pointer_down(id: i32, x: f32, y: f32) {
@@ -379,6 +415,59 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         crate::touch_controls::set_guide_open(false);
         crate::touch_controls::set_log_open(false);
         jni_vibrate(12);
+        return;
+    }
+
+    // If Drastic-style Radial Quick-Menu is open, intercept touch for menu wheel actions
+    if crate::touch_controls::radial_menu_open() {
+        let action = crate::touch_controls::radial_menu_hit(x, y, wf, hf);
+        match action {
+            crate::touch_controls::RadialAction::Turbo => {
+                let on = crate::touch_controls::toggle_fast_forward();
+                crate::touch_controls::show_toast(if on { "TURBO: ACTIVADO" } else { "TURBO: DESACTIVADO" });
+                jni_vibrate(if on { 25 } else { 12 });
+            },
+            crate::touch_controls::RadialAction::Mute => {
+                let muted = crate::touch_controls::toggle_audio_mute();
+                crate::touch_controls::show_toast(if muted { "AUDIO: SILENCIADO" } else { "AUDIO: ACTIVADO" });
+                jni_vibrate(if muted { 25 } else { 12 });
+            },
+            crate::touch_controls::RadialAction::Log => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::toggle_log_modal();
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Guide => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::toggle_guide_modal();
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Snapshot => {
+                crate::touch_controls::set_radial_menu_open(false);
+                perform_quick_snapshot();
+                jni_vibrate(35);
+            },
+            crate::touch_controls::RadialAction::Fps => {
+                let on = crate::touch_controls::toggle_fps();
+                crate::touch_controls::show_toast(if on { "FPS: MOSTRAR" } else { "FPS: OCULTAR" });
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Bezel => {
+                let mode = crate::touch_controls::cycle_bezel();
+                crate::touch_controls::show_toast(&format!("BEZEL: {}", mode.to_ascii_uppercase()));
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Edit => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::toggle_edit_mode();
+                jni_vibrate(30);
+            },
+            crate::touch_controls::RadialAction::Close | crate::touch_controls::RadialAction::Outside => {
+                crate::touch_controls::set_radial_menu_open(false);
+                jni_vibrate(15);
+            },
+            crate::touch_controls::RadialAction::None => {},
+        }
         return;
     }
 
@@ -422,6 +511,9 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 crate::touch_controls::set_wheel_open(true);
                 *WHEEL_PTR.lock().unwrap() = Some(id);
                 jni_vibrate(18);
+            } else if name == crate::touch_controls::RADIAL_MENU_NAME {
+                let open = crate::touch_controls::toggle_radial_menu();
+                jni_vibrate(if open { 25 } else { 15 });
             } else if name == crate::touch_controls::TURBO_NAME {
                 let on = crate::touch_controls::toggle_fast_forward();
                 jni_vibrate(if on { 25 } else { 12 });
@@ -819,6 +911,35 @@ extern "C" {
 /// on, because android-activity asserts it, so the pump cannot live on a worker thread.
 /// The emulator itself runs on a worker thread instead.
 pub fn android_entry(app: AndroidApp) {
+    // Install robust crash dump telemetry hook
+    std::panic::set_hook(Box::new(|info| {
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            *s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "Error desconocido"
+        };
+        let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "ubicacion desconocida".to_string());
+        let current_room = crate::touch_controls::current_context();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| format!("{} seg (UNIX)", d.as_secs()))
+            .unwrap_or_else(|_| "desconocida".to_string());
+        let dump = format!(
+            "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
+             Version: 0.4.0-EX\n\
+             Fecha/Hora (UTC): {}\n\
+             Panico: {}\n\
+             Ubicacion: {}\n\
+             Estado de Sala: {}\n\
+             ===========================================\n",
+            timestamp, payload, location, current_room
+        );
+        eprintln!("{}", dump);
+        let _ = std::fs::write("/data/data/com.klisee.reloaded/files/crash_dump.txt", &dump);
+        let _ = std::fs::write("crash_dump.txt", &dump);
+    }));
 
     // The pad layout and the video mode are read once, before any input can arrive.
     load_controls();
