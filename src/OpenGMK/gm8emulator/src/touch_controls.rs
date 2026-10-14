@@ -324,7 +324,7 @@ pub fn set_viewport(x: f32, y: f32, w: f32, h: f32) {
     *VIEWPORT.lock().unwrap() = (x, y, w, h);
 }
 
-fn viewport() -> (f32, f32, f32, f32) {
+pub fn viewport() -> (f32, f32, f32, f32) {
     *VIEWPORT.lock().unwrap()
 }
 
