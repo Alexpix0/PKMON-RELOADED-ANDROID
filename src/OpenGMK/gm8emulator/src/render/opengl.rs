@@ -1228,6 +1228,65 @@ fn push_text(out: &mut Vec<f32>, ww: f32, wh: f32, text: &str, cx: f32, cy: f32,
     }
 }
 
+static GUIDE_TEXTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn get_or_load_guide_texture(gl: &gl::Gl) -> u32 {
+    let existing = GUIDE_TEXTURE.load(std::sync::atomic::Ordering::Relaxed);
+    if existing != 0 {
+        return existing;
+    }
+
+    let resolved = std::path::PathBuf::from(crate::gml::file::to_path("data/image/Efectividades.png").as_ref());
+    let candidates = [
+        resolved,
+        std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
+        std::path::PathBuf::from("data/image/Efectividades.png"),
+        std::path::PathBuf::from("/sdcard/Android/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
+    ];
+
+    let mut img_bytes: Option<Vec<u8>> = None;
+    for c in &candidates {
+        if let Ok(b) = std::fs::read(c) {
+            img_bytes = Some(b);
+            break;
+        }
+    }
+
+    let Some(bytes) = img_bytes else {
+        return 0;
+    };
+
+    let Ok(dyn_img) = image::load_from_memory(&bytes) else {
+        return 0;
+    };
+    let rgba = dyn_img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+
+    let mut tex = 0;
+    unsafe {
+        gl.GenTextures(1, &mut tex);
+        gl.BindTexture(gl::TEXTURE_2D, tex);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as _);
+        gl.TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::RGBA as _,
+            w as _,
+            h as _,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            rgba.as_raw().as_ptr().cast(),
+        );
+    }
+
+    GUIDE_TEXTURE.store(tex, std::sync::atomic::Ordering::Relaxed);
+    tex
+}
+
 #[cfg(target_os = "android")]
 impl RendererImpl {
     /// Builds (once) the tiny program used to draw the touch controls over the frame.
@@ -1303,65 +1362,6 @@ impl RendererImpl {
             fields
         }
     }
-
-static GUIDE_TEXTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-fn get_or_load_guide_texture(gl: &gl::Gl) -> u32 {
-    let existing = GUIDE_TEXTURE.load(std::sync::atomic::Ordering::Relaxed);
-    if existing != 0 {
-        return existing;
-    }
-
-    let resolved = std::path::PathBuf::from(crate::gml::file::to_path("data/image/Efectividades.png").as_ref());
-    let candidates = [
-        resolved,
-        std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
-        std::path::PathBuf::from("data/image/Efectividades.png"),
-        std::path::PathBuf::from("/sdcard/Android/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
-    ];
-
-    let mut img_bytes: Option<Vec<u8>> = None;
-    for c in &candidates {
-        if let Ok(b) = std::fs::read(c) {
-            img_bytes = Some(b);
-            break;
-        }
-    }
-
-    let Some(bytes) = img_bytes else {
-        return 0;
-    };
-
-    let Ok(dyn_img) = image::load_from_memory(&bytes) else {
-        return 0;
-    };
-    let rgba = dyn_img.to_rgba8();
-    let (w, h) = rgba.dimensions();
-
-    let mut tex = 0;
-    unsafe {
-        gl.GenTextures(1, &mut tex);
-        gl.BindTexture(gl::TEXTURE_2D, tex);
-        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
-        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
-        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as _);
-        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as _);
-        gl.TexImage2D(
-            gl::TEXTURE_2D,
-            0,
-            gl::RGBA as _,
-            w as _,
-            h as _,
-            0,
-            gl::RGBA,
-            gl::UNSIGNED_BYTE,
-            rgba.as_raw().as_ptr().cast(),
-        );
-    }
-
-    GUIDE_TEXTURE.store(tex, std::sync::atomic::Ordering::Relaxed);
-    tex
-}
 
     /// Draws the on-screen touch controls over the presented frame with its own GL state, so the
     /// emulator's render state is never disturbed.
@@ -1976,12 +1976,12 @@ impl RendererTrait for RendererImpl {
         if self.vertex_queue.capacity() > 2048 {
             self.vertex_queue.shrink_to(1024);
         }
-        while self.texture_ids.len() > self.stock_atlas_count as usize && self.texture_ids.last() == Some(&None) {
+        while self.texture_ids.len() > self.stock_atlas_count as usize && matches!(self.texture_ids.last(), Some(None)) {
             self.texture_ids.pop();
             self.zbuf_ids.pop();
             self.fbo_ids.pop();
         }
-        while self.texture_rects.len() > self.stock_texture_count && self.texture_rects.last() == Some(&None) {
+        while self.texture_rects.len() > self.stock_texture_count && matches!(self.texture_rects.last(), Some(None)) {
             self.texture_rects.pop();
         }
         unsafe {
