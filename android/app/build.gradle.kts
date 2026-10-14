@@ -39,24 +39,37 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.3.2 EX"
+        versionCode = 10
+        versionName = "0.4.0 EX"
         ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
         create("release") {
-            val repoKeystore = rootProject.file("release.keystore")
-            if (repoKeystore.exists()) {
-                storeFile = repoKeystore
-                storePassword = "pokemonreloaded"
-                keyAlias = "reloaded"
-                keyPassword = "pokemonreloaded"
-            } else if (!keystoreProperties.isEmpty) {
+            if (!keystoreProperties.isEmpty) {
                 storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
                 keyPassword = keystoreProperties.getProperty("keyPassword")
+            } else if (!System.getenv("RELEASE_KEYSTORE_BASE64").isNullOrBlank()) {
+                val secretKeystore = rootProject.file("keystore/ci_release.keystore")
+                if (!secretKeystore.exists()) {
+                    secretKeystore.parentFile?.mkdirs()
+                    val bytes = java.util.Base64.getDecoder().decode(System.getenv("RELEASE_KEYSTORE_BASE64"))
+                    secretKeystore.writeBytes(bytes)
+                }
+                storeFile = secretKeystore
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "AlexReloaded2026SecureKey!"
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "alex_reloaded"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
+            } else {
+                val repoKeystore = rootProject.file("release.keystore")
+                if (repoKeystore.exists()) {
+                    storeFile = repoKeystore
+                    storePassword = "pokemonreloaded"
+                    keyAlias = "reloaded"
+                    keyPassword = "pokemonreloaded"
+                }
             }
         }
     }

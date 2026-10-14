@@ -17,6 +17,8 @@
 //! the combat extras. The emulator reports the current room every frame.
 
 use ramen::input::Key;
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{
     atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering},
     Mutex,
@@ -63,8 +65,15 @@ pub struct Control {
 
 /// The joystick is not a button but is customised (and saved) the same way.
 pub const JOYSTICK_NAME: &str = "joystick";
+pub const TURBO_NAME: &str = "turbo";
+pub const MUTE_NAME: &str = "mute";
+pub const EDIT_NAME: &str = "edit";
 
 pub const CONTROLS: &[Control] = &[
+    // Utility quick buttons (top right, discrete and non-intrusive)
+    Control { name: TURBO_NAME, key: Key::Pause, shape: Shape::Circle { cx: 0.880, cy: 0.055, r: 0.022 }, label: Label::Text(">>"), contexts: WORLD | BATTLE },
+    Control { name: MUTE_NAME, key: Key::NumLock, shape: Shape::Circle { cx: 0.945, cy: 0.055, r: 0.022 }, label: Label::Text("MUT"), contexts: WORLD | BATTLE },
+    Control { name: EDIT_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.815, cy: 0.055, r: 0.022 }, label: Label::Text("EDT"), contexts: WORLD | BATTLE },
     // Menu / misc keys (second row along the top).
     Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
@@ -97,9 +106,117 @@ pub const CONTROLS: &[Control] = &[
     Control { name: "dialogo", key: Key::Z, shape: Shape::Circle { cx: 0.940, cy: 0.880, r: 0.024 }, label: Label::Text("OK"), contexts: DIALOG },
 ];
 
+static CUSTOM_OFFSETS: Mutex<Option<HashMap<String, (f32, f32)>>> = Mutex::new(None);
+
+pub fn set_control_offset(name: &str, ox: f32, oy: f32) {
+    let mut lock = CUSTOM_OFFSETS.lock().unwrap();
+    let map = lock.get_or_insert_with(HashMap::new);
+    map.insert(name.to_string(), (ox, oy));
+}
+
+pub fn control_offset(name: &str) -> (f32, f32) {
+    let lock = CUSTOM_OFFSETS.lock().unwrap();
+    if let Some(map) = lock.as_ref() {
+        if let Some(&(ox, oy)) = map.get(name) {
+            return (ox, oy);
+        }
+    }
+    (0.0, 0.0)
+}
+
+pub fn load_layout_file(path: &Path) {
+    if let Ok(text) = std::fs::read_to_string(path) {
+        let mut map = HashMap::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((name, coords)) = line.split_once('=') {
+                if let Some((xs, ys)) = coords.split_once(',') {
+                    if let (Ok(x), Ok(y)) = (xs.trim().parse::<f32>(), ys.trim().parse::<f32>()) {
+                        map.insert(name.trim().to_string(), (x, y));
+                    }
+                }
+            }
+        }
+        *CUSTOM_OFFSETS.lock().unwrap() = Some(map);
+    }
+}
+
+pub fn save_layout_file(path: &Path) {
+    let lock = CUSTOM_OFFSETS.lock().unwrap();
+    if let Some(map) = lock.as_ref() {
+        let mut text = String::from("# Layout personalizado de controles Pokémon Reloaded Android\n");
+        for (name, (x, y)) in map {
+            text.push_str(&format!("{}={:.4},{:.4}\n", name, x, y));
+        }
+        let _ = std::fs::write(path, text);
+    }
+}
+
+static FAST_FORWARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FAST_FORWARD_SPEED: AtomicU32 = AtomicU32::new(15);
+
+pub fn fast_forward_active() -> bool {
+    FAST_FORWARD.load(Ordering::Relaxed)
+}
+
+pub fn toggle_fast_forward() -> bool {
+    let active = !fast_forward_active();
+    FAST_FORWARD.store(active, Ordering::Relaxed);
+    active
+}
+
+pub fn fast_forward_multiplier() -> f32 {
+    if fast_forward_active() {
+        FAST_FORWARD_SPEED.load(Ordering::Relaxed) as f32 / 10.0
+    } else {
+        1.0
+    }
+}
+
+pub fn set_fast_forward_speed(tenths: u32) {
+    FAST_FORWARD_SPEED.store(tenths.clamp(12, 30), Ordering::Relaxed);
+}
+
+static AUDIO_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_audio_muted() -> bool {
+    AUDIO_MUTED.load(Ordering::Relaxed)
+}
+
+pub fn toggle_audio_mute() -> bool {
+    let muted = !is_audio_muted();
+    AUDIO_MUTED.store(muted, Ordering::Relaxed);
+    muted
+}
+
+static EDIT_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_edit_mode() -> bool {
+    EDIT_MODE.load(Ordering::Relaxed)
+}
+
+pub fn toggle_edit_mode() -> bool {
+    let mode = !is_edit_mode();
+    EDIT_MODE.store(mode, Ordering::Relaxed);
+    mode
+}
+
+static SHOW_NUM_KEYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_show_num_keys(show: bool) {
+    SHOW_NUM_KEYS.store(show, Ordering::Relaxed);
+}
+
+pub fn show_num_keys() -> bool {
+    SHOW_NUM_KEYS.load(Ordering::Relaxed)
+}
+
 pub fn effective_shape(index: usize) -> Shape {
     let c = &CONTROLS[index];
-    if c.contexts & DIALOG != 0 {
+    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME {
         return c.shape;
     }
     let s = scale();
@@ -110,6 +227,10 @@ pub fn effective_shape(index: usize) -> Shape {
         Shape::Circle { cx, cy, .. } => (cx, cy),
         Shape::Rect { cx, cy, .. } => (cx, cy),
     };
+
+    let (ox, oy) = control_offset(c.name);
+    cx += ox;
+    cy += oy;
 
     if cx > 0.55 {
         cx -= mx;
@@ -269,7 +390,14 @@ pub fn pad_active() -> bool {
 }
 
 pub fn is_active(index: usize) -> bool {
-    !pad_active() && CONTROLS[index].contexts & current_context() != 0
+    if pad_active() {
+        return false;
+    }
+    let c = &CONTROLS[index];
+    if !show_num_keys() && (c.name == "space" || c.name == "o" || c.name == "m" || c.name == "e" || c.name == "t" || c.name == "l" || c.name == "p") {
+        return false;
+    }
+    c.contexts & current_context() != 0
 }
 
 /// The joystick drives the arrow keys, which is how the game's menus (the ones that still show
@@ -326,7 +454,8 @@ pub fn joystick_dead() -> f32 {
 
 /// The joystick's centre, in normalised coordinates.
 pub fn joystick_center() -> (f32, f32) {
-    (JOYSTICK_CX + margin_x(), JOYSTICK_CY - margin_y())
+    let (ox, oy) = control_offset(JOYSTICK_NAME);
+    (JOYSTICK_CX + margin_x() + ox, JOYSTICK_CY - margin_y() + oy)
 }
 
 /// Radius as a fraction of the window height.

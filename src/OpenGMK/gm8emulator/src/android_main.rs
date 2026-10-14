@@ -128,14 +128,18 @@ fn load_video() {
     if let Ok(text) = fs::read_to_string(&path) {
         for line in text.lines() {
             let Some((name, value)) = line.trim().split_once('=') else { continue };
-            if name.trim() != "scaling" {
-                continue
-            }
+            let name = name.trim();
             let value = value.trim();
-            if value == "aspect" || value == "full" {
-                eprintln!("[video] escalado: {}", value);
-                // Read by the engine when it builds its renderer.
-                std::env::set_var("OPENGMK_SCALING", value);
+            if name == "scaling" {
+                if value == "aspect" || value == "full" {
+                    eprintln!("[video] escalado: {}", value);
+                    // Read by the engine when it builds its renderer.
+                    std::env::set_var("OPENGMK_SCALING", value);
+                }
+            } else if name == "show_fps" {
+                let show = value == "1" || value.eq_ignore_ascii_case("true");
+                eprintln!("[video] show_fps: {}", show);
+                std::env::set_var("OPENGMK_SHOW_FPS", if show { "1" } else { "0" });
             }
         }
     }
@@ -183,6 +187,8 @@ fn load_controls() {
                 if let Ok(pct) = value.trim().parse::<u32>() {
                     crate::touch_controls::set_joystick_dead(pct);
                 }
+            } else if name.trim() == "show_num_keys" {
+                crate::touch_controls::set_show_num_keys(value.trim() != "0");
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }
@@ -192,6 +198,8 @@ fn load_controls() {
     if let Ok(mut map) = MAPPED_BUTTONS.get_or_init(|| Mutex::new(HashMap::new())).lock() {
         *map = buttons;
     }
+    let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
+    crate::touch_controls::load_layout_file(&layout_path);
 }
 
 /// The key names the control screen can write into `controls.conf`.
@@ -348,6 +356,7 @@ fn control_key_up(index: usize) {
 /// Pointers whose press was swallowed to bring the on-screen controls back, so that their release
 /// is ignored too instead of reaching the game as a stray mouse-up.
 static SWALLOWED_INPUTS: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
+static DRAGGED_ITEM: Mutex<Option<(String, f32, f32)>> = Mutex::new(None);
 
 /// A touch on an on-screen control presses the key that control maps to; any other touch is
 /// forwarded to the game as a mouse, exactly as before.
@@ -361,6 +370,33 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     }
     let (w, h) = android::window_size();
     let (wf, hf) = (w as f32, h as f32);
+
+    // If edit mode is active, touching buttons drags them instead of sending game keys
+    if crate::touch_controls::is_edit_mode() {
+        if wf > 0.0 && hf > 0.0 {
+            let hit = crate::touch_controls::hit(x / wf, y / hf, wf, hf);
+            if let Some(index) = hit {
+                let name = crate::touch_controls::CONTROLS[index].name;
+                if name == crate::touch_controls::EDIT_NAME {
+                    crate::touch_controls::toggle_edit_mode();
+                    let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
+                    crate::touch_controls::save_layout_file(&layout_path);
+                    jni_vibrate(25);
+                    return;
+                }
+                *DRAGGED_ITEM.lock().unwrap() = Some((name.to_string(), x / wf, y / hf));
+                jni_vibrate(12);
+                return;
+            }
+            if crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
+                *DRAGGED_ITEM.lock().unwrap() = Some((crate::touch_controls::JOYSTICK_NAME.to_string(), x / wf, y / hf));
+                jni_vibrate(12);
+                return;
+            }
+        }
+        return;
+    }
+
     if wf > 0.0 && hf > 0.0 && crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
         *JOYSTICK_PTR.lock().unwrap() = Some(id);
         joystick_update(x, y);
@@ -369,11 +405,21 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     let hit = if w > 0 && h > 0 { crate::touch_controls::hit(x / wf, y / hf, wf, hf) } else { None };
     match hit {
         Some(index) => {
-            if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::PARTY_NAME {
+            let name = crate::touch_controls::CONTROLS[index].name;
+            if name == crate::touch_controls::PARTY_NAME {
                 // Holding it opens the party wheel instead of pressing a key of its own.
                 crate::touch_controls::set_wheel_open(true);
                 *WHEEL_PTR.lock().unwrap() = Some(id);
                 jni_vibrate(18);
+            } else if name == crate::touch_controls::TURBO_NAME {
+                let on = crate::touch_controls::toggle_fast_forward();
+                jni_vibrate(if on { 25 } else { 12 });
+            } else if name == crate::touch_controls::MUTE_NAME {
+                let muted = crate::touch_controls::toggle_audio_mute();
+                jni_vibrate(if muted { 25 } else { 12 });
+            } else if name == crate::touch_controls::EDIT_NAME {
+                let edit = crate::touch_controls::toggle_edit_mode();
+                jni_vibrate(if edit { 30 } else { 15 });
             } else {
                 control_key_down(index);
                 POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
@@ -384,6 +430,14 @@ fn pointer_down(id: i32, x: f32, y: f32) {
 }
 
 fn pointer_up(id: i32, x: f32, y: f32) {
+    if crate::touch_controls::is_edit_mode() {
+        if DRAGGED_ITEM.lock().unwrap().take().is_some() {
+            let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
+            crate::touch_controls::save_layout_file(&layout_path);
+            jni_vibrate(15);
+        }
+        return;
+    }
     if WHEEL_PTR.lock().unwrap().take() == Some(id) {
         // The key only goes out now, on the release, and only if a slot was picked. Letting go over
         // the middle of the wheel, or letting go without moving at all, sends nothing.
@@ -618,6 +672,26 @@ fn translate(event: &InputEvent) {
                     }
                 },
                 MotionAction::Move | MotionAction::HoverMove => {
+                    if crate::touch_controls::is_edit_mode() {
+                        let (w, h) = android::window_size();
+                        let (wf, hf) = (w as f32, h as f32);
+                        if wf > 0.0 && hf > 0.0 {
+                            let mut item_lock = DRAGGED_ITEM.lock().unwrap();
+                            if let Some((name, last_x, last_y)) = item_lock.clone() {
+                                for p in motion.pointers() {
+                                    let cur_x = p.x() / wf;
+                                    let cur_y = p.y() / hf;
+                                    let dx = cur_x - last_x;
+                                    let dy = cur_y - last_y;
+                                    let (ox, oy) = crate::touch_controls::control_offset(&name);
+                                    crate::touch_controls::set_control_offset(&name, ox + dx, oy + dy);
+                                    *item_lock = Some((name, cur_x, cur_y));
+                                    break;
+                                }
+                            }
+                        }
+                        return;
+                    }
                     let wheel_ptr = *WHEEL_PTR.lock().unwrap();
                     for p in motion.pointers() {
                         if wheel_ptr == Some(p.pointer_id()) {

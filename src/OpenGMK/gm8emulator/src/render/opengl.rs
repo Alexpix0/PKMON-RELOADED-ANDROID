@@ -1187,12 +1187,20 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         'D' => [0b110, 0b101, 0b101, 0b101, 0b110],
         'G' => [0b011, 0b100, 0b101, 0b101, 0b011],
         'I' => [0b111, 0b010, 0b010, 0b010, 0b111],
+        'F' => [0b111, 0b100, 0b110, 0b100, 0b100],
+        '0' => [0b111, 0b101, 0b101, 0b101, 0b111],
         '1' => [0b010, 0b110, 0b010, 0b010, 0b111],
         '2' => [0b110, 0b001, 0b010, 0b100, 0b111],
         '3' => [0b111, 0b001, 0b011, 0b001, 0b111],
         '4' => [0b101, 0b101, 0b111, 0b001, 0b001],
         '5' => [0b111, 0b100, 0b111, 0b001, 0b111],
         '6' => [0b011, 0b100, 0b111, 0b101, 0b111],
+        '7' => [0b111, 0b001, 0b010, 0b010, 0b010],
+        '8' => [0b111, 0b101, 0b111, 0b101, 0b111],
+        '9' => [0b111, 0b101, 0b111, 0b001, 0b111],
+        '>' => [0b100, 0b010, 0b001, 0b010, 0b100],
+        ':' => [0b000, 0b010, 0b000, 0b010, 0b000],
+        ' ' => [0b000, 0b000, 0b000, 0b000, 0b000],
         '-' => [0b000, 0b000, 0b111, 0b000, 0b000],
         _ => return None,
     })
@@ -1333,11 +1341,24 @@ impl RendererImpl {
                 continue
             }
             let pressed = touch_controls::is_pressed(i);
-            let (fill, border, ink) = if pressed {
+            let (mut fill, mut border, mut ink) = if pressed {
                 ([1.0, 0.80, 0.10, 0.55 * opacity], [1.0, 1.0, 0.70, 0.95 * opacity], [0.10, 0.10, 0.10, 0.95 * opacity])
             } else {
                 ([0.10, 0.10, 0.16, 0.28 * opacity], [1.0, 1.0, 1.0, 0.60 * opacity], [1.0, 1.0, 1.0, 0.90 * opacity])
             };
+            if c.name == touch_controls::TURBO_NAME && touch_controls::fast_forward_active() {
+                fill = [1.0, 0.65, 0.05, 0.80 * opacity];
+                border = [1.0, 0.90, 0.30, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
+            } else if c.name == touch_controls::MUTE_NAME && touch_controls::is_audio_muted() {
+                fill = [0.85, 0.20, 0.20, 0.80 * opacity];
+                border = [1.0, 0.40, 0.40, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
+            } else if c.name == touch_controls::EDIT_NAME && touch_controls::is_edit_mode() {
+                fill = [0.10, 0.70, 0.90, 0.80 * opacity];
+                border = [0.30, 0.95, 1.00, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
+            }
             if let Some(uv) = overlay.art(c.name) {
                 // A control with its own artwork is drawn as that sprite, sized to the control.
                 let (cx, cy, half) = match touch_controls::window_shape(i) {
@@ -1366,9 +1387,19 @@ impl RendererImpl {
                 touch_controls::Shape::Circle { cx, cy, r } => {
                     let (cx, cy, r) = (cx * ww, cy * wh, r * ww);
                     push_circle(&mut verts, ww, wh, cx, cy, r, fill);
-                    push_ring(&mut verts, ww, wh, cx, cy, r, 3.0, border);
+                    let ring_width = if touch_controls::is_edit_mode() && c.name != touch_controls::EDIT_NAME {
+                        4.5
+                    } else {
+                        3.0
+                    };
+                    push_ring(&mut verts, ww, wh, cx, cy, r, ring_width, border);
                     if let touch_controls::Label::Text(text) = c.label {
-                        push_text(&mut verts, ww, wh, text, cx, cy, r * 0.24, ink);
+                        let label_str = if c.name == touch_controls::EDIT_NAME && touch_controls::is_edit_mode() {
+                            "OK"
+                        } else {
+                            text
+                        };
+                        push_text(&mut verts, ww, wh, label_str, cx, cy, r * 0.24, ink);
                     }
                 },
             }
@@ -1431,6 +1462,60 @@ impl RendererImpl {
                     }
                 }
             }
+        }
+
+        // Edit mode banner
+        if touch_controls::is_edit_mode() {
+            let bx1 = ww * 0.15;
+            let bx2 = ww * 0.85;
+            let by1 = 12.0;
+            let by2 = 38.0;
+            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by2, [0.04, 0.08, 0.16, 0.85]);
+            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by1 + 1.5, [0.20, 0.80, 1.0, 0.90]);
+            push_quad(&mut verts, ww, wh, bx1, by2 - 1.5, bx2, by2, [0.20, 0.80, 1.0, 0.90]);
+            push_text(&mut verts, ww, wh, "MODO EDICION: ARRASTRA LOS BOTONES", ww * 0.50, 25.0, 2.2, [0.30, 0.90, 1.0, 1.0]);
+        }
+
+        // Real-time FPS counter overlay
+        static FPS_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        static FPS_VALUE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(60);
+        static FPS_LAST_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let last_ms = FPS_LAST_MS.load(std::sync::atomic::Ordering::Relaxed);
+        FPS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if now_ms >= last_ms + 1000 {
+            if FPS_LAST_MS.compare_exchange(last_ms, now_ms, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed).is_ok() {
+                let frames = FPS_COUNT.swap(0, std::sync::atomic::Ordering::Relaxed);
+                let diff_s = (now_ms.saturating_sub(last_ms) as f32) / 1000.0;
+                let fps = if diff_s > 0.0 { (frames as f32 / diff_s).round() as u32 } else { 60 };
+                FPS_VALUE.store(fps, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
+        if std::env::var_os("OPENGMK_SHOW_FPS").map_or(false, |v| v == "1") {
+            let fps = FPS_VALUE.load(std::sync::atomic::Ordering::Relaxed);
+            let fps_text = format!("{} FPS", fps);
+            let pill_x = 16.0;
+            let pill_y = 16.0;
+            let pill_w = 64.0;
+            let pill_h = 22.0;
+            push_quad(&mut verts, ww, wh, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, [0.05, 0.05, 0.08, 0.70]);
+            let (border_col, text_col) = if fps >= 55 {
+                ([0.20, 0.85, 0.35, 0.9], [0.30, 0.95, 0.45, 1.0])
+            } else if fps >= 30 {
+                ([0.90, 0.75, 0.15, 0.9], [1.0, 0.85, 0.20, 1.0])
+            } else {
+                ([0.90, 0.25, 0.25, 0.9], [1.0, 0.35, 0.35, 1.0])
+            };
+            push_quad(&mut verts, ww, wh, pill_x, pill_y, pill_x + pill_w, pill_y + 1.2, border_col);
+            push_quad(&mut verts, ww, wh, pill_x, pill_y + pill_h - 1.2, pill_x + pill_w, pill_y + pill_h, border_col);
+            push_quad(&mut verts, ww, wh, pill_x, pill_y, pill_x + 1.2, pill_y + pill_h, border_col);
+            push_quad(&mut verts, ww, wh, pill_x + pill_w - 1.2, pill_y, pill_x + pill_w, pill_y + pill_h, border_col);
+            push_text(&mut verts, ww, wh, &fps_text, pill_x + pill_w / 2.0, pill_y + pill_h / 2.0, 2.3, text_col);
         }
 
         if verts.is_empty() && sprites.is_empty() && party_sprites.is_empty() {

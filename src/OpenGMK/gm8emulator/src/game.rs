@@ -2418,10 +2418,21 @@ impl Game {
 
             // frame limiter
             let diff = Instant::now().duration_since(time_now);
-            let duration = Duration::from_nanos(1_000_000_000 / self.room.speed as u64);
+            #[cfg(target_os = "android")]
+            let speed_mult = crate::touch_controls::fast_forward_multiplier();
+            #[cfg(not(target_os = "android"))]
+            let speed_mult = 1.0f32;
+
+            let base_nanos = 1_000_000_000 / self.room.speed.max(1) as u64;
+            let target_nanos = if speed_mult > 1.0 {
+                (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
+            } else {
+                base_nanos
+            };
+            let duration = Duration::from_nanos(target_nanos);
             if let GameClock::SpoofedNanos(t) = &mut self.clock {
                 *t += duration.as_nanos();
-                self.fps = self.room.speed.into();
+                self.fps = (self.room.speed as f32 * speed_mult) as u32;
             } else {
                 // gm8 just ignores any leftover time after a second has passed, so we do the same
                 if time_now.duration_since(time_last) >= Duration::from_secs(1) {

@@ -96,6 +96,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     var marginY by remember { mutableStateOf(prefs.touchMarginY.toFloat()) }
     var haptics by remember { mutableStateOf(prefs.touchHaptics) }
     var deadzone by remember { mutableStateOf(prefs.touchDeadzone.toFloat()) }
+    var showNumKeys by remember { mutableStateOf(prefs.showNumKeys) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
@@ -110,6 +111,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         newMarginY: Int = marginY.toInt(),
         newHaptics: Boolean = haptics,
         newDeadzone: Int = deadzone.toInt(),
+        newShowNumKeys: Boolean = showNumKeys,
     ) {
         bindings = newBindings
         stick = newStick
@@ -119,6 +121,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         marginY = newMarginY.toFloat()
         haptics = newHaptics
         deadzone = newDeadzone.toFloat()
+        showNumKeys = newShowNumKeys
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
         prefs.touchOpacity = newOpacity
@@ -127,6 +130,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         prefs.touchMarginY = newMarginY
         prefs.touchHaptics = newHaptics
         prefs.touchDeadzone = newDeadzone
+        prefs.showNumKeys = newShowNumKeys
         writeControlsFile(
             filesDir,
             newBindings,
@@ -138,6 +142,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
             newMarginY,
             newHaptics,
             newDeadzone,
+            newShowNumKeys,
         )
     }
 
@@ -343,6 +348,16 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                         items = 1,
                         index = 0,
                         onCheckedChange = { store(newHaptics = it) },
+                    )
+
+                    SwitchRow(
+                        icon = Icons.Filled.SportsEsports,
+                        title = "Mostrar barra superior de accesos",
+                        subtitle = "Muestra u oculta los botones superiores (equipo Pokémon, objetos y opciones)",
+                        checked = showNumKeys,
+                        items = 1,
+                        index = 0,
+                        onCheckedChange = { store(newShowNumKeys = it) },
                     )
 
                     Column {
