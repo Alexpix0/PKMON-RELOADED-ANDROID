@@ -147,6 +147,13 @@ class Preferences(context: Context) {
             keepAspect = (value == "aspect" || value == "pixel_perfect")
         }
 
+    /** Bezel art style for 4:3 mode: "oled", "retro_slate", "reloaded_blue" */
+    var videoBezel: String
+        get() = prefs.getString("videoBezel", "oled") ?: "oled"
+        set(value) {
+            prefs.edit().putString("videoBezel", value).apply()
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
-    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, videoScaling, showFps)
+    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, videoScaling, showFps, videoBezel)
 }

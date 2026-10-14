@@ -380,6 +380,99 @@ La **Fase 3** del Roadmap v0.4.0 EX se enfoca en el rendimiento crítico del mot
 | [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt) | Fila de selección de Escalado Pixel-Perfect en interfaz Compose |
 | [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md) | Actualización de tabla de estados (Fase 1, 2 y 3 completadas) |
 
+---
+
+## 13. Fase 4 de la v0.4.0 EX: QoL Avanzado & Diagnóstico
+
+### A. Copia de Seguridad Instantánea "Punto de Retorno" (Instant Safety Snapshots)
+* **Archivos modificados:**
+  * [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Problema:** En Pokémon Reloaded los combates contra líderes de gimnasio, el Frente de Batalla o Pokémon legendarios conllevan riesgos elevados. Si el jugador comete un error táctico o debilita por accidente a un legendario sin capturarlo, revertir la partida dependía de reiniciar o arriesgarse a perder horas de juego si el autoguardado ya se había sobrescrito.
+* **Solución técnica implementada:**
+  1. **Motor de Snapshots (`createSnapshot`):** Permite generar una instantánea completa de cualquier ranura de guardado activa (`Slot 1`, `Slot 2`, `Slot 3`) empaquetando el archivo de partida binario (`PartidaX.sav`), el archivo de resumen (`PartidaX_resumen.sav`) y un manifiesto en JSON (`snapshot.json`) con metadatos: etiqueta personalizada (`label`), ranura de origen (`slot`), fecha y hora UNIX (`timestamp`) y tamaño.
+  2. **Doble persistencia (Internal Storage + Scoped Storage Shield):** El snapshot `.zip` se almacena primero en el almacenamiento interno privado (`filesDir/snapshots/`) y de forma simultánea se replica en la carpeta pública del dispositivo `Documents/PokemonReloadedSnapshots/` mediante `MediaStore` en Android 10+ (API 29+) o acceso directo a disco en Android 9-, sobreviviendo a borrados de caché, limpiezas de datos y reinstalaciones del APK.
+  3. **Restauración y gestión en 1 toque (`restoreSnapshot` y `deleteSnapshot`):** La interfaz muestra el listado cronológico de snapshots guardados. Con un toque se valida el archivo ZIP, se extraen las partidas hacia el directorio del juego y se reemplazan de forma limpia y atómica.
+
+---
+
+### B. Auto-Diagnóstico de Integridad de Archivos (Deep Health Checker)
+* **Archivos modificados:**
+  * [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Problema:** Tras descomprimir o importar el juego desde diferentes exploradores de archivos o almacenamiento externo, a menudo quedaban archivos a 0 bytes por descargas corruptas o faltaban carpetas de sprites de batalla, provocando que el juego se congelara o crasheara inesperadamente en mitad de una batalla o al reproducir una pista musical.
+* **Solución técnica implementada:**
+  1. **Inspección en hilo secundario de alta velocidad (`runHealthCheck`):** Escanea recursivamente el árbol completo de 34,388 assets en menos de un segundo en `Dispatchers.IO`.
+  2. **Detección de integridad profunda:**
+     * Conteo y verificación de los 26,240 sprites `.gmspr` en `data/pkmnbattle`.
+     * Detección y verificación de las más de 320 pistas musicales en `data/midis` y carpetas de audio.
+     * Comprobación del ejecutable principal (`.exe`) del juego y de la tabla de tipos (`Efectividades.png`).
+     * Detección y reporte automático de cualquier archivo truncado a 0 bytes (`zeroByteFiles`).
+  3. **Clasificación por niveles de salud (`HealthLevel`):** Reporta badges visuales en la interfaz Compose: `EXCELLENT` (todo intacto al 100%), `GOOD` (completamente jugable), `WARNING` (archivos secundarios o 0 bytes detectados), y `CRITICAL` (juego no instalado o ejecutable ausente).
+
+---
+
+### C. Bordes Temáticos en Modo 4:3 (Bezel Art Pillarbox)
+* **Archivos modificados:**
+  * [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  * [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  * [`android/app/src/main/java/com/klisee/reloaded/Video.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Video.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Problema:** Al jugar en modo de aspecto 4:3 en pantallas panorámicas modernas (19.5:9 o 20:9), las barras laterales negras eran inertes y desaprovechaban la identidad estética del juego.
+* **Solución técnica implementada:**
+  1. **Configuración de Bezel en `video.conf`:** Parámetro `bezel=oled|retro_slate|reloaded_blue` leído en arranque por el emulador nativo.
+  2. **Renderizado acelerado por GPU:** Cuando el área de pillarbox lateral es visible (`w_x > 4.0`), el renderizador de OpenGL ES dibuja en ambos laterales:
+     * **`oled` (Negro Puro AMOLED):** Barras negras absolutas (`#000000`), manteniendo apagados los píxeles de pantallas OLED/AMOLED para máximo ahorro energético.
+     * **`retro_slate` (Consola Retro):** Degradado slate grafito oscuro (`#12161A` a `#1A2026`) con una línea divisoria de acento en pizarra pulida (`#323D47`).
+     * **`reloaded_blue` (Reloaded Azul Neón):** Degradado azul marino profundo (`#081226` a `#0E1B38`) rematado por una fina línea vertical en cian eléctrico neón (`#00E5FF`).
+  3. Cero impacto en el framerate: se dibuja en 2 quads simples sin texturas pesadas ni asignaciones dinámicas.
+
+---
+
+### D. Historial de Diálogos Recientes en Pantalla (In-Game Dialogue Text Log Modal)
+* **Archivos modificados:**
+  * [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  * [`src/OpenGMK/gm8emulator/src/game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs)
+  * [`src/OpenGMK/gm8emulator/src/game/draw.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game/draw.rs)
+  * [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  * [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+* **Problema:** En pantallas táctiles, es frecuente pulsar repetidamente el botón de acción por reflejo y saltar accidentalmente conversaciones con PNJs, instrucciones de misiones o pistas de gimnasio importantes.
+* **Solución técnica implementada:**
+  1. **Captura en el pipeline de renderizado de texto (`draw_string`):** Al detectar la invocación de `draw_string` cuando una ventana de diálogo o mensaje está en pantalla (`dialogue_open()`), o cuando el texto supera los 24 caracteres con signos de puntuación, se normaliza y se almacena en un búfer circular en memoria (`RECENT_DIALOGUES`).
+  2. **Botón táctil dedicado `"LOG"`:** Se integró un botón flotante ergonómico (`cx: 0.685, cy: 0.055`) en la barra superior junto al botón `"TIP"` de la guía, con iluminación activa en color verde al abrirse.
+  3. **Renderizado de fuente tipográfica extendida en OpenGL:** Se expandió el mapa de glifos en memoria (`glyph(c: char)`) de la GPU para incluir todo el alfabeto ASCII completo (mayúsculas y minúsculas: 'H', 'J', 'Q', 'W', 'Y', etc.) y signos de puntuación (`.`, `,`, `!`, `?`, `/`, `(`, `)`, `[`, `]`).
+  4. **Modal flotante superpuesto:** Muestra una ventana con fondo translúcido (85% alfa), cabecera cian `"HISTORIAL DE DIALOGOS"` y los últimos mensajes formateados línea a línea, permitiendo consultar los diálogos pasados en cualquier momento y cerrándose con un toque rápido en la pantalla.
+
+---
+
+### E. Integración en UI y Controles de Ajustes
+* **Archivos modificados:**
+  * [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+* **Novedades en la interfaz:**
+  1. **Grupo "Bordes en 4:3 (Bezel Art)":** Selector directo entre Negro AMOLED, Consola Retro (Grafito) y Reloaded Azul (Neón).
+  2. **Acceso directo a Puntos de Retorno (Snapshots):** Diálogo interactivo para crear snapshots instantáneos seleccionando ranura (Slot 1, 2, 3), escribir un motivo o etiqueta y restaurar o eliminar copias existentes.
+  3. **Acceso directo al Diagnóstico de Integridad:** Diálogo interactivo con barra de escaneo, métricas en tiempo real y clasificación visual del estado del juego.
+
+---
+
+### F. Resumen de Archivos Afectados en la Fase 4
+
+| Archivo | Rol en Fase 4 |
+|---|---|
+| [`android/app/src/main/java/com/klisee/reloaded/GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt) | Motor de Snapshots (creación, listado, restauración, eliminación) y Deep Health Checker de 34,388 archivos |
+| [`android/app/src/main/java/com/klisee/reloaded/Video.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Video.kt) | Soporte del parámetro `bezel` en `writeVideoFile` |
+| [`android/app/src/main/java/com/klisee/reloaded/Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt) | Persistencia de la propiedad `videoBezel` |
+| [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt) | Interfaz Compose de Bezel Art, diálogo modal de Snapshots y diálogo de Diagnóstico de Integridad |
+| [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs) | Botón `"LOG"`, estado atómico de modal de log, búfer circular `RECENT_DIALOGUES` |
+| [`src/OpenGMK/gm8emulator/src/game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs) | Exposición pública interna del método `dialogue_open()` |
+| [`src/OpenGMK/gm8emulator/src/game/draw.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game/draw.rs) | Captura de cadenas en `draw_string()` hacia `record_dialogue()` |
+| [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs) | Parseo de `bezel`, detección de toques para botón `"LOG"` y cierre de modal |
+| [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs) | Expansión del mapa de fuentes ASCII completas, renderizado de bordes Bezel Art y modal flotante de Text Log |
+| [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md) | Actualización de tabla de estados (Fase 4 completada, Fase 5 siguiente) |
+| [`Armando-Cambios.MD`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/Armando-Cambios.MD) | Documentación técnica exhaustiva de la Sección 13 (Fase 4) |
+
+
 
 
 

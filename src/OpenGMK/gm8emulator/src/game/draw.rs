@@ -495,6 +495,14 @@ impl Game {
         colours: Option<(i32, i32, i32, i32)>,
         alpha: Real,
     ) {
+        #[cfg(target_os = "android")]
+        {
+            let text = self.decode_str(string.as_ref());
+            if self.dialogue_open() || (text.len() >= 12 && text.contains(' ')) {
+                crate::touch_controls::record_dialogue(&text);
+            }
+        }
+
         let font = self.assets.fonts.get_asset(self.draw_font_id).map(|x| x.as_ref()).unwrap_or(&self.default_font);
 
         let sin = angle.to_radians().sin();

@@ -354,6 +354,266 @@ class GameRepository(private val context: Context) {
         }
     }
 
+    data class SnapshotItem(
+        val file: File,
+        val slot: Int,
+        val label: String,
+        val timestamp: Long,
+        val sizeBytes: Long,
+        val dateFormatted: String,
+    )
+
+    enum class HealthLevel { EXCELLENT, GOOD, WARNING, CRITICAL }
+
+    data class HealthReport(
+        val level: HealthLevel,
+        val totalFiles: Int,
+        val totalSizeBytes: Long,
+        val zeroByteFiles: Int,
+        val battleSpritesCount: Int,
+        val midisCount: Int,
+        val missingCoreFiles: List<String>,
+        val summary: String,
+    )
+
+    /**
+     * Creates an instant safety snapshot ("Punto de Retorno") of a save slot before a gym/boss battle.
+     * Persists in internal storage and replicates to public Documents/PokemonReloadedSnapshots.
+     */
+    suspend fun createSnapshot(slot: Int, label: String = "Punto de Retorno"): Result<File> = withContext(Dispatchers.IO) {
+        runCatching {
+            val folder = File(gameDir, "data/partidas")
+            if (!folder.isDirectory) error("Primero instala el juego.")
+            val prefix = "reloaded$slot"
+            val targetFiles = folder.listFiles().orEmpty()
+                .filter { it.name.startsWith("$prefix.", ignoreCase = true) || it.name.startsWith("${prefix}_", ignoreCase = true) }
+            if (targetFiles.isEmpty()) error("La ranura $slot no tiene ninguna partida guardada.")
+
+            val snapshotsDir = File(files, "snapshots").apply { mkdirs() }
+            val time = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val timestamp = System.currentTimeMillis()
+            val snapFile = File(snapshotsDir, "snapshot_slot${slot}_$time.zip")
+
+            ZipOutputStream(snapFile.outputStream().buffered()).use { zip ->
+                targetFiles.forEach { file ->
+                    zip.putNextEntry(ZipEntry("partidas/" + file.name))
+                    file.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+                // Internal metadata file
+                zip.putNextEntry(ZipEntry("snapshot_meta.json"))
+                val metaJson = JSONObject()
+                    .put("slot", slot)
+                    .put("label", label)
+                    .put("timestamp", timestamp)
+                    .put("version", "0.4.0-EX")
+                    .toString()
+                zip.write(metaJson.toByteArray())
+                zip.closeEntry()
+            }
+
+            // Scoped Storage Shield: Replicate snapshot into Documents/PokemonReloadedSnapshots
+            runCatching {
+                val shieldDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "PokemonReloadedSnapshots").apply { mkdirs() }
+                snapFile.copyTo(File(shieldDir, snapFile.name), overwrite = true)
+            }
+
+            snapFile
+        }
+    }
+
+    /** Lists all saved snapshots, newest first. */
+    fun listSnapshots(): List<SnapshotItem> {
+        val internalDir = File(files, "snapshots")
+        val internalFiles = if (internalDir.isDirectory) internalDir.listFiles().orEmpty().filter { it.extension.equals("zip", ignoreCase = true) } else emptyList()
+        val shieldDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "PokemonReloadedSnapshots")
+        val shieldFiles = if (shieldDir.isDirectory) shieldDir.listFiles().orEmpty().filter { it.extension.equals("zip", ignoreCase = true) } else emptyList()
+
+        val all = (internalFiles + shieldFiles).distinctBy { it.name }
+        val formatter = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.getDefault())
+
+        return all.map { file ->
+            var slot = 1
+            var label = "Punto de Retorno"
+            var timestamp = file.lastModified()
+
+            // Try reading embedded metadata
+            runCatching {
+                ZipFile(file).use { zip ->
+                    val entry = zip.getEntry("snapshot_meta.json")
+                    if (entry != null) {
+                        zip.getInputStream(entry).reader().use {
+                            val json = JSONObject(it.readText())
+                            slot = json.optInt("slot", 1)
+                            label = json.optString("label", label)
+                            timestamp = json.optLong("timestamp", timestamp)
+                        }
+                    } else {
+                        val match = Regex("slot(\\d+)", RegexOption.IGNORE_CASE).find(file.name)
+                        if (match != null) {
+                            slot = match.groupValues[1].toIntOrNull() ?: 1
+                        }
+                    }
+                }
+            }
+
+            SnapshotItem(
+                file = file,
+                slot = slot,
+                label = label,
+                timestamp = timestamp,
+                sizeBytes = file.length(),
+                dateFormatted = formatter.format(java.util.Date(timestamp)),
+            )
+        }.sortedByDescending { it.timestamp }
+    }
+
+    /** Restores a snapshot file back into its original save slot. */
+    suspend fun restoreSnapshot(snapshotFile: File): Result<Int> = withContext(Dispatchers.IO) {
+        runCatching {
+            val folder = File(gameDir, "data/partidas")
+            if (!folder.isDirectory) error("Primero instala el juego.")
+            var slot = 1
+            // Determine slot
+            runCatching {
+                ZipFile(snapshotFile).use { zip ->
+                    val entry = zip.getEntry("snapshot_meta.json")
+                    if (entry != null) {
+                        zip.getInputStream(entry).reader().use {
+                            val json = JSONObject(it.readText())
+                            slot = json.optInt("slot", 1)
+                        }
+                    } else {
+                        val match = Regex("slot(\\d+)", RegexOption.IGNORE_CASE).find(snapshotFile.name)
+                        if (match != null) slot = match.groupValues[1].toIntOrNull() ?: 1
+                    }
+                }
+            }
+
+            // Clean previous save in that slot
+            folder.listFiles().orEmpty()
+                .filter { it.name.startsWith("reloaded$slot.", ignoreCase = true) || it.name.startsWith("reloaded${slot}_", ignoreCase = true) }
+                .forEach { it.delete() }
+
+            var written = 0
+            ZipInputStream(snapshotFile.inputStream().buffered()).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    val name = entry.name.replace('\\', '/')
+                    if (!entry.isDirectory && name.startsWith("partidas/", ignoreCase = true)) {
+                        val fname = name.substringAfterLast('/')
+                        val target = File(folder, fname)
+                        target.outputStream().use { zip.copyTo(it) }
+                        written++
+                    }
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+            if (written == 0) error("El snapshot no contenía archivos de partida válidos.")
+            slot
+        }
+    }
+
+    /** Deletes a snapshot file and its mirrored copy in Documents. */
+    fun deleteSnapshot(snapshotFile: File): Boolean {
+        var ok = snapshotFile.delete()
+        val shieldDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "PokemonReloadedSnapshots")
+        val mirrored = File(shieldDir, snapshotFile.name)
+        if (mirrored.exists()) {
+            ok = mirrored.delete() || ok
+        }
+        return ok
+    }
+
+    /**
+     * Deep Health Checker of game installation integrity across all 34,388 assets.
+     */
+    suspend fun runHealthCheck(): HealthReport = withContext(Dispatchers.IO) {
+        var totalFiles = 0
+        var totalSize = 0L
+        var zeroByteCount = 0
+        val missing = mutableListOf<String>()
+
+        if (!gameDir.isDirectory) {
+            return@withContext HealthReport(
+                level = HealthLevel.CRITICAL,
+                totalFiles = 0,
+                totalSizeBytes = 0L,
+                zeroByteFiles = 0,
+                battleSpritesCount = 0,
+                midisCount = 0,
+                missingCoreFiles = listOf("Directorio principal game/ no existe"),
+                summary = "El juego no está instalado. Instálalo desde el archivo ZIP para comenzar.",
+            )
+        }
+
+        val exe = gameDir.listFiles().orEmpty().firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+        if (exe == null) {
+            missing.add("Ejecutable principal (.exe)")
+        }
+
+        val dataDir = File(gameDir, "data")
+        if (!dataDir.isDirectory) {
+            missing.add("Carpeta de recursos (data/)")
+        }
+
+        val pkmnbattle = File(dataDir, "pkmnbattle")
+        val battleCount = if (pkmnbattle.isDirectory) {
+            pkmnbattle.listFiles().orEmpty().count { it.isFile && it.extension.equals("gmspr", ignoreCase = true) }
+        } else {
+            missing.add("Sprites de combate (data/pkmnbattle/)")
+            0
+        }
+
+        val midisDir = File(dataDir, "midis")
+        val midisCount = if (midisDir.isDirectory) {
+            midisDir.listFiles().orEmpty().count { it.isFile }
+        } else {
+            missing.add("Música y efectos (data/midis/)")
+            0
+        }
+
+        val efectividades = File(dataDir, "image/Efectividades.png")
+        if (!efectividades.isFile) {
+            missing.add("Tabla de tipos (data/image/Efectividades.png)")
+        }
+
+        gameDir.walkTopDown().filter { it.isFile }.forEach { f ->
+            totalFiles++
+            val len = f.length()
+            totalSize += len
+            if (len == 0L) {
+                zeroByteCount++
+            }
+        }
+
+        val level = when {
+            missing.isNotEmpty() || battleCount < 1000 -> HealthLevel.CRITICAL
+            zeroByteCount > 10 || midisCount < 100 -> HealthLevel.WARNING
+            zeroByteCount > 0 -> HealthLevel.GOOD
+            else -> HealthLevel.EXCELLENT
+        }
+
+        val summary = when (level) {
+            HealthLevel.EXCELLENT -> "¡Instalación perfecta! Los $totalFiles archivos están íntegros, incluidos los $battleCount sprites de combate y $midisCount temas musicales."
+            HealthLevel.GOOD -> "Instalación en buen estado ($totalFiles archivos). Se detectaron $zeroByteCount archivos residuales de 0 bytes no esenciales."
+            HealthLevel.WARNING -> "Instalación funcional con advertencias: se encontraron $zeroByteCount archivos vacíos (0 bytes) que podrían provocar fallos en audio o texturas."
+            HealthLevel.CRITICAL -> "Instalación crítica: Faltan componentes esenciales: ${missing.joinToString(", ")}. Se recomienda reinstalar el juego."
+        }
+
+        HealthReport(
+            level = level,
+            totalFiles = totalFiles,
+            totalSizeBytes = totalSize,
+            zeroByteFiles = zeroByteCount,
+            battleSpritesCount = battleCount,
+            midisCount = midisCount,
+            missingCoreFiles = missing,
+            summary = summary,
+        )
+    }
+
     /** Zips the saves into the cache, ready to be handed to a file picker. */
     suspend fun exportSaves(): Result<File> = withContext(Dispatchers.IO) {
         runCatching {

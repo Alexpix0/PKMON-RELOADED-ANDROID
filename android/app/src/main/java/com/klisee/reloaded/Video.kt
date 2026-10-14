@@ -10,15 +10,20 @@ import java.io.File
  * - `full`: stretched to fill the full screen.
  * - `pixel_perfect`: integer scaling with razor-sharp pixel edges for OLED/HD/2K screens.
  */
-fun writeVideoFile(filesDir: File, scaling: String, showFps: Boolean = false) {
+fun writeVideoFile(filesDir: File, scaling: String, showFps: Boolean = false, bezel: String = "oled") {
     val text = buildString {
         appendLine("# Escrito por Ajustes. El emulador lo lee al arrancar.")
         appendLine("scaling=$scaling")
         appendLine("show_fps=${if (showFps) 1 else 0}")
+        appendLine("bezel=$bezel")
     }
     runCatching { File(filesDir, "video.conf").writeText(text) }
 }
 
+fun writeVideoFile(filesDir: File, scaling: String, showFps: Boolean = false) {
+    writeVideoFile(filesDir, scaling, showFps, "oled")
+}
+
 fun writeVideoFile(filesDir: File, keepAspect: Boolean, showFps: Boolean = false) {
-    writeVideoFile(filesDir, if (keepAspect) "aspect" else "full", showFps)
+    writeVideoFile(filesDir, if (keepAspect) "aspect" else "full", showFps, "oled")
 }

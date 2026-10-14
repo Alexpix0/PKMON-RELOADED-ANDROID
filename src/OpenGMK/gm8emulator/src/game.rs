@@ -1981,7 +1981,7 @@ impl Game {
     /// in `global.drawModalSystem`; -1 means nothing is open. 6937 is the box with a portrait, 6949
     /// the plain one and 6941 the mobile one.
     #[cfg(target_os = "android")]
-    fn dialogue_open(&self) -> bool {
+    pub(crate) fn dialogue_open(&self) -> bool {
         matches!(self.modal_system(), 6937 | 6949 | 6941)
     }
 

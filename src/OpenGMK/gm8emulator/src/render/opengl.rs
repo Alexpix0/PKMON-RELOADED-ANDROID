@@ -1163,10 +1163,10 @@ fn push_arrow(out: &mut Vec<f32>, ww: f32, wh: f32, cx: f32, cy: f32, size: f32,
     push_tri(out, ww, wh, tip, b1, b2, col);
 }
 
-/// A tiny 3x5 bitmap font, just for the control labels.
+/// A tiny 3x5 bitmap font, just for the control labels and dialog log.
 #[cfg(target_os = "android")]
 fn glyph(c: char) -> Option<[u8; 5]> {
-    Some(match c {
+    Some(match c.to_ascii_uppercase() {
         'Z' => [0b111, 0b001, 0b010, 0b100, 0b111],
         'X' => [0b101, 0b101, 0b010, 0b101, 0b101],
         'C' => [0b011, 0b100, 0b100, 0b100, 0b011],
@@ -1188,6 +1188,11 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         'G' => [0b011, 0b100, 0b101, 0b101, 0b011],
         'I' => [0b111, 0b010, 0b010, 0b010, 0b111],
         'F' => [0b111, 0b100, 0b110, 0b100, 0b100],
+        'H' => [0b101, 0b101, 0b111, 0b101, 0b101],
+        'J' => [0b001, 0b001, 0b001, 0b101, 0b010],
+        'Q' => [0b010, 0b101, 0b101, 0b011, 0b001],
+        'W' => [0b101, 0b101, 0b111, 0b111, 0b101],
+        'Y' => [0b101, 0b101, 0b010, 0b010, 0b010],
         '0' => [0b111, 0b101, 0b101, 0b101, 0b111],
         '1' => [0b010, 0b110, 0b010, 0b010, 0b111],
         '2' => [0b110, 0b001, 0b010, 0b100, 0b111],
@@ -1202,6 +1207,15 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         ':' => [0b000, 0b010, 0b000, 0b010, 0b000],
         ' ' => [0b000, 0b000, 0b000, 0b000, 0b000],
         '-' => [0b000, 0b000, 0b111, 0b000, 0b000],
+        '.' => [0b000, 0b000, 0b000, 0b000, 0b010],
+        ',' => [0b000, 0b000, 0b000, 0b010, 0b100],
+        '!' => [0b010, 0b010, 0b010, 0b000, 0b010],
+        '?' => [0b110, 0b001, 0b010, 0b000, 0b010],
+        '/' => [0b001, 0b001, 0b010, 0b100, 0b100],
+        '(' | '[' => [0b010, 0b100, 0b100, 0b100, 0b010],
+        ')' | ']' => [0b010, 0b001, 0b001, 0b001, 0b010],
+        '_' => [0b000, 0b000, 0b000, 0b000, 0b111],
+        '\'' => [0b010, 0b010, 0b000, 0b000, 0b000],
         _ => return None,
     })
 }
@@ -1212,6 +1226,27 @@ fn push_text(out: &mut Vec<f32>, ww: f32, wh: f32, text: &str, cx: f32, cy: f32,
     let char_w = 4.0 * px; // 3 columns of glyph + 1 gap
     let total = char_w * chars.len() as f32 - px;
     let mut x = cx - total / 2.0;
+    for ch in chars {
+        if let Some(g) = glyph(ch) {
+            for (row, bits) in g.iter().enumerate() {
+                for col_i in 0..3u8 {
+                    if *bits & (1u8 << (2 - col_i)) != 0 {
+                        let gx = x + f32::from(col_i) * px;
+                        let gy = cy + (row as f32 - 2.0) * px;
+                        push_quad(out, ww, wh, gx, gy, gx + px, gy + px, col);
+                    }
+                }
+            }
+        }
+        x += char_w;
+    }
+}
+
+#[cfg(target_os = "android")]
+fn push_text_left(out: &mut Vec<f32>, ww: f32, wh: f32, text: &str, left_x: f32, cy: f32, px: f32, col: [f32; 4]) {
+    let chars: Vec<char> = text.chars().collect();
+    let char_w = 4.0 * px;
+    let mut x = left_x;
     for ch in chars {
         if let Some(g) = glyph(ch) {
             for (row, bits) in g.iter().enumerate() {
@@ -1421,6 +1456,10 @@ impl RendererImpl {
                 fill = [0.15, 0.75, 0.40, 0.85 * opacity];
                 border = [0.40, 0.95, 0.60, 0.95 * opacity];
                 ink = [1.0, 1.0, 1.0, 1.0];
+            } else if c.name == touch_controls::LOG_NAME && touch_controls::is_log_open() {
+                fill = [0.15, 0.75, 0.40, 0.85 * opacity];
+                border = [0.40, 0.95, 0.60, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
             }
             if let Some(uv) = overlay.art(c.name) {
                 // A control with its own artwork is drawn as that sprite, sized to the control.
@@ -1611,6 +1650,82 @@ impl RendererImpl {
             let guide_tex = get_or_load_guide_texture(&self.gl);
             if guide_tex != 0 {
                 push_sprite(&mut guide_sprites, ww, wh, gx1, gy1, gx2, gy2, 0.0, 0.0, 1.0, 1.0);
+            }
+        }
+
+        // In-game dialogue text log modal
+        if touch_controls::is_log_open() {
+            // Dark modal backdrop
+            push_quad(&mut verts, ww, wh, 0.0, 0.0, ww, wh, [0.0, 0.0, 0.0, 0.88]);
+
+            let modal_w = (ww * 0.88).min(640.0);
+            let modal_h = (wh * 0.84).min(440.0);
+            let mx1 = (ww - modal_w) / 2.0;
+            let my1 = (wh - modal_h) / 2.0;
+            let mx2 = mx1 + modal_w;
+            let my2 = my1 + modal_h;
+
+            // Card background
+            push_quad(&mut verts, ww, wh, mx1, my1, mx2, my2, [0.06, 0.08, 0.14, 0.96]);
+
+            // Cyan frame border
+            push_quad(&mut verts, ww, wh, mx1 - 2.0, my1 - 2.0, mx2 + 2.0, my1, [0.20, 0.75, 1.0, 0.90]);
+            push_quad(&mut verts, ww, wh, mx1 - 2.0, my2, mx2 + 2.0, my2 + 2.0, [0.20, 0.75, 1.0, 0.90]);
+            push_quad(&mut verts, ww, wh, mx1 - 2.0, my1, mx1, my2, [0.20, 0.75, 1.0, 0.90]);
+            push_quad(&mut verts, ww, wh, mx2, my1, mx2 + 2.0, my2, [0.20, 0.75, 1.0, 0.90]);
+
+            // Header banner
+            push_quad(&mut verts, ww, wh, mx1, my1, mx2, my1 + 28.0, [0.09, 0.15, 0.26, 0.98]);
+            push_quad(&mut verts, ww, wh, mx1, my1 + 27.0, mx2, my1 + 28.5, [0.20, 0.75, 1.0, 0.90]);
+            push_text(&mut verts, ww, wh, "HISTORIAL DE DIALOGOS RECIENTES", (mx1 + mx2) / 2.0, my1 + 14.0, 1.8, [0.35, 0.90, 1.0, 1.0]);
+
+            let logs = touch_controls::get_recent_dialogues();
+            if logs.is_empty() {
+                push_text(&mut verts, ww, wh, "NO HAY DIALOGOS REGISTRADOS EN ESTA SESION", (mx1 + mx2) / 2.0, (my1 + my2) / 2.0, 1.7, [0.60, 0.68, 0.80, 0.90]);
+            } else {
+                let mut cy = my1 + 44.0;
+                for (idx, line) in logs.iter().rev().take(7).enumerate() {
+                    if cy + 24.0 > my2 - 20.0 {
+                        break;
+                    }
+                    // Subtle line separator
+                    push_quad(&mut verts, ww, wh, mx1 + 10.0, cy - 8.0, mx2 - 10.0, cy - 7.0, [0.18, 0.26, 0.40, 0.45]);
+                    let clean = line.replace('\n', " ").replace('\r', " ");
+                    let max_chars = ((modal_w - 40.0) / 7.2) as usize;
+                    let display_text = if clean.len() > max_chars {
+                        format!("{}. {:.width$}...", idx + 1, clean, width = max_chars.saturating_sub(4))
+                    } else {
+                        format!("{}. {}", idx + 1, clean)
+                    };
+                    push_text_left(&mut verts, ww, wh, &display_text, mx1 + 16.0, cy + 2.0, 1.6, [0.90, 0.94, 1.0, 0.95]);
+                    cy += 28.0;
+                }
+            }
+
+            // Footer note
+            push_text(&mut verts, ww, wh, "TOCAR PARA CERRAR", (mx1 + mx2) / 2.0, my2 - 12.0, 1.4, [0.45, 0.55, 0.70, 0.85]);
+        }
+
+        // Bezel art decoration on 4:3 pillarbox side bars
+        let bezel = std::env::var("OPENGMK_BEZEL").unwrap_or_else(|_| "oled".to_string());
+        let (vx, _vy, vw, _vh) = touch_controls::viewport();
+        let wx1 = vx * ww;
+        let wx2 = (vx + vw) * ww;
+        if wx1 > 4.0 {
+            if bezel == "reloaded_blue" {
+                // Neon cyan accent border at game edges
+                push_quad(&mut verts, ww, wh, wx1 - 2.5, 0.0, wx1, wh, [0.25, 0.80, 1.0, 0.65]);
+                push_quad(&mut verts, ww, wh, wx2, 0.0, wx2 + 2.5, wh, [0.25, 0.80, 1.0, 0.65]);
+                // Subtle dark navy side panel tint
+                push_quad(&mut verts, ww, wh, 0.0, 0.0, wx1 - 2.5, wh, [0.04, 0.07, 0.14, 0.45]);
+                push_quad(&mut verts, ww, wh, wx2 + 2.5, 0.0, ww, wh, [0.04, 0.07, 0.14, 0.45]);
+            } else if bezel == "retro_slate" {
+                // Retro graphite slate borders with pinstripe
+                push_quad(&mut verts, ww, wh, wx1 - 3.0, 0.0, wx1, wh, [0.30, 0.33, 0.38, 0.75]);
+                push_quad(&mut verts, ww, wh, wx2, 0.0, wx2 + 3.0, wh, [0.30, 0.33, 0.38, 0.75]);
+                // Subtle graphite side panel tint
+                push_quad(&mut verts, ww, wh, 0.0, 0.0, wx1 - 3.0, wh, [0.10, 0.11, 0.13, 0.50]);
+                push_quad(&mut verts, ww, wh, wx2 + 3.0, 0.0, ww, wh, [0.10, 0.11, 0.13, 0.50]);
             }
         }
 

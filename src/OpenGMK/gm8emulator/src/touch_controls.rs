@@ -69,9 +69,11 @@ pub const TURBO_NAME: &str = "turbo";
 pub const MUTE_NAME: &str = "mute";
 pub const EDIT_NAME: &str = "edit";
 pub const GUIDE_NAME: &str = "guide";
+pub const LOG_NAME: &str = "log";
 
 pub const CONTROLS: &[Control] = &[
     // Utility quick buttons (top right, discrete and non-intrusive)
+    Control { name: LOG_NAME, key: Key::F2, shape: Shape::Circle { cx: 0.685, cy: 0.055, r: 0.022 }, label: Label::Text("LOG"), contexts: WORLD | BATTLE },
     Control { name: GUIDE_NAME, key: Key::F1, shape: Shape::Circle { cx: 0.750, cy: 0.055, r: 0.022 }, label: Label::Text("TIP"), contexts: WORLD | BATTLE },
     Control { name: EDIT_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.815, cy: 0.055, r: 0.022 }, label: Label::Text("EDT"), contexts: WORLD | BATTLE },
     Control { name: TURBO_NAME, key: Key::Pause, shape: Shape::Circle { cx: 0.880, cy: 0.055, r: 0.022 }, label: Label::Text(">>"), contexts: WORLD | BATTLE },
@@ -215,11 +217,58 @@ pub fn is_guide_open() -> bool {
 pub fn toggle_guide_modal() -> bool {
     let mode = !is_guide_open();
     GUIDE_OPEN.store(mode, Ordering::Relaxed);
+    if mode {
+        set_log_open(false);
+    }
     mode
 }
 
 pub fn set_guide_open(open: bool) {
     GUIDE_OPEN.store(open, Ordering::Relaxed);
+}
+
+static LOG_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_log_open() -> bool {
+    LOG_OPEN.load(Ordering::Relaxed)
+}
+
+pub fn toggle_log_modal() -> bool {
+    let mode = !is_log_open();
+    LOG_OPEN.store(mode, Ordering::Relaxed);
+    if mode {
+        set_guide_open(false);
+    }
+    mode
+}
+
+pub fn set_log_open(open: bool) {
+    LOG_OPEN.store(open, Ordering::Relaxed);
+}
+
+static RECENT_DIALOGUES: Mutex<Option<Vec<String>>> = Mutex::new(None);
+
+pub fn record_dialogue(text: &str) {
+    let clean = text.trim();
+    if clean.len() < 6 || !clean.contains(' ') {
+        return;
+    }
+    let mut lock = match RECENT_DIALOGUES.lock() {
+        Ok(l) => l,
+        Err(_) => return,
+    };
+    let list = lock.get_or_insert_with(Vec::new);
+    if list.last().map(|s| s.as_str()) == Some(clean) {
+        return;
+    }
+    if list.len() >= 12 {
+        list.remove(0);
+    }
+    list.push(clean.to_string());
+}
+
+pub fn get_recent_dialogues() -> Vec<String> {
+    RECENT_DIALOGUES.lock().ok().and_then(|l| l.clone()).unwrap_or_default()
 }
 
 static SHOW_NUM_KEYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
@@ -234,7 +283,7 @@ pub fn show_num_keys() -> bool {
 
 pub fn effective_shape(index: usize) -> Shape {
     let c = &CONTROLS[index];
-    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME || c.name == GUIDE_NAME {
+    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME || c.name == GUIDE_NAME || c.name == LOG_NAME {
         return c.shape;
     }
     let s = scale();

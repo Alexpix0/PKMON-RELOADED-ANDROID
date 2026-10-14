@@ -140,6 +140,9 @@ fn load_video() {
                 let show = value == "1" || value.eq_ignore_ascii_case("true");
                 eprintln!("[video] show_fps: {}", show);
                 std::env::set_var("OPENGMK_SHOW_FPS", if show { "1" } else { "0" });
+            } else if name == "bezel" {
+                eprintln!("[video] marco bezel: {}", value);
+                std::env::set_var("OPENGMK_BEZEL", value);
             }
         }
     }
@@ -371,9 +374,10 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     let (w, h) = android::window_size();
     let (wf, hf) = (w as f32, h as f32);
 
-    // If the in-game type chart guide is open, any screen tap dismisses it
-    if crate::touch_controls::is_guide_open() {
+    // If the in-game type chart guide or dialogue log is open, any screen tap dismisses it
+    if crate::touch_controls::is_guide_open() || crate::touch_controls::is_log_open() {
         crate::touch_controls::set_guide_open(false);
+        crate::touch_controls::set_log_open(false);
         jni_vibrate(12);
         return;
     }
@@ -429,6 +433,9 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 jni_vibrate(if edit { 30 } else { 15 });
             } else if name == crate::touch_controls::GUIDE_NAME {
                 let open = crate::touch_controls::toggle_guide_modal();
+                jni_vibrate(if open { 25 } else { 12 });
+            } else if name == crate::touch_controls::LOG_NAME {
+                let open = crate::touch_controls::toggle_log_modal();
                 jni_vibrate(if open { 25 } else { 12 });
             } else {
                 control_key_down(index);

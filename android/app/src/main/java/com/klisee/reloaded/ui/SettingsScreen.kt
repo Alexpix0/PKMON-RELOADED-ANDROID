@@ -1,14 +1,18 @@
 package com.klisee.reloaded.ui
 
+import java.io.File
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,13 +21,19 @@ import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
@@ -31,11 +41,18 @@ import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.VideogameAsset
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -48,6 +65,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -77,11 +95,26 @@ fun SettingsScreen(
     var keepScreenOn by remember { mutableStateOf(prefs.keepScreenOn) }
     var keepAspect by remember { mutableStateOf(prefs.keepAspect) }
     var videoScaling by remember { mutableStateOf(prefs.videoScaling) }
+    var videoBezel by remember { mutableStateOf(prefs.videoBezel) }
     var showFps by remember { mutableStateOf(prefs.showFps) }
     var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
     var currentTheme by remember { mutableStateOf(prefs.themeMode) }
     var persistentShield by remember { mutableStateOf(prefs.persistentShield) }
     var checking by remember { mutableStateOf(false) }
+
+    // Snapshots state
+    var showSnapshotsDialog by remember { mutableStateOf(false) }
+    var snapshotsList by remember { mutableStateOf<List<GameRepository.SnapshotItem>>(emptyList()) }
+    var newSnapshotSlot by remember { mutableStateOf(1) }
+    var newSnapshotLabel by remember { mutableStateOf("Pre-Gimnasio") }
+    var restoreSnapshotTarget by remember { mutableStateOf<GameRepository.SnapshotItem?>(null) }
+    var deleteSnapshotTarget by remember { mutableStateOf<GameRepository.SnapshotItem?>(null) }
+
+    // Health check state
+    var showHealthDialog by remember { mutableStateOf(false) }
+    var runningHealthCheck by remember { mutableStateOf(false) }
+    var healthReport by remember { mutableStateOf<GameRepository.HealthReport?>(null) }
+
     val appVersion = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
     }
@@ -103,6 +136,285 @@ fun SettingsScreen(
                 }) { Text("Borrar") }
             },
             dismissButton = { TextButton(onClick = { confirmingDelete = false }) { Text("Cancelar") } },
+        )
+    }
+
+    restoreSnapshotTarget?.let { snap ->
+        AlertDialog(
+            onDismissRequest = { restoreSnapshotTarget = null },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+            title = { Text("¿Restaurar Punto de Retorno?") },
+            text = {
+                Text("Esto restaurará la Partida ${snap.slot} con los datos de '${snap.label}' del ${formatDate(snap.timestamp)}. Tu partida actual en esa ranura se sobrescribirá. ¿Deseas continuar?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = snap
+                    restoreSnapshotTarget = null
+                    scope.launch {
+                        val result = repo.restoreSnapshot(target.file)
+                        if (result.isSuccess) {
+                            snackbar.showSnackbar("Punto de retorno restaurado con éxito en Slot ${result.getOrNull() ?: target.slot}.")
+                        } else {
+                            snackbar.showSnackbar("Error al restaurar: ${result.exceptionOrNull()?.message}")
+                        }
+                    }
+                }) { Text("Restaurar") }
+            },
+            dismissButton = { TextButton(onClick = { restoreSnapshotTarget = null }) { Text("Cancelar") } },
+        )
+    }
+
+    deleteSnapshotTarget?.let { snap ->
+        AlertDialog(
+            onDismissRequest = { deleteSnapshotTarget = null },
+            icon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+            title = { Text("¿Eliminar Punto de Retorno?") },
+            text = {
+                Text("¿Deseas eliminar el snapshot '${snap.label}' (${formatDate(snap.timestamp)})?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = snap
+                    deleteSnapshotTarget = null
+                    scope.launch {
+                        val ok = repo.deleteSnapshot(target.file)
+                        snapshotsList = repo.listSnapshots()
+                        if (ok) {
+                            snackbar.showSnackbar("Snapshot eliminado.")
+                        }
+                    }
+                }) { Text("Eliminar") }
+            },
+            dismissButton = { TextButton(onClick = { deleteSnapshotTarget = null }) { Text("Cancelar") } },
+        )
+    }
+
+    if (showSnapshotsDialog) {
+        AlertDialog(
+            onDismissRequest = { showSnapshotsDialog = false },
+            icon = { Icon(Icons.Filled.CameraAlt, contentDescription = null) },
+            title = { Text("Puntos de Retorno (Snapshots)") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "Crea copias de seguridad instantáneas antes de gimnasios o combates difíciles. Se guardan tanto internamente como en la carpeta pública Documents.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("Nuevo Snapshot", style = MaterialTheme.typography.titleSmall)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Ranura:", style = MaterialTheme.typography.bodyMedium)
+                                (1..3).forEach { slotNum ->
+                                    if (newSnapshotSlot == slotNum) {
+                                        Button(
+                                            onClick = { newSnapshotSlot = slotNum },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Slot $slotNum")
+                                        }
+                                    } else {
+                                        OutlinedButton(
+                                            onClick = { newSnapshotSlot = slotNum },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text("Slot $slotNum")
+                                        }
+                                    }
+                                }
+                            }
+                            OutlinedTextField(
+                                value = newSnapshotLabel,
+                                onValueChange = { newSnapshotLabel = it },
+                                label = { Text("Etiqueta / Motivo") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        val created = repo.createSnapshot(newSnapshotSlot, newSnapshotLabel.trim().ifEmpty { "Snapshot" })
+                                        snapshotsList = repo.listSnapshots()
+                                        if (created != null) {
+                                            snackbar.showSnackbar("Punto de retorno guardado (${created.name})")
+                                        } else {
+                                            snackbar.showSnackbar("No se pudo crear el snapshot. Comprueba que el juego esté instalado.")
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = installed != null
+                            ) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.size(8.dp))
+                                Text("Guardar Snapshot Ahora")
+                            }
+                        }
+                    }
+
+                    Text("Historial de Snapshots (${snapshotsList.size})", style = MaterialTheme.typography.titleSmall)
+                    if (snapshotsList.isEmpty()) {
+                        Text(
+                            "No hay puntos de retorno guardados aún.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    } else {
+                        snapshotsList.forEach { snap ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "${snap.label} (Slot ${snap.slot})",
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(
+                                            "${formatDate(snap.timestamp)} • ${formatBytes(snap.sizeBytes)}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    IconButton(onClick = { restoreSnapshotTarget = snap }) {
+                                        Icon(Icons.Filled.Restore, contentDescription = "Restaurar")
+                                    }
+                                    IconButton(onClick = { deleteSnapshotTarget = snap }) {
+                                        Icon(Icons.Filled.Delete, contentDescription = "Eliminar")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSnapshotsDialog = false }) { Text("Cerrar") }
+            }
+        )
+    }
+
+    if (showHealthDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!runningHealthCheck) showHealthDialog = false },
+            icon = { Icon(Icons.Filled.HealthAndSafety, contentDescription = null) },
+            title = { Text("Diagnóstico de Integridad") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (runningHealthCheck) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(16.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Escaneando 34.388 archivos, sprites de batalla y pistas MIDI...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    } else if (healthReport != null) {
+                        val report = healthReport!!
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = when (report.level) {
+                                    GameRepository.HealthLevel.EXCELLENT -> MaterialTheme.colorScheme.primaryContainer
+                                    GameRepository.HealthLevel.GOOD -> MaterialTheme.colorScheme.secondaryContainer
+                                    GameRepository.HealthLevel.WARNING -> MaterialTheme.colorScheme.tertiaryContainer
+                                    GameRepository.HealthLevel.CRITICAL -> MaterialTheme.colorScheme.errorContainer
+                                }
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    when (report.level) {
+                                        GameRepository.HealthLevel.EXCELLENT, GameRepository.HealthLevel.GOOD -> Icons.Filled.CheckCircle
+                                        GameRepository.HealthLevel.WARNING -> Icons.Filled.Warning
+                                        GameRepository.HealthLevel.CRITICAL -> Icons.Filled.Warning
+                                    },
+                                    contentDescription = null
+                                )
+                                Text(
+                                    text = when (report.level) {
+                                        GameRepository.HealthLevel.EXCELLENT -> "ESTADO EXCELENTE"
+                                        GameRepository.HealthLevel.GOOD -> "ESTADO ÓPTIMO"
+                                        GameRepository.HealthLevel.WARNING -> "ADVERTENCIA: Faltan recursos"
+                                        GameRepository.HealthLevel.CRITICAL -> "ERROR CRÍTICO"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                            }
+                        }
+                        Text(report.summary, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(4.dp))
+                        val exeOk = !report.missingCoreFiles.any { it.contains(".exe") }
+                        Text("• Archivos totales analizados: ${report.totalFiles} (${formatBytes(report.totalSizeBytes)})", style = MaterialTheme.typography.bodySmall)
+                        Text("• Sprites de combate: ${report.battleSpritesCount} encontrados", style = MaterialTheme.typography.bodySmall)
+                        Text("• Pistas MIDI de sonido: ${report.midisCount} encontradas", style = MaterialTheme.typography.bodySmall)
+                        Text("• Ejecutable (.exe): ${if (exeOk) "Presente y válido ✓" else "Falta ejecutable ✗"}", style = MaterialTheme.typography.bodySmall)
+                        if (report.zeroByteFiles > 0) {
+                            Text("• Archivos vacíos/corruptos (0 bytes): ${report.zeroByteFiles}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (report.missingCoreFiles.isNotEmpty()) {
+                            Text("• Recursos críticos faltantes: ${report.missingCoreFiles.joinToString()}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Text(
+                            "Comprueba la integridad de los más de 34.000 archivos instalados (sprites de combate, efectos de sonido, MIDIs y ejecutables) para verificar que la instalación está libre de fallos y lista para jugar.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !runningHealthCheck && installed != null,
+                    onClick = {
+                        runningHealthCheck = true
+                        scope.launch {
+                            val rep = repo.runHealthCheck()
+                            healthReport = rep
+                            runningHealthCheck = false
+                        }
+                    }
+                ) {
+                    Text(if (healthReport == null) "Iniciar Diagnóstico" else "Volver a analizar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !runningHealthCheck,
+                    onClick = { showHealthDialog = false }
+                ) {
+                    Text("Cerrar")
+                }
+            }
         )
     }
 
@@ -197,6 +509,48 @@ fun SettingsScreen(
                 )
             }
 
+            SettingsGroup("Bordes en 4:3 (Bezel Art)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Nightlight,
+                    title = "Negro AMOLED (Puro)",
+                    subtitle = "Franjas negras absolutas (#000000) para máximo ahorro de batería OLED",
+                    selected = videoBezel == "oled",
+                    items = 3,
+                    index = 0,
+                    onSelect = {
+                        videoBezel = "oled"
+                        prefs.videoBezel = "oled"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "Consola Retro (Grafito)",
+                    subtitle = "Marco de consola portátil texturizado con acentos pizarra sobrios",
+                    selected = videoBezel == "retro_slate",
+                    items = 3,
+                    index = 1,
+                    onSelect = {
+                        videoBezel = "retro_slate"
+                        prefs.videoBezel = "retro_slate"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Reloaded Azul (Neón)",
+                    subtitle = "Franjas azul marino profundo con líneas decorativas cian neón",
+                    selected = videoBezel == "reloaded_blue",
+                    items = 3,
+                    index = 2,
+                    onSelect = {
+                        videoBezel = "reloaded_blue"
+                        prefs.videoBezel = "reloaded_blue"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
             SettingsGroup("Apariencia") {
                 ChoiceRow(
                     icon = Icons.Filled.BrightnessAuto,
@@ -276,7 +630,7 @@ fun SettingsScreen(
                     } else {
                         "Consulta, exporta o gestiona tus archivos de guardado"
                     },
-                    items = 2,
+                    items = 4,
                     index = 0,
                     enabled = installed != null,
                     onClick = onMySaves,
@@ -286,7 +640,7 @@ fun SettingsScreen(
                     title = "Escudo Scoped Storage Shield",
                     subtitle = "Réplica en Documents/PokemonReloadedSaves/ para no perder partidas si desinstalas el APK",
                     checked = persistentShield,
-                    items = 2,
+                    items = 4,
                     index = 1,
                     onCheckedChange = { enabled ->
                         persistentShield = enabled
@@ -297,6 +651,29 @@ fun SettingsScreen(
                                 snackbar.showSnackbar("Escudo activado: partidas replicadas en Documents/PokemonReloadedSaves")
                             }
                         }
+                    },
+                )
+                NavRow(
+                    icon = Icons.Filled.CameraAlt,
+                    title = "Puntos de Retorno (Instant Snapshots)",
+                    subtitle = "Crea copias de seguridad instantáneas antes de eventos clave o combates difíciles",
+                    items = 4,
+                    index = 2,
+                    enabled = installed != null,
+                    onClick = {
+                        scope.launch { snapshotsList = repo.listSnapshots() }
+                        showSnapshotsDialog = true
+                    },
+                )
+                NavRow(
+                    icon = Icons.Filled.HealthAndSafety,
+                    title = "Diagnóstico de Integridad del Juego",
+                    subtitle = "Verifica los más de 34.000 archivos, sprites de combate, MIDIs y ejecutables",
+                    items = 4,
+                    index = 3,
+                    enabled = installed != null,
+                    onClick = {
+                        showHealthDialog = true
                     },
                 )
             }
