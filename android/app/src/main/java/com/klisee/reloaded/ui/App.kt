@@ -47,7 +47,11 @@ private enum class Pushed { About, Controls, MySaves }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun App(repo: GameRepository, prefs: Preferences) {
+fun App(
+    repo: GameRepository,
+    prefs: Preferences,
+    onThemeChange: (String) -> Unit = {},
+) {
     var onboarded by remember { mutableStateOf(prefs.onboardingDone) }
     var tab by remember { mutableStateOf(Tab.Home) }
     var pushed by remember { mutableStateOf<Pushed?>(null) }
@@ -199,6 +203,7 @@ fun App(repo: GameRepository, prefs: Preferences) {
                         onControls = { pushed = Pushed.Controls },
                         onMySaves = { pushed = Pushed.MySaves },
                         onUpdateFound = { update = it },
+                        onThemeChange = onThemeChange,
                     )
                 }
             }

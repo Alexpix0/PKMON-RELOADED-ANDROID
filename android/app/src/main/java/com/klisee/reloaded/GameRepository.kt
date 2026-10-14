@@ -2,6 +2,7 @@ package com.klisee.reloaded
 
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
 import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -236,18 +237,36 @@ class GameRepository(private val context: Context) {
                 targetZip.delete()
                 false
             } else {
+                // Scoped Storage Shield: Replicate backup to public Documents/PokemonReloadedSaves/
+                runCatching {
+                    val shieldDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "PokemonReloadedSaves").apply { mkdirs() }
+                    val shieldZip = File(shieldDir, "reloaded_backup_$time.zip")
+                    targetZip.copyTo(shieldZip, overwrite = true)
+                    val existingShield = shieldDir.listFiles()?.filter { it.extension.equals("zip", ignoreCase = true) }?.sortedBy { it.lastModified() }
+                    if (existingShield != null && existingShield.size > 5) {
+                        existingShield.take(existingShield.size - 5).forEach { it.delete() }
+                    }
+                }
                 true
             }
         }.getOrDefault(false)
     }
 
-    /** Returns list of auto-backup zip files, ordered newest to oldest. */
+    /** Returns list of auto-backup zip files, ordered newest to oldest, merging internal and Scoped Storage Shield backups. */
     fun autoBackupsList(): List<File> {
         val backupRoot = File(files, "backups_auto")
-        if (!backupRoot.isDirectory) return emptyList()
-        return backupRoot.listFiles()?.filter { it.extension.equals("zip", ignoreCase = true) }
-            ?.sortedByDescending { it.lastModified() }
-            ?: emptyList()
+        val internalList = if (backupRoot.isDirectory) {
+            backupRoot.listFiles()?.filter { it.extension.equals("zip", ignoreCase = true) }?.toList().orEmpty()
+        } else emptyList()
+
+        val shieldDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "PokemonReloadedSaves")
+        val shieldList = if (shieldDir.isDirectory) {
+            shieldDir.listFiles()?.filter { it.extension.equals("zip", ignoreCase = true) }?.toList().orEmpty()
+        } else emptyList()
+
+        return (internalList + shieldList)
+            .distinctBy { it.name }
+            .sortedByDescending { it.lastModified() }
     }
 
     /** Restores an automatic backup zip file directly. */
@@ -470,34 +489,46 @@ class GameRepository(private val context: Context) {
         Unit
     }
 
-    /** Imports a zip picked with the system file chooser. */
+    /** Imports a zip picked with the system file chooser using zero-copy streaming. */
     suspend fun import(uri: Uri, onProgress: (Int) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val temp = File(files, "import.zip")
+            trace("import: inicio de importacion streaming directa desde uri=$uri")
+            val total = contentResolverSize(uri).coerceAtLeast(1L)
+            val pfd = runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+            val stream = if (pfd != null) {
+                java.io.FileInputStream(pfd.fileDescriptor)
+            } else {
+                context.contentResolver.openInputStream(uri) ?: error("No pude abrir el archivo seleccionado.")
+            }
+            var success = false
             try {
-                trace("import: uri=$uri")
-                copyFromUri(uri, temp, onProgress)
-                trace("import: copiado a $temp (${temp.length()} bytes, libre ${files.usableSpace})")
-                installZip(temp, version = null, source = "manual", onProgress = onProgress).getOrThrow()
+                installFromStream(stream, total, version = null, source = "manual", onProgress = onProgress).getOrThrow()
                 prepare()
+                success = true
             } catch (e: Throwable) {
-                trace("import: FALLO ${e::class.java.simpleName}: ${e.message}")
-                throw e
+                trace("import: streaming directo fallo (${e.message}); probando modo seguro con copia temporal")
             } finally {
-                temp.delete()
+                runCatching { stream.close() }
+                pfd?.let { runCatching { it.close() } }
+            }
+
+            if (!success) {
+                val temp = File(files, "import.zip")
+                try {
+                    copyFromUri(uri, temp, onProgress)
+                    temp.inputStream().buffered(512 * 1024).use { fileIn ->
+                        installFromStream(fileIn, temp.length(), version = null, source = "manual", onProgress = onProgress).getOrThrow()
+                    }
+                    prepare()
+                } finally {
+                    temp.delete()
+                }
             }
         }
     }
 
     /**
      * Copies the chosen zip into `dest`, tolerating the flaky streams some pickers hand out.
-     *
-     * Reading a big document through `contentResolver.openInputStream()` is not reliable on every
-     * device: the stream can end early (`unexpected EOF`) or come back empty, especially on devices
-     * with little memory and the game on slow/adopted storage. That is what made importing the zip
-     * fail. So the size the picker reports is used as a reference, the file is verified after the
-     * copy, and the whole thing is retried a few times before giving up. Leaving a half-written
-     * `import.zip` behind (as before) made the next step read a broken archive.
      */
     private fun copyFromUri(uri: Uri, dest: File, onProgress: (Int) -> Unit) {
         val expected = contentResolverSize(uri)
@@ -506,8 +537,8 @@ class GameRepository(private val context: Context) {
             try {
                 dest.delete()
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    dest.outputStream().buffered().use { output ->
-                        val buffer = ByteArray(256 * 1024)
+                    dest.outputStream().buffered(512 * 1024).use { output ->
+                        val buffer = ByteArray(512 * 1024)
                         var copied = 0L
                         while (true) {
                             val n = input.read(buffer)
@@ -537,87 +568,86 @@ class GameRepository(private val context: Context) {
         } ?: -1L
     }.getOrDefault(-1L)
 
-    /** Downloads a zip from a direct URL (following redirects) and installs it. */
+    /** Downloads a zip from a direct URL and streams directly into installFromStream. */
     suspend fun download(url: String, cookies: String?, onProgress: (Int) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val temp = File(files, "download.zip")
-            try {
-                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    instanceFollowRedirects = true
-                    connectTimeout = 30_000
-                    readTimeout = 30_000
-                    setRequestProperty("User-Agent", "Mozilla/5.0 (Android) ReloadedLauncher/1.0")
-                    if (!cookies.isNullOrEmpty()) setRequestProperty("Cookie", cookies)
-                }
-                connection.connect()
-                if (connection.responseCode !in 200..299) error("El servidor respondio ${connection.responseCode}.")
-                val total = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
-                connection.inputStream.use { input ->
-                    temp.outputStream().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        var written = 0L
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            output.write(buffer, 0, n)
-                            written += n
-                            if (total > 0) onProgress((written * 100 / total).toInt())
-                        }
-                    }
-                }
-                installZip(temp, version = null, source = "descarga", onProgress = onProgress).getOrThrow()
-                prepare()
-            } finally {
-                temp.delete()
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 30_000
+                readTimeout = 30_000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android) ReloadedLauncher/1.0")
+                if (!cookies.isNullOrEmpty()) setRequestProperty("Cookie", cookies)
             }
+            connection.connect()
+            if (connection.responseCode !in 200..299) error("El servidor respondio ${connection.responseCode}.")
+            val total = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
+            connection.inputStream.use { input ->
+                installFromStream(input, total, version = null, source = "descarga", onProgress = onProgress).getOrThrow()
+            }
+            prepare()
         }
     }
 
-    /** Validates, inflates and swaps in a game zip. Mirrors the emulator's own requirements. */
-    private fun installZip(zip: File, version: String?, source: String, onProgress: (Int) -> Unit): Result<Unit> = runCatching {
-        foldZipNamesToAscii(zip)
-        requireGameZip(zip)
+    /** Validates, inflates and swaps in a game zip from an input stream with directory caching and high-throughput buffering. */
+    private fun installFromStream(
+        stream: java.io.InputStream,
+        totalBytes: Long,
+        version: String?,
+        source: String,
+        onProgress: (Int) -> Unit
+    ): Result<Unit> = runCatching {
         val staging = File(files, "game.staging")
         staging.deleteRecursively()
         staging.mkdirs()
 
-        val total = zip.length().coerceAtLeast(1)
-        trace("import: extrayendo ${zip.length()} bytes de ${zip.name}...")
-        ZipInputStream(zip.inputStream().buffered()).use { input ->
-            val buffer = ByteArray(64 * 1024)
+        val createdDirs = HashSet<File>()
+        createdDirs.add(staging)
+        fun ensureDir(dir: File) {
+            if (createdDirs.add(dir)) {
+                dir.mkdirs()
+            }
+        }
+
+        trace("import: extrayendo en streaming directo de alta velocidad...")
+        // StandardCharsets.ISO_8859_1 prevents any malformed charset exceptions on CP437 accents without file rewriting!
+        ZipInputStream(java.io.BufferedInputStream(stream, 512 * 1024), java.nio.charset.StandardCharsets.ISO_8859_1).use { input ->
+            val buffer = ByteArray(512 * 1024)
             var written = 0L
             var entries = 0
             var entry = input.nextEntry
             while (entry != null) {
-                val target = File(staging, entry.name)
+                val rawName = entry.name.replace('\\', '/')
+                // Sanitize non-ASCII accented characters to prevent filesystem incompatibilities
+                val cleanName = rawName.replace('\u00A1', 'i').replace('\u00A2', 'o').replace('í', 'i').replace('ó', 'o')
+                val target = File(staging, cleanName)
                 // Reject zip-slip: entries must stay inside the staging directory.
                 if (!target.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
-                    error("El zip tiene una ruta no valida: ${entry.name}")
+                    error("El zip tiene una ruta no valida: $cleanName")
                 }
                 if (entry.isDirectory) {
-                    target.mkdirs()
+                    ensureDir(target)
                 } else {
-                    target.parentFile?.mkdirs()
-                    target.outputStream().buffered().use { output ->
+                    target.parentFile?.let { ensureDir(it) }
+                    target.outputStream().buffered(256 * 1024).use { output ->
                         var n = input.read(buffer)
                         while (n > 0) {
                             output.write(buffer, 0, n)
                             written += n
-                            onProgress(((written * 100) / total).toInt().coerceIn(0, 99))
+                            if (totalBytes > 0) {
+                                onProgress(((written * 100) / totalBytes).toInt().coerceIn(0, 99))
+                            }
                             n = input.read(buffer)
                         }
                     }
                 }
                 input.closeEntry()
                 entries++
-                // A game zip holds tens of thousands of files; on slow/adopted storage the extraction
-                // can take a while, so leave a trail instead of going silent.
                 if (entries % 5000 == 0) {
                     trace("import: extraidas $entries entradas (${written / (1024 * 1024)} MB)")
                 }
                 entry = input.nextEntry
             }
-            trace("import: extraccion terminada ($entries entradas, ${written / (1024 * 1024)} MB)")
+            trace("import: extraccion en streaming terminada ($entries entradas, ${written / (1024 * 1024)} MB)")
         }
 
         // A zip of the game folder keeps it one level down, and the emulator wants it at the root.

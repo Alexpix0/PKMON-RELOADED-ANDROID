@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.klisee.reloaded.R
 
 /**
@@ -45,14 +46,36 @@ private val ExpressiveShapes = Shapes(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun ReloadedTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+fun ReloadedTheme(
+    themeMode: String = "system",
+    content: @Composable () -> Unit,
+) {
+    val isSystemDark = isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        "light" -> false
+        "dark", "amoled" -> true
+        else -> isSystemDark
+    }
     val context = LocalContext.current
-    val scheme = when {
+    val baseScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> darkColorScheme()
+            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        isDark -> darkColorScheme()
         else -> expressiveLightColorScheme()
+    }
+    val scheme = if (themeMode == "amoled") {
+        baseScheme.copy(
+            background = Color.Black,
+            surface = Color.Black,
+            surfaceContainer = Color(0xFF0D0D0D),
+            surfaceContainerHigh = Color(0xFF141414),
+            surfaceContainerHighest = Color(0xFF1C1C1C),
+            surfaceContainerLow = Color(0xFF050505),
+            surfaceContainerLowest = Color.Black,
+            surfaceDim = Color.Black,
+        )
+    } else {
+        baseScheme
     }
 
     val typography = remember {

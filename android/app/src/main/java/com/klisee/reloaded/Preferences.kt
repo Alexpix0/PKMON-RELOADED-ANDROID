@@ -111,6 +111,34 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("batterySaver", value).apply()
         }
 
+    /** Theme mode: "system", "light", "dark", "amoled" */
+    var themeMode: String
+        get() = prefs.getString("themeMode", "system") ?: "system"
+        set(value) {
+            prefs.edit().putString("themeMode", value).apply()
+        }
+
+    /** Real-time FPS counter overlay in-game */
+    var showFps: Boolean
+        get() = prefs.getBoolean("showFps", false)
+        set(value) {
+            prefs.edit().putBoolean("showFps", value).apply()
+        }
+
+    /** Scoped Storage Shield: whether to keep external persistent backups in Documents folder */
+    var persistentShield: Boolean
+        get() = prefs.getBoolean("persistentShield", true)
+        set(value) {
+            prefs.edit().putBoolean("persistentShield", value).apply()
+        }
+
+    /** Fast-forward speed multiplier in tenths: 15 for 1.5x, 20 for 2.0x */
+    var fastForwardSpeed: Int
+        get() = prefs.getInt("fastForwardSpeed", 15)
+        set(value) {
+            prefs.edit().putInt("fastForwardSpeed", value).apply()
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
     fun writeVideo(filesDir: File) = writeVideoFile(filesDir, keepAspect)
 }
