@@ -21,6 +21,16 @@ Transformar la versión **0.4.0 EX** en el salto generacional definitivo de **Po
 
 ---
 
+## 📱 Dispositivo y Hardware de Referencia (Baseline): MediaTek Helio G25 (Infinix Hot 20i)
+
+> **Regla de oro del proyecto:** Todo el código y las optimizaciones de la versión **0.4.0 EX** están diseñados y calibrados teniendo como objetivo que el juego funcione de forma impecable y a **60 FPS rocosos** en el hardware del **Infinix Hot 20i (MediaTek Helio G25)**:
+> * **CPU (8 núcleos Cortex-A53 a 2.0 GHz / 1.5 GHz):** Código nativo Rust sin operaciones pesadas de punteros ni saltos de rama innecesarios para evitar estrangulamiento térmico (*thermal throttling*) y mantener el consumo de batería al mínimo.
+> * **GPU (PowerVR GE8320):** Renderizado por lotes (Batch Quads), mínima alternancia de texturas y shaders GLSL planos sin bifurcaciones pesadas para no saturar la tasa de relleno de la GPU PowerVR.
+> * **Almacenamiento (eMMC 5.1):** Descompresión en streaming Zero-Copy e índice en memoria RAM para evitar que las bajas tasas de lectura/escritura aleatoria 4K de la memoria eMMC causen tirones.
+> * **Resultado garantizado:** Si el juego va fluido, frío y sin tirones en el Helio G25, **irá con holgura extrema, máxima respuesta y absoluta perfección en cualquier móvil de gama media o alta**.
+
+---
+
 ## ⚡ 1. Rendimiento Gráfico Sin Pérdida y Eficiencia de Batería (Motor Rust)
 
 ### 1.1. Índice en Memoria para Combates (Fast Sprite Loader para los 26,240 `.gmspr`)
