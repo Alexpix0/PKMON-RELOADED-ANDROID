@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -55,7 +56,7 @@ android {
                 val secretKeystore = rootProject.file("keystore/ci_release.keystore")
                 if (!secretKeystore.exists()) {
                     secretKeystore.parentFile?.mkdirs()
-                    val bytes = java.util.Base64.getDecoder().decode(System.getenv("RELEASE_KEYSTORE_BASE64"))
+                    val bytes = Base64.getDecoder().decode(System.getenv("RELEASE_KEYSTORE_BASE64"))
                     secretKeystore.writeBytes(bytes)
                 }
                 storeFile = secretKeystore
