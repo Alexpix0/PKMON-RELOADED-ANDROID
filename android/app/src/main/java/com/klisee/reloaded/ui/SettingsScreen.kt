@@ -178,6 +178,7 @@ fun SettingsScreen(
                     onCheckedChange = {
                         showFps = it
                         prefs.showFps = it
+                        prefs.writeVideo(context.filesDir)
                     },
                 )
             }

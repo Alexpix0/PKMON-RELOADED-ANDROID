@@ -140,5 +140,5 @@ class Preferences(context: Context) {
         }
 
     /** Mirrors the video mode into the file the emulator reads at startup. */
-    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, keepAspect)
+    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, keepAspect, showFps)
 }
