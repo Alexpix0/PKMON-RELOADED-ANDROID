@@ -259,15 +259,20 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 > Plan detallado completo disponible en: [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md)
 
 * **Stack:** Rust (OpenGMK) + Kotlin (Compose Launcher) sin lenguajes adicionales.
-* **1. Rendimiento y Autonomía:**
+* **1. Rendimiento y Gráficos:**
+  - Poda de VRAM sin pérdida (Lossless VRAM Trimming) que libera texturas inactivas sin alterar la resolución de los sprites + Escalado Pixel-Perfect / Sharp Bilinear para máxima nitidez en pantallas 1080p/2K/OLED.
   - JIT / Optimización profunda de bytecode GML con Cranelift para 2.5x a 4x en fotogramas mínimos.
   - Síntesis de audio lock-free desacoplada de la tasa de frames (`rtrb` + `aaudio`).
   - Congelamiento total en segundo plano (0% consumo de batería en standby).
-* **2. Interfaz y Controles:**
+* **2. Interfaz, Controles y Apariencia:**
   - Editor de controles flotante in-game: arrastrar y soltar botones libremente sobre la pantalla, pellizco táctil (pinch-to-zoom) para tamaños independientes y opacidad en vivo.
-* **3. Calidad de Vida (QoL — Experimental):**
-  - Modo Fast-Forward (Acelerador 1.5x / 2.0x) con sincronización de audio.
-* **4. Escalabilidad y Estabilidad:**
+  - Reorganización modular de Ajustes dividida por categorías (Controles, Vídeo, Audio, Rendimiento, Apariencia, Sistema).
+  - Selector de Tema Claro, Tema Oscuro y Negro Puro AMOLED (apaga píxeles en pantallas OLED).
+* **3. Calidad de Vida (QoL):**
+  - Contador de FPS y Frame Time en tiempo real en pantalla (para auditar fluidez exacta).
+  - Modo Fast-Forward experimental (Acelerador 1.5x / 2.0x) con sincronización de audio.
+* **4. Instalador, Escalabilidad y Estabilidad:**
+  - Importación ultra rápida del ZIP de 700MB (de 3-5 minutos a 30-45 segundos) con streaming Zero-Copy directo y descompresión paralela multihilo en los 8 núcleos.
   - Soporte de packs externos de música/SoundFonts y sprites `.gif` desde `custom_assets/` sin alterar el zip original.
   - Crash Dump & Telemetría local con copia de reporte en 1 solo toque ante cualquier fallo.
 
