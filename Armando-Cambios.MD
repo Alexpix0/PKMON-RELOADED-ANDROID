@@ -252,6 +252,26 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
   - Eliminado el parámetro obsoleto `android.defaults.buildfeatures.buildconfig` de `gradle.properties`.
   - Actualizado el pipeline de GitHub Actions para publicar el artefacto como `pokemon-reloaded-0.3.2-EX-release`.
 
+---
+
+## 11. Hoja de Ruta Planificada para la Versión 0.4.0 EX
+
+> Plan detallado completo disponible en: [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md)
+
+* **Stack:** Rust (OpenGMK) + Kotlin (Compose Launcher) sin lenguajes adicionales.
+* **1. Rendimiento y Autonomía:**
+  - JIT / Optimización profunda de bytecode GML con Cranelift para 2.5x a 4x en fotogramas mínimos.
+  - Síntesis de audio lock-free desacoplada de la tasa de frames (`rtrb` + `aaudio`).
+  - Congelamiento total en segundo plano (0% consumo de batería en standby).
+* **2. Interfaz y Controles:**
+  - Editor de controles flotante in-game: arrastrar y soltar botones libremente sobre la pantalla, pellizco táctil (pinch-to-zoom) para tamaños independientes y opacidad en vivo.
+* **3. Calidad de Vida (QoL — Experimental):**
+  - Modo Fast-Forward (Acelerador 1.5x / 2.0x) con sincronización de audio.
+* **4. Escalabilidad y Estabilidad:**
+  - Soporte de packs externos de música/SoundFonts y sprites `.gif` desde `custom_assets/` sin alterar el zip original.
+  - Crash Dump & Telemetría local con copia de reporte en 1 solo toque ante cualquier fallo.
+
+
 
 
 
