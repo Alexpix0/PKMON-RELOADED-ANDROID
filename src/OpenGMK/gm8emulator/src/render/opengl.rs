@@ -1304,6 +1304,65 @@ impl RendererImpl {
         }
     }
 
+static GUIDE_TEXTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn get_or_load_guide_texture(gl: &gl::Gl) -> u32 {
+    let existing = GUIDE_TEXTURE.load(std::sync::atomic::Ordering::Relaxed);
+    if existing != 0 {
+        return existing;
+    }
+
+    let resolved = std::path::PathBuf::from(crate::gml::file::to_path("data/image/Efectividades.png").as_ref());
+    let candidates = [
+        resolved,
+        std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
+        std::path::PathBuf::from("data/image/Efectividades.png"),
+        std::path::PathBuf::from("/sdcard/Android/data/com.klisee.reloaded/files/game/data/image/Efectividades.png"),
+    ];
+
+    let mut img_bytes: Option<Vec<u8>> = None;
+    for c in &candidates {
+        if let Ok(b) = std::fs::read(c) {
+            img_bytes = Some(b);
+            break;
+        }
+    }
+
+    let Some(bytes) = img_bytes else {
+        return 0;
+    };
+
+    let Ok(dyn_img) = image::load_from_memory(&bytes) else {
+        return 0;
+    };
+    let rgba = dyn_img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+
+    let mut tex = 0;
+    unsafe {
+        gl.GenTextures(1, &mut tex);
+        gl.BindTexture(gl::TEXTURE_2D, tex);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as _);
+        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as _);
+        gl.TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::RGBA as _,
+            w as _,
+            h as _,
+            0,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            rgba.as_raw().as_ptr().cast(),
+        );
+    }
+
+    GUIDE_TEXTURE.store(tex, std::sync::atomic::Ordering::Relaxed);
+    tex
+}
+
     /// Draws the on-screen touch controls over the presented frame with its own GL state, so the
     /// emulator's render state is never disturbed.
     fn draw_touch_overlay(&mut self, window_width: u32, window_height: u32) {
@@ -1357,6 +1416,10 @@ impl RendererImpl {
             } else if c.name == touch_controls::EDIT_NAME && touch_controls::is_edit_mode() {
                 fill = [0.10, 0.70, 0.90, 0.80 * opacity];
                 border = [0.30, 0.95, 1.00, 0.95 * opacity];
+                ink = [1.0, 1.0, 1.0, 1.0];
+            } else if c.name == touch_controls::GUIDE_NAME && touch_controls::is_guide_open() {
+                fill = [0.15, 0.75, 0.40, 0.85 * opacity];
+                border = [0.40, 0.95, 0.60, 0.95 * opacity];
                 ink = [1.0, 1.0, 1.0, 1.0];
             }
             if let Some(uv) = overlay.art(c.name) {
@@ -1518,7 +1581,40 @@ impl RendererImpl {
             push_text(&mut verts, ww, wh, &fps_text, pill_x + pill_w / 2.0, pill_y + pill_h / 2.0, 2.3, text_col);
         }
 
-        if verts.is_empty() && sprites.is_empty() && party_sprites.is_empty() {
+        // In-game type chart guide modal (Efectividades.png)
+        let mut guide_sprites: Vec<f32> = Vec::new();
+        if touch_controls::is_guide_open() {
+            // Dark modal backdrop
+            push_quad(&mut verts, ww, wh, 0.0, 0.0, ww, wh, [0.0, 0.0, 0.0, 0.85]);
+
+            // Dimensions of Efectividades.png (680x590)
+            let max_h = wh * 0.84;
+            let mut gh = max_h;
+            let mut gw = gh * (680.0 / 590.0);
+            if gw > ww * 0.90 {
+                gw = ww * 0.90;
+                gh = gw * (590.0 / 680.0);
+            }
+            let gx1 = (ww - gw) / 2.0;
+            let gy1 = (wh - gh) / 2.0 + 12.0;
+            let gx2 = gx1 + gw;
+            let gy2 = gy1 + gh;
+
+            // Header banner
+            push_quad(&mut verts, ww, wh, gx1, gy1 - 26.0, gx2, gy1, [0.06, 0.10, 0.18, 0.95]);
+            push_quad(&mut verts, ww, wh, gx1, gy1 - 26.0, gx2, gy1 - 24.5, [0.20, 0.75, 1.0, 0.90]);
+            push_text(&mut verts, ww, wh, "TABLA DE TIPOS - TOCAR PARA CERRAR", (gx1 + gx2) / 2.0, gy1 - 13.0, 1.8, [0.35, 0.90, 1.0, 1.0]);
+
+            // Border around image
+            push_quad(&mut verts, ww, wh, gx1 - 2.0, gy1 - 2.0, gx2 + 2.0, gy2 + 2.0, [0.20, 0.75, 1.0, 0.90]);
+
+            let guide_tex = get_or_load_guide_texture(&self.gl);
+            if guide_tex != 0 {
+                push_sprite(&mut guide_sprites, ww, wh, gx1, gy1, gx2, gy2, 0.0, 0.0, 1.0, 1.0);
+            }
+        }
+
+        if verts.is_empty() && sprites.is_empty() && party_sprites.is_empty() && guide_sprites.is_empty() {
             return
         }
         unsafe {
@@ -1573,6 +1669,14 @@ impl RendererImpl {
                 gl.BindTexture(gl::TEXTURE_2D, overlay.party);
                 gl.BufferData(gl::ARRAY_BUFFER, (party_sprites.len() * 4) as _, party_sprites.as_ptr().cast(), gl::STREAM_DRAW);
                 gl.DrawArrays(gl::TRIANGLES, 0, (party_sprites.len() / 8) as i32);
+            }
+            if !guide_sprites.is_empty() {
+                let guide_tex = GUIDE_TEXTURE.load(std::sync::atomic::Ordering::Relaxed);
+                if guide_tex != 0 {
+                    gl.BindTexture(gl::TEXTURE_2D, guide_tex);
+                    gl.BufferData(gl::ARRAY_BUFFER, (guide_sprites.len() * 4) as _, guide_sprites.as_ptr().cast(), gl::STREAM_DRAW);
+                    gl.DrawArrays(gl::TRIANGLES, 0, (guide_sprites.len() / 8) as i32);
+                }
             }
 
             gl.BindVertexArray(prev_vao as u32);
@@ -1864,6 +1968,24 @@ impl RendererTrait for RendererImpl {
                     assert_eq!(self.gl.GetError(), 0);
                 }
             }
+        }
+    }
+
+    fn trim_vram(&mut self) {
+        self.flush_queue();
+        if self.vertex_queue.capacity() > 2048 {
+            self.vertex_queue.shrink_to(1024);
+        }
+        while self.texture_ids.len() > self.stock_atlas_count as usize && self.texture_ids.last() == Some(&None) {
+            self.texture_ids.pop();
+            self.zbuf_ids.pop();
+            self.fbo_ids.pop();
+        }
+        while self.texture_rects.len() > self.stock_texture_count && self.texture_rects.last() == Some(&None) {
+            self.texture_rects.pop();
+        }
+        unsafe {
+            self.gl.Flush();
         }
     }
 
@@ -3317,6 +3439,16 @@ impl RendererTrait for RendererImpl {
                     }
                 },
                 Scaling::Full => (0, 0, window_width, window_height),
+                Scaling::PixelPerfect => {
+                    if fb_width > 0 && fb_height > 0 {
+                        let scale = ((window_width / fb_width).min(window_height / fb_height)).max(1);
+                        let w = fb_width * scale;
+                        let h = fb_height * scale;
+                        ((window_width - w) / 2, (window_height - h) / 2, w, h)
+                    } else {
+                        (0, 0, fb_width, fb_height)
+                    }
+                },
             };
 
             // Where the game image lands on screen, so the controls that belong over it (the dialogue

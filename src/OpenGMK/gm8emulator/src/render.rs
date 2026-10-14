@@ -18,6 +18,8 @@ pub enum Scaling {
     Aspect(f64),
     /// Scale to fill window.
     Full,
+    /// Integer-only pixel-perfect scaling for maximum sharpness on high-res displays.
+    PixelPerfect,
 }
 
 /// The video mode the launcher pinned through the environment, if any.
@@ -32,6 +34,7 @@ pub fn pinned_scaling() -> Option<Scaling> {
     match value.to_string_lossy().trim().to_ascii_lowercase().as_str() {
         "aspect" => Some(Scaling::Aspect(-1.0)),
         "full" => Some(Scaling::Full),
+        "pixel_perfect" | "pixelperfect" | "integer" => Some(Scaling::PixelPerfect),
         _ => None,
     }
 }
@@ -208,6 +211,8 @@ pub trait RendererTrait {
     ) -> Result<AtlasRef, String>;
     fn duplicate_sprite(&mut self, atlas_ref: AtlasRef) -> Result<AtlasRef, String>;
     fn delete_sprite(&mut self, atlas_ref: AtlasRef);
+    /// Lossless VRAM trimming: flushes pending GPU commands and purges unused dynamic textures.
+    fn trim_vram(&mut self) {}
 
     /// Resizes the rendering target. Usually called when the window has been resized.
     /// The contents of the old framebuffer will be copied to the new one. If `store` is true, the old one
@@ -609,6 +614,10 @@ impl Renderer {
 
     pub fn delete_sprite(&mut self, atlas_ref: AtlasRef) {
         self.0.delete_sprite(atlas_ref)
+    }
+
+    pub fn trim_vram(&mut self) {
+        self.0.trim_vram();
     }
 
     pub fn check_texture_id(&self, id: i32) -> bool {

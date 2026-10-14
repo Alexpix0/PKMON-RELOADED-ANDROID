@@ -68,12 +68,14 @@ pub const JOYSTICK_NAME: &str = "joystick";
 pub const TURBO_NAME: &str = "turbo";
 pub const MUTE_NAME: &str = "mute";
 pub const EDIT_NAME: &str = "edit";
+pub const GUIDE_NAME: &str = "guide";
 
 pub const CONTROLS: &[Control] = &[
     // Utility quick buttons (top right, discrete and non-intrusive)
+    Control { name: GUIDE_NAME, key: Key::F1, shape: Shape::Circle { cx: 0.750, cy: 0.055, r: 0.022 }, label: Label::Text("TIP"), contexts: WORLD | BATTLE },
+    Control { name: EDIT_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.815, cy: 0.055, r: 0.022 }, label: Label::Text("EDT"), contexts: WORLD | BATTLE },
     Control { name: TURBO_NAME, key: Key::Pause, shape: Shape::Circle { cx: 0.880, cy: 0.055, r: 0.022 }, label: Label::Text(">>"), contexts: WORLD | BATTLE },
     Control { name: MUTE_NAME, key: Key::NumLock, shape: Shape::Circle { cx: 0.945, cy: 0.055, r: 0.022 }, label: Label::Text("MUT"), contexts: WORLD | BATTLE },
-    Control { name: EDIT_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.815, cy: 0.055, r: 0.022 }, label: Label::Text("EDT"), contexts: WORLD | BATTLE },
     // Menu / misc keys (second row along the top).
     Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
@@ -204,6 +206,22 @@ pub fn toggle_edit_mode() -> bool {
     mode
 }
 
+static GUIDE_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn is_guide_open() -> bool {
+    GUIDE_OPEN.load(Ordering::Relaxed)
+}
+
+pub fn toggle_guide_modal() -> bool {
+    let mode = !is_guide_open();
+    GUIDE_OPEN.store(mode, Ordering::Relaxed);
+    mode
+}
+
+pub fn set_guide_open(open: bool) {
+    GUIDE_OPEN.store(open, Ordering::Relaxed);
+}
+
 static SHOW_NUM_KEYS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 pub fn set_show_num_keys(show: bool) {
@@ -216,7 +234,7 @@ pub fn show_num_keys() -> bool {
 
 pub fn effective_shape(index: usize) -> Shape {
     let c = &CONTROLS[index];
-    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME {
+    if c.contexts & DIALOG != 0 || c.name == TURBO_NAME || c.name == MUTE_NAME || c.name == EDIT_NAME || c.name == GUIDE_NAME {
         return c.shape;
     }
     let s = scale();

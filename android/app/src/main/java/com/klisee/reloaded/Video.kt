@@ -5,14 +5,20 @@ import java.io.File
 /**
  * Writes the video mode the emulator reads when it starts.
  *
- * The game was drawn for a 4:3 shape, so `aspect` shows it the way it looked on a PC, with bands at
- * the sides, while `full` stretches it to fill the phone's screen.
+ * Supported scaling modes:
+ * - `aspect`: classic 4:3 shape with pillarbox bands.
+ * - `full`: stretched to fill the full screen.
+ * - `pixel_perfect`: integer scaling with razor-sharp pixel edges for OLED/HD/2K screens.
  */
-fun writeVideoFile(filesDir: File, keepAspect: Boolean, showFps: Boolean = false) {
+fun writeVideoFile(filesDir: File, scaling: String, showFps: Boolean = false) {
     val text = buildString {
         appendLine("# Escrito por Ajustes. El emulador lo lee al arrancar.")
-        appendLine("scaling=${if (keepAspect) "aspect" else "full"}")
+        appendLine("scaling=$scaling")
         appendLine("show_fps=${if (showFps) 1 else 0}")
     }
     runCatching { File(filesDir, "video.conf").writeText(text) }
+}
+
+fun writeVideoFile(filesDir: File, keepAspect: Boolean, showFps: Boolean = false) {
+    writeVideoFile(filesDir, if (keepAspect) "aspect" else "full", showFps)
 }

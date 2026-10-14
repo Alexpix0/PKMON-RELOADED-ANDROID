@@ -131,7 +131,7 @@ fn load_video() {
             let name = name.trim();
             let value = value.trim();
             if name == "scaling" {
-                if value == "aspect" || value == "full" {
+                if value == "aspect" || value == "full" || value == "pixel_perfect" || value == "integer" {
                     eprintln!("[video] escalado: {}", value);
                     // Read by the engine when it builds its renderer.
                     std::env::set_var("OPENGMK_SCALING", value);
@@ -371,6 +371,13 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     let (w, h) = android::window_size();
     let (wf, hf) = (w as f32, h as f32);
 
+    // If the in-game type chart guide is open, any screen tap dismisses it
+    if crate::touch_controls::is_guide_open() {
+        crate::touch_controls::set_guide_open(false);
+        jni_vibrate(12);
+        return;
+    }
+
     // If edit mode is active, touching buttons drags them instead of sending game keys
     if crate::touch_controls::is_edit_mode() {
         if wf > 0.0 && hf > 0.0 {
@@ -420,6 +427,9 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             } else if name == crate::touch_controls::EDIT_NAME {
                 let edit = crate::touch_controls::toggle_edit_mode();
                 jni_vibrate(if edit { 30 } else { 15 });
+            } else if name == crate::touch_controls::GUIDE_NAME {
+                let open = crate::touch_controls::toggle_guide_modal();
+                jni_vibrate(if open { 25 } else { 12 });
             } else {
                 control_key_down(index);
                 POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
@@ -842,7 +852,14 @@ pub fn android_entry(app: AndroidApp) {
         };
 
         crate::render::opengl::egl::log_stubbed_once();
-        provision_soundfont(game_exe.parent().unwrap_or_else(|| std::path::Path::new("/")));
+        let game_parent = game_exe.parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
+        provision_soundfont(&game_parent);
+        let battle_dir = game_parent.join("data").join("pkmnbattle");
+        let _ = std::thread::Builder::new()
+            .name("sprite_indexer".into())
+            .spawn(move || {
+                crate::asset::sprite_cache::index_directory(&battle_dir);
+            });
         logf(&format!("arrancando {}", game_exe.display()));
         crate::run_game(vec![
             "gm8emulator".to_string(),

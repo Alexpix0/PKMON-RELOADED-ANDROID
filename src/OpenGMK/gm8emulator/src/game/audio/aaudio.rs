@@ -34,9 +34,24 @@ static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
 /// comes back. Set by [open].
 static STREAM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+const RING_BUFFER_CAPACITY: usize = 16384; // ~170 ms at 48kHz stereo (power of two)
+const RING_BUFFER_MASK: usize = RING_BUFFER_CAPACITY - 1;
+
+/// Lock-free circular audio ring buffer storing f32 sample bits.
+static RING_BUF: [AtomicU32; RING_BUFFER_CAPACITY] = {
+    const INIT: AtomicU32 = AtomicU32::new(0);
+    [INIT; RING_BUFFER_CAPACITY]
+};
+
+static READ_POS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static WRITE_POS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static STREAM_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FEEDER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Stops or resumes the output. Without this the music keeps playing behind the home screen, which
 /// is both wrong and how a game that never really paused gives itself away.
 pub fn set_paused(paused: bool) {
+    STREAM_PAUSED.store(paused, Ordering::Release);
     let stream = STREAM.load(Ordering::Relaxed) as *mut c_void;
     if stream.is_null() {
         return
@@ -46,6 +61,9 @@ pub fn set_paused(paused: bool) {
             AAudioStream_requestPause(stream);
             // Drop what is already queued, so the silence arrives now instead of draining first.
             AAudioStream_requestFlush(stream);
+            // Reset ring buffer positions so resuming starts with fresh audio
+            READ_POS.store(0, Ordering::Release);
+            WRITE_POS.store(0, Ordering::Release);
         } else {
             let _ = AAudioStream_requestStart(stream);
         }
@@ -82,30 +100,43 @@ pub fn sound_started() -> bool {
     SOUND.load(Ordering::Relaxed)
 }
 
-/// Pulls `num_frames` of interleaved f32 audio out of the mixer. AAudio calls this from its own
-/// real-time thread, so a failed `try_lock` just yields silence instead of blocking that thread.
+/// Pulls `num_frames` of interleaved f32 audio out of the lock-free ring buffer.
+/// AAudio calls this from its real-time audio thread: zero locking, zero wait, constant O(1) time.
 extern "C" fn data_callback(
     _stream: *mut c_void,
     _user_data: *mut c_void,
     audio_data: *mut c_void,
     num_frames: i32,
 ) -> i32 {
-    let Ok(mut guard) = MIXER.try_lock() else {
-        return AAUDIO_CALLBACK_RESULT_CONTINUE
-    };
-    let channels = guard.as_ref().map(|m| m.channel_count().get() as usize).unwrap_or(2);
+    let channels = 2;
     let len = (num_frames.max(0) as usize) * channels;
     // SAFETY: AAudio guarantees `audio_data` points to `num_frames * channels` f32 samples.
     let buffer = unsafe { std::slice::from_raw_parts_mut(audio_data as *mut Sample, len) };
-    match guard.as_mut() {
-        Some(mixer) => {
-            let count = mixer.write_samples(buffer);
-            if count < len {
-                buffer[count..].iter_mut().for_each(|x| *x = 0.0);
-            }
-        },
-        None => buffer.iter_mut().for_each(|x| *x = 0.0),
+
+    if STREAM_PAUSED.load(Ordering::Relaxed) {
+        buffer.fill(0.0);
+        return AAUDIO_CALLBACK_RESULT_CONTINUE;
     }
+
+    let r = READ_POS.load(Ordering::Relaxed);
+    let w = WRITE_POS.load(Ordering::Acquire);
+    let avail = w.wrapping_sub(r);
+    let to_read = len.min(avail);
+
+    for (i, slot) in buffer[..to_read].iter_mut().enumerate() {
+        let idx = (r.wrapping_add(i)) & RING_BUFFER_MASK;
+        *slot = f32::from_bits(RING_BUF[idx].load(Ordering::Relaxed));
+    }
+    if to_read < len {
+        buffer[to_read..].fill(0.0);
+    }
+    READ_POS.store(r.wrapping_add(to_read), Ordering::Release);
+
+    // On-screen mute button toggle support
+    if crate::touch_controls::is_audio_muted() {
+        buffer.fill(0.0);
+    }
+
     // Cheap after the first time: the check is skipped once something has been heard.
     if !SOUND.load(Ordering::Relaxed) && buffer.iter().any(|x| *x != 0.0) {
         SOUND.store(true, Ordering::Relaxed);
@@ -150,8 +181,48 @@ pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, Sampl
         *MIXER.lock().unwrap() = Some(mixer);
         STREAM.store(stream as usize, Ordering::Relaxed);
 
+        FEEDER_ACTIVE.store(true, Ordering::Release);
+        let _ = std::thread::Builder::new()
+            .name("audio_synthesis".into())
+            .spawn(|| {
+                let mut chunk = [0.0f32; 512];
+                while FEEDER_ACTIVE.load(Ordering::Relaxed) {
+                    if STREAM_PAUSED.load(Ordering::Relaxed) {
+                        std::thread::sleep(std::time::Duration::from_millis(15));
+                        continue;
+                    }
+                    let r = READ_POS.load(Ordering::Acquire);
+                    let w = WRITE_POS.load(Ordering::Relaxed);
+                    let occupied = w.wrapping_sub(r);
+                    let free = RING_BUFFER_CAPACITY.saturating_sub(occupied);
+
+                    if free >= chunk.len() {
+                        let count = if let Ok(mut guard) = MIXER.lock() {
+                            if let Some(m) = guard.as_mut() {
+                                m.write_samples(&mut chunk)
+                            } else {
+                                0
+                            }
+                        } else {
+                            0
+                        };
+                        if count < chunk.len() {
+                            chunk[count..].fill(0.0);
+                        }
+                        for (i, &s) in chunk.iter().enumerate() {
+                            let idx = (w.wrapping_add(i)) & RING_BUFFER_MASK;
+                            RING_BUF[idx].store(s.to_bits(), Ordering::Relaxed);
+                        }
+                        WRITE_POS.store(w.wrapping_add(chunk.len()), Ordering::Release);
+                    } else {
+                        // Buffer has plenty of audio (>150ms), sleep 4ms
+                        std::thread::sleep(std::time::Duration::from_millis(4));
+                    }
+                }
+            });
+
         check(AAudioStream_requestStart(stream), "AAudioStream_requestStart")?;
-        eprintln!("[aaudio] salida abierta: {} canales @ {} Hz", channels.get(), sample_rate.get());
+        eprintln!("[aaudio] salida abierta: {} canales @ {} Hz (lock-free ring buffer activo)", channels.get(), sample_rate.get());
         Ok((stream as usize, channels, sample_rate, handle))
     }
 }

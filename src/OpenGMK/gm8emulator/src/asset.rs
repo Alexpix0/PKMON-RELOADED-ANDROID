@@ -6,6 +6,7 @@ pub mod room;
 pub mod script;
 pub mod sound;
 pub mod sprite;
+pub mod sprite_cache;
 pub mod timeline;
 pub mod trigger;
 

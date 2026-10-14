@@ -1812,6 +1812,7 @@ impl Game {
                 self.renderer.delete_sprite(surf.atlas_ref);
             }
 
+            self.renderer.trim_vram();
             // Let then next frame handle it
             Ok(())
         } else {
@@ -1876,6 +1877,7 @@ impl Game {
             if let Some(surf) = self.surfaces.remove(trans_surf_new) {
                 self.renderer.delete_sprite(surf.atlas_ref);
             }
+            self.renderer.trim_vram();
             self.transition_kind = 0;
             Ok(())
         }
@@ -2686,6 +2688,12 @@ impl Game {
                 }
             },
             Scaling::Full => (0, 0, ww, wh),
+            Scaling::PixelPerfect => {
+                let scale = ((ww / fw).min(wh / fh)).max(1);
+                let w = fw * scale;
+                let h = fh * scale;
+                ((ww - w) / 2, (wh - h) / 2, w, h)
+            },
         };
         let (w_w, w_h) = (w_w.max(1), w_h.max(1));
         ((x - w_x) * fw / w_w, (y - w_y) * fh / w_h)
@@ -2715,6 +2723,12 @@ impl Game {
                 }
             },
             Scaling::Full => (0, 0, ww, wh),
+            Scaling::PixelPerfect => {
+                let scale = ((ww / fw).min(wh / fh)).max(1);
+                let w = fw * scale;
+                let h = fh * scale;
+                ((ww - w) / 2, (wh - h) / 2, w, h)
+            },
         };
         let (w_w, w_h) = (w_w.max(1), w_h.max(1));
         (w_x + x * w_w / fw, w_y + y * w_h / fh)

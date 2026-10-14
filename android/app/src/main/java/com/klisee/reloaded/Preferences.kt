@@ -139,6 +139,14 @@ class Preferences(context: Context) {
             prefs.edit().putInt("fastForwardSpeed", value).apply()
         }
 
+    /** Video scaling mode: "aspect", "full", or "pixel_perfect". */
+    var videoScaling: String
+        get() = prefs.getString("videoScaling", if (keepAspect) "aspect" else "full") ?: "aspect"
+        set(value) {
+            prefs.edit().putString("videoScaling", value).apply()
+            keepAspect = (value == "aspect" || value == "pixel_perfect")
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
-    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, keepAspect, showFps)
+    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, videoScaling, showFps)
 }

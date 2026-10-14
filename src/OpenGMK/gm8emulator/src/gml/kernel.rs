@@ -491,6 +491,7 @@ impl Game {
             Scaling::Fixed(n) => n,
             Scaling::Aspect(n) => n,
             Scaling::Full => 0.0,
+            Scaling::PixelPerfect => -1.0,
         }
         .into())
     }
@@ -8708,52 +8709,34 @@ impl Game {
 
     /// Loads a `.gmspr` file (GameMaker's own sprite format) and uploads it to the renderer.
     fn load_gmspr(&mut self, fname: &str) -> Result<Box<asset::Sprite>, String> {
-        let path = file::to_path(fname);
-        let bytes = std::fs::read(path.as_ref()).map_err(|e| format!("failed to open '{}': {}", fname, e))?;
-        let parsed = parse_gmspr(&bytes).map_err(|e| format!("failed to parse '{}': {}", fname, e))?;
-
-        let (origin_x, origin_y) = (parsed.origin_x, parsed.origin_y);
-        let mut frames = Vec::with_capacity(parsed.frames.len());
-        for frame in &parsed.frames {
-            // `.gmspr` frames store pixels as BGRA (same as the sprites embedded in the exe), but
-            // `upload_sprite` takes RGBA — so swap the red and blue channels or the sprites render
-            // with their colours flipped.
-            let mut data = frame.data.to_vec();
-            crate::util::bgra2rgba(&mut data);
+        let template = crate::asset::sprite_cache::get_or_load_template(fname)?;
+        let mut frames = Vec::with_capacity(template.frame_data.len());
+        for frame in &template.frame_data {
             let atlas_ref = self
                 .renderer
-                .upload_sprite(data.into_boxed_slice(), frame.width as i32, frame.height as i32, origin_x, origin_y)
+                .upload_sprite(
+                    frame.rgba_bytes.to_vec().into_boxed_slice(),
+                    frame.width as i32,
+                    frame.height as i32,
+                    template.origin_x,
+                    template.origin_y,
+                )
                 .map_err(|e| format!("renderer error on '{}': {}", fname, e))?;
             frames.push(asset::sprite::Frame { width: frame.width, height: frame.height, atlas_ref });
         }
-        let colliders = parsed
-            .colliders
-            .iter()
-            .map(|c| asset::sprite::Collider {
-                width: c.width,
-                height: c.height,
-                bbox_left: c.bbox_left,
-                bbox_right: c.bbox_right,
-                bbox_top: c.bbox_top,
-                bbox_bottom: c.bbox_bottom,
-                data: c.data.clone(),
-            })
-            .collect::<Vec<_>>();
-        let (width, height) = parsed.frames.first().map(|f| (f.width, f.height)).unwrap_or((0, 0));
-        let bbox = colliders.first();
         Ok(Box::new(asset::Sprite {
             name: "<gmspr>".into(),
             frames,
-            width,
-            height,
-            origin_x,
-            origin_y,
-            per_frame_colliders: parsed.per_frame_colliders,
-            bbox_left: bbox.map(|b| b.bbox_left).unwrap_or(0),
-            bbox_right: bbox.map(|b| b.bbox_right).unwrap_or(0),
-            bbox_top: bbox.map(|b| b.bbox_top).unwrap_or(0),
-            bbox_bottom: bbox.map(|b| b.bbox_bottom).unwrap_or(0),
-            colliders,
+            width: template.width,
+            height: template.height,
+            origin_x: template.origin_x,
+            origin_y: template.origin_y,
+            per_frame_colliders: template.per_frame_colliders,
+            bbox_left: template.bbox_left,
+            bbox_right: template.bbox_right,
+            bbox_top: template.bbox_top,
+            bbox_bottom: template.bbox_bottom,
+            colliders: template.colliders.clone(),
         }))
     }
 

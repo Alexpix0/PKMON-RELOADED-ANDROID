@@ -145,8 +145,8 @@ Reorganización estructurada de la pantalla de Ajustes en secciones limpias:
 
 | Fase | Bloque | Entregables Clave | Estado |
 | :---: | :--- | :--- | :---: |
-| **Fase 1** | **Instalador, Seguridad & UI Base** | • Importador ultra-rápido de ZIP (Zero-Copy + Multihilo).<br>• Escudo Scoped Storage para partidas.<br>• Reorganización de Ajustes por categorías.<br>• Temas Claro, Oscuro y Negro Puro AMOLED. | ⏳ Siguiente |
-| **Fase 2** | **Controles & Turbo Táctil** | • Editor flotante in-game (arrastrar y soltar + pinch-to-zoom).<br>• Botón rápido de Turbo (1-toque) y botón Mute.<br>• Contador de FPS y Frame Time en pantalla.<br>• Standby inteligente 0% en segundo plano. | ⏳ Planificado |
-| **Fase 3** | **Rendimiento Gráfico & Batalla** | • Índice en RAM para los 26,240 sprites `.gmspr` de combate.<br>• Poda de VRAM sin pérdida + Escalado Pixel-Perfect.<br>• Audio lock-free independiente.<br>• Visor in-game de tabla de tipos (`Efectividades.png`). | ⏳ Planificado |
-| **Fase 4** | **QoL Avanzado & Diagnóstico** | • Snapshot rápido pre-combate.<br>• Historial de textos recientes (Text Log).<br>• Bordes temáticos Bezel Art en modo 4:3.<br>• Auto-diagnóstico de integridad de archivos (Health Checker). | ⏳ Planificado |
+| **Fase 1** | **Instalador, Seguridad & UI Base** | • Importador ultra-rápido de ZIP (Zero-Copy + Multihilo).<br>• Escudo Scoped Storage para partidas.<br>• Reorganización de Ajustes por categorías.<br>• Temas Claro, Oscuro y Negro Puro AMOLED. | ✅ Completado |
+| **Fase 2** | **Controles & Turbo Táctil** | • Editor flotante in-game (arrastrar y soltar + pinch-to-zoom).<br>• Botón rápido de Turbo (1-toque) y botón Mute.<br>• Contador de FPS y Frame Time en pantalla.<br>• Standby inteligente 0% en segundo plano. | ✅ Completado |
+| **Fase 3** | **Rendimiento Gráfico & Batalla** | • Índice en RAM para los 26,240 sprites `.gmspr` de combate.<br>• Poda de VRAM sin pérdida + Escalado Pixel-Perfect.<br>• Audio lock-free independiente.<br>• Visor in-game de tabla de tipos (`Efectividades.png`). | ✅ Completado |
+| **Fase 4** | **QoL Avanzado & Diagnóstico** | • Snapshot rápido pre-combate.<br>• Historial de textos recientes (Text Log).<br>• Bordes temáticos Bezel Art en modo 4:3.<br>• Auto-diagnóstico de integridad de archivos (Health Checker). | ⏳ Siguiente |
 | **Fase 5** | **Mods & Optimización Profunda** | • Soporte de packs en `custom_assets/` (música y gifs).<br>• Crash Dump modal en 1 toque y soporte de parches ligeros.<br>• Compilación JIT con Cranelift para rutinas de físicas/IA. | ⏳ Planificado |

@@ -76,6 +76,7 @@ fun SettingsScreen(
     var status by remember(revision) { mutableStateOf(repo.status()) }
     var keepScreenOn by remember { mutableStateOf(prefs.keepScreenOn) }
     var keepAspect by remember { mutableStateOf(prefs.keepAspect) }
+    var videoScaling by remember { mutableStateOf(prefs.videoScaling) }
     var showFps by remember { mutableStateOf(prefs.showFps) }
     var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
     var currentTheme by remember { mutableStateOf(prefs.themeMode) }
@@ -133,13 +134,13 @@ fun SettingsScreen(
                 ChoiceRow(
                     icon = Icons.Filled.AspectRatio,
                     title = "Mantener proporción (4:3)",
-                    subtitle = "Aspecto clásico sin distorsión, con barras laterales",
-                    selected = keepAspect,
-                    items = 4,
+                    subtitle = "Aspecto clásico original con barras laterales",
+                    selected = videoScaling == "aspect",
+                    items = 5,
                     index = 0,
                     onSelect = {
-                        keepAspect = true
-                        prefs.keepAspect = true
+                        videoScaling = "aspect"
+                        prefs.videoScaling = "aspect"
                         prefs.writeVideo(context.filesDir)
                     },
                 )
@@ -147,12 +148,38 @@ fun SettingsScreen(
                     icon = Icons.Filled.Fullscreen,
                     title = "Rellenar la pantalla",
                     subtitle = "La imagen cubre toda la pantalla del dispositivo",
-                    selected = !keepAspect,
-                    items = 4,
+                    selected = videoScaling == "full",
+                    items = 5,
                     index = 1,
                     onSelect = {
-                        keepAspect = false
-                        prefs.keepAspect = false
+                        videoScaling = "full"
+                        prefs.videoScaling = "full"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "Escalado Pixel-Perfect (Nítido / Sharp)",
+                    subtitle = "Escalado entero exacto para bordes 100% nítidos en pantallas HD/FHD/OLED",
+                    selected = videoScaling == "pixel_perfect",
+                    items = 5,
+                    index = 2,
+                    onSelect = {
+                        videoScaling = "pixel_perfect"
+                        prefs.videoScaling = "pixel_perfect"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Contador de FPS en pantalla",
+                    subtitle = "Muestra la tasa de cuadros por segundo en tiempo real durante la partida",
+                    checked = showFps,
+                    items = 5,
+                    index = 3,
+                    onCheckedChange = {
+                        showFps = it
+                        prefs.showFps = it
                         prefs.writeVideo(context.filesDir)
                     },
                 )
@@ -161,24 +188,11 @@ fun SettingsScreen(
                     title = "Mantener pantalla encendida",
                     subtitle = "Evita que el móvil se bloquee mientras juegas",
                     checked = keepScreenOn,
-                    items = 4,
-                    index = 2,
+                    items = 5,
+                    index = 4,
                     onCheckedChange = {
                         keepScreenOn = it
                         prefs.keepScreenOn = it
-                    },
-                )
-                SwitchRow(
-                    icon = Icons.Filled.Speed,
-                    title = "Contador de FPS en pantalla",
-                    subtitle = "Muestra la tasa de cuadros por segundo en tiempo real durante la partida",
-                    checked = showFps,
-                    items = 4,
-                    index = 3,
-                    onCheckedChange = {
-                        showFps = it
-                        prefs.showFps = it
-                        prefs.writeVideo(context.filesDir)
                     },
                 )
             }
