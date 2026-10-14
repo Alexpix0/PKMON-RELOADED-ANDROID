@@ -260,20 +260,28 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 
 * **Stack:** Rust (OpenGMK) + Kotlin (Compose Launcher) sin lenguajes adicionales.
 * **1. Rendimiento y Gráficos:**
-  - Poda de VRAM sin pérdida (Lossless VRAM Trimming) que libera texturas inactivas sin alterar la resolución de los sprites + Escalado Pixel-Perfect / Sharp Bilinear para máxima nitidez en pantallas 1080p/2K/OLED.
+  - Índice en memoria RAM para carga instantánea de los 26,240 sprites `.gmspr` de combate (cero stutter).
+  - Poda de VRAM sin pérdida (Lossless VRAM Trimming) que libera texturas inactivas + Escalado Pixel-Perfect / Sharp Bilinear para máxima nitidez en pantallas 1080p/2K/OLED.
+  - Pre-buffer de audio y modo Low-RAM para los 323 MIDIs (ahorra 50-100MB RAM).
   - JIT / Optimización profunda de bytecode GML con Cranelift para 2.5x a 4x en fotogramas mínimos.
   - Síntesis de audio lock-free desacoplada de la tasa de frames (`rtrb` + `aaudio`).
-  - Congelamiento total en segundo plano (0% consumo de batería en standby).
+  - Congelamiento total en segundo plano (0% consumo de batería en standby) y limpiador de basura temporal.
 * **2. Interfaz, Controles y Apariencia:**
   - Editor de controles flotante in-game: arrastrar y soltar botones libremente sobre la pantalla, pellizco táctil (pinch-to-zoom) para tamaños independientes y opacidad en vivo.
+  - Botón táctil rápido de Turbo / Fast-Forward (1-toque) y botón de silenciado rápido (Mute).
+  - Bordes temáticos Bezel Art para pantallas panorámicas en modo 4:3 (OLED, GameBoy retro, arte Reloaded).
   - Reorganización modular de Ajustes dividida por categorías (Controles, Vídeo, Audio, Rendimiento, Apariencia, Sistema).
   - Selector de Tema Claro, Tema Oscuro y Negro Puro AMOLED (apaga píxeles en pantallas OLED).
 * **3. Calidad de Vida (QoL):**
   - Contador de FPS y Frame Time en tiempo real en pantalla (para auditar fluidez exacta).
-  - Modo Fast-Forward experimental (Acelerador 1.5x / 2.0x) con sincronización de audio.
-* **4. Instalador, Escalabilidad y Estabilidad:**
+  - Copia de seguridad instantánea "Punto de Retorno" (Snapshot Pre-Gimnasio / Pre-Legendario).
+  - Visor in-game de tabla de tipos y guías (`data/image/Efectividades.png`).
+  - Historial de diálogos recientes (Text Log de los últimos 10 diálogos).
+* **4. Instalador, Escalabilidad y Seguridad:**
   - Importación ultra rápida del ZIP de 700MB (de 3-5 minutos a 30-45 segundos) con streaming Zero-Copy directo y descompresión paralela multihilo en los 8 núcleos.
-  - Soporte de packs externos de música/SoundFonts y sprites `.gif` desde `custom_assets/` sin alterar el zip original.
+  - Escudo Scoped Storage contra borrado accidental de partidas en desinstalaciones.
+  - Auto-diagnóstico de integridad de los 34,388 archivos (Health Checker).
+  - Soporte de parches ligeros modulares (`.patch`) y packs en `custom_assets/` (música y gifs).
   - Crash Dump & Telemetría local con copia de reporte en 1 solo toque ante cualquier fallo.
 
 

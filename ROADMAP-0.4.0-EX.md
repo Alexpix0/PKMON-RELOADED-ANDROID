@@ -3,106 +3,131 @@
 > **Documento de Planificación y Arquitectura**  
 > **Proyecto:** Pokémon Reloaded para Android (Edición EX)  
 > **Autores:** Alexpix0 / Armando  
-> **Stack tecnológico:** Rust (OpenGMK Engine) + Kotlin (Jetpack Compose Launcher) — *Stack puro sin lenguajes externos*
+> **Stack tecnológico:** Rust (OpenGMK Engine) + Kotlin (Jetpack Compose Launcher) — *Stack nativo puro*
 
 ---
 
 ## 🎯 Objetivo General
-Hacer de la versión **0.4.0 EX** la entrega más fluida, cómoda y visualmente personalizable del port, incorporando:
-1. **Rendimiento profundo sin perder calidad visual** (Poda de VRAM sin pérdida y escalado Pixel-Perfect).
-2. **Editor de controles in-game** (arrastrar y soltar con escalado individual por pellizco).
-3. **Contador de FPS en tiempo real** para auditar el rendimiento exacto en pantalla.
-4. **Reorganización modular de la pantalla de Ajustes** dividida por categorías lógicas.
+Transformar la versión **0.4.0 EX** en el salto generacional definitivo de **Pokémon Reloaded en Android**, convirtiendo el port en una experiencia idéntica a la de una consola portátil moderna:
+1. **Rendimiento y fluidez sin concesiones visuales** (Poda de VRAM sin pérdida, índice en RAM para los 26,240 sprites de combate y escalado Pixel-Perfect).
+2. **Editor de controles in-game** con arrastrar y soltar, redimensionado libre por pellizco y opacidad en vivo.
+3. **Contador de FPS y Frame Time en pantalla** para auditoría en tiempo real.
+4. **Reorganización modular de Ajustes** por categorías (Controles, Vídeo, Audio, Rendimiento, Apariencia, Sistema).
 5. **Tema Claro, Tema Oscuro y Negro Puro AMOLED**.
-6. **Importación ultra rápida del ZIP de 700MB** (reduciendo el tiempo de 3-5 minutos a 30-45 segundos).
-7. **Modo Fast-Forward (Acelerador 1.5x / 2.0x)** en fase de pruebas.
-8. **Soporte de packs de música/SoundFonts y sprites (`.gif`) externos** + reporte de fallos en 1 toque.
+6. **Importación ultra rápida del ZIP de 700MB** (reduciendo el tiempo de 3-5 minutos a 30-45 segundos con streaming Zero-Copy).
+7. **Modo Fast-Forward con botón de turbo en pantalla (1-toque)** y atajo de silenciado rápido.
+8. **Seguridad total de partidas:** Escudo Scoped Storage contra desinstalaciones, Snapshot pre-gimnasio y auto-diagnóstico de integridad de archivos.
+9. **Soporte de packs de música/SoundFonts y sprites (`.gif`) en `custom_assets/`** + reporte de fallos en 1 toque.
 
 ---
 
 ## ⚡ 1. Rendimiento Gráfico Sin Pérdida y Eficiencia de Batería (Motor Rust)
 
-### 1.1. Poda de VRAM Sin Pérdida (Lossless VRAM Trimming) y Escalado Pixel-Perfect
-* **Garantía de calidad visual:** **Cero pérdida de calidad gráfica ni compresión destructiva.** Los sprites conservan el 100% de su resolución nativa original.
-* **Mecanismo técnico:**
-  * En lugar de mantener en la memoria de la GPU texturas de mapas o especies de rutas que ya no están visibles, el recolector de texturas en `opengl.rs` descarga de la VRAM lo inactivo y mantiene activos únicamente los elementos en pantalla.
-  * **Escalado Pixel-Perfect / Sharp Bilinear:** Ajuste matemático en pantalla completa que preserva los píxeles cuadrados con bordes limpios, viéndose aún más nítido y definido en pantallas 1080p y 2K OLED que en el monitor de un PC.
-* **Impacto:** Reduce el uso de memoria RAM/VRAM en más del 40%, previniendo cierres inesperados por falta de memoria (*OOM Killer*) y manteniendo 60 FPS estables.
+### 1.1. Índice en Memoria para Combates (Fast Sprite Loader para los 26,240 `.gmspr`)
+* **Problema:** En `data/pkmnbattle/` hay 26,240 archivos `.gmspr`. Leerlos del almacenamiento flash uno a uno al iniciar un combate causa micro-congelamientos (*stutter*).
+* **Solución técnica:** Construir un índice en memoria RAM durante el inicio que mapea offsets y descriptores de cada sprite.
+* **Impacto:** Los combates contra líderes, Alto Mando y Pokémon salvajes inician al instante a 60 FPS estables.
 
-### 1.2. JIT / Optimización de Ejecución de Bytecode GML (Cranelift)
-* **Propuesta técnica:** Integrar **Cranelift** (generador de código JIT ligero de Rust) para compilar en tiempo de ejecución rutinas críticas de colisiones, físicas de combate masivo e IA a código máquina nativo ARM64.
-* **Impacto:** Multiplica por 2.5x a 4x los FPS mínimos y previene calentamiento térmico en sesiones largas.
+### 1.2. Poda de VRAM Sin Pérdida (Lossless VRAM Trimming) y Escalado Pixel-Perfect
+* **Garantía de calidad:** **Cero pérdida de calidad gráfica ni compresión destructiva.** Los sprites conservan el 100% de su resolución nativa.
+* **Mecanismo:** Descarga de la GPU las texturas de mapas anteriores que no estén en pantalla. Incorpora **escalado Pixel-Perfect (Sharp Bilinear)** para que en pantallas 1080p y 2K OLED se vea con bordes definidos y nítidos, superando la nitidez del PC original.
+* **Impacto:** Ahorra más del 40% de RAM/VRAM y previene cierres por falta de memoria (*OOM Killer*).
 
-### 1.3. Síntesis de Audio Lock-Free de Latencia Cero
-* **Propuesta técnica:** Desacoplar por completo el sintetizador SoundFont (`rustysynth` / `aaudio`) del bucle gráfico mediante un búfer circular lock-free (`rtrb`).
-* **Impacto:** El audio nunca tartamudea ni se entrecorta, incluso ante cargas pesadas de procesamiento gráfico.
+### 1.3. Pre-Buffer de Audio y Modo Low-RAM para MIDIs
+* **Mecanismo:** Carga en memoria únicamente las muestras del SoundFont (`.sf2`) que la canción actual necesita, liberando bancos de instrumentos no utilizados.
+* **Impacto:** Ahorra entre 50MB y 100MB de RAM en todo momento, ideal para teléfonos de 2GB o 3GB.
 
-### 1.4. Congelamiento Inteligente en Segundo Plano (Standby 0% Consumo)
-* **Propuesta técnica:** Conectar el ciclo de vida de Android (`onPause` / `onStop`) con el bucle nativo en Rust para pausar los timers y suspender el hilo (`futex / epoll_wait`).
-* **Impacto:** 0% de drenaje de batería mientras la pantalla esté apagada o el juego minimizado.
+### 1.4. JIT / Optimización de Bytecode GML (Cranelift)
+* **Propuesta:** Integrar **Cranelift** para compilar dinámicamente las rutinas pesadas de físicas, proyectiles e IA a código máquina nativo ARM64.
+* **Impacto:** Incremento de 2.5x a 4x en fotogramas mínimos durante batallas con efectos de clima y partículas.
+
+### 1.5. Síntesis de Audio Lock-Free de Latencia Cero
+* **Propuesta:** Búfer circular sin bloqueo (`rtrb` + `aaudio`) que desvincula la música y los efectos de sonido de la carga de la GPU.
+* **Impacto:** Audio sin chasquidos ni tartamudeos bajo ninguna circunstancia.
+
+### 1.6. Congelamiento Inteligente en Segundo Plano (Standby 0% Consumo)
+* **Propuesta:** Pausado instantáneo de timers y suspensión de hilos (`futex / epoll_wait`) al bloquear pantalla o minimizar la app.
+* **Impacto:** 0% de consumo de batería mientras no se esté jugando.
+
+### 1.7. Limpiador Automático de Basura Temporal y Caché de Partidas
+* **Propuesta:** Rutina de mantenimiento que purga archivos `.tmp` y volcados residuales en la memoria interna.
+* **Impacto:** La app se mantiene siempre limpia y con el menor peso en disco posible.
 
 ---
 
-## 🎮 2. Interfaz, Controles y Ajustes Modulares (Kotlin + Rust)
+## 🎮 2. Interfaz, Controles y Experiencia Visual (Kotlin + Rust)
 
 ### 2.1. Editor Visual Flotante In-Game (Arrastrar y Soltar)
-* **Objetivo:** Permitir ajustar cada botón directamente sobre la partida en vivo sin usar sliders estáticos.
 * **Características:**
   * **Arrastre libre:** Mover con el dedo cualquier botón (`Z`, `X`, `C`, `V`, `SEL`, `OK`, `ESC`, `Diálogo` y `Joystick`).
-  * **Pinch-to-zoom (Pellizco táctil):** Redimensionar cada botón de manera independiente (por ejemplo, hacer el botón de Ataque más grande que el de Diálogo).
-  * **Opacidad en tiempo real:** Ver la transparencia sobre el mapa del juego mientras se ajusta.
-  * **Guardado instantáneo:** Se guarda en `controls.conf` de inmediato sin reiniciar la partida.
+  * **Pinch-to-zoom (Pellizco táctil):** Redimensionar cada botón individualmente.
+  * **Opacidad en tiempo real:** Ver la transparencia sobre el mapa del juego en vivo.
+  * **Guardado instantáneo:** Persistencia inmediata en `controls.conf` sin reiniciar.
 
-### 2.2. Pantalla de Configuración Modular Dividida por Categorías
-Reorganización integral de la pantalla de Ajustes en pestañas/secciones limpias y ordenadas:
-* 🎮 **Controles:** Sensibilidad del joystick virtual, zona muerta (deadzone), márgenes, opacidad y botón directo al *Editor In-Game*.
-* 📺 **Vídeo y Pantalla:** Aspect ratio original (4:3) o pantalla completa, escalado pixel-perfect, mantener pantalla encendida y **Contador de FPS en pantalla**.
-* 🎵 **Audio:** Selector de SoundFonts (`.sf2`), volumen maestro, balance para altavoces móviles y auriculares.
-* ⚡ **Rendimiento y Batería:** Modo ahorro térmico, standby inteligente 0% y optimizador de VRAM.
+### 2.2. Botón Rápido de Turbo / Fast-Forward en Pantalla (Acceso 1-Toque)
+* **Qué es:** Botón táctil discreto con icono `>>` en la esquina superior para conmutar al instante entre velocidad normal (1.0x) y turbo (1.5x / 2.0x).
+* **Impacto:** Farmeo de experiencia, crianza y exploración ágiles sin entrar a menús de ajustes.
+
+### 2.3. Bordes Temáticos para Modo 4:3 (Bezel Art)
+* **Qué es:** Personalización de las bandas laterales en pantallas panorámicas (Negro Puro OLED, bordes estilo consola retro Game Boy, o arte oficial ilustrado de Reloaded).
+* **Impacto:** Estética prémium de consola portátil.
+
+### 2.4. Botón Táctil de Silenciado Rápido (Mute Toggle 1-Toque)
+* **Qué es:** Atajo en pantalla para enmudecer el juego al instante con un toque sin manipular los botones físicos de volumen del móvil.
+
+### 2.5. Pantalla de Configuración Modular por Categorías
+Reorganización estructurada de la pantalla de Ajustes en secciones limpias:
+* 🎮 **Controles:** Sensibilidad del joystick, zona muerta (deadzone), márgenes, opacidad y acceso al Editor In-Game.
+* 📺 **Vídeo y Pantalla:** Proporción 4:3 / pantalla completa, marcos temáticos Bezel, escalado pixel-perfect, mantener pantalla encendida y **Contador de FPS**.
+* 🎵 **Audio:** Selector de SoundFonts (`.sf2`), volumen maestro, balance para altavoces y botón de silenciado.
+* ⚡ **Rendimiento y Batería:** Modo ahorro térmico, standby inteligente 0%, VRAM trimmer y limpiador de caché.
 * 🎨 **Apariencia:** Selector de Tema Claro / Oscuro / Negro Puro AMOLED.
-* 🛠️ **Sistema y Partidas:** Importador ultra-rápido, exportador de respaldos en `.zip`, clonador de ranuras y visualizador de registros.
+* 🛠️ **Sistema y Partidas:** Importador ultra-rápido, exportador de respaldos, Snapshot rápido, escudo Scoped Storage y verificador de salud.
 
-### 2.3. Soporte Completo de Tema Claro, Tema Oscuro y Negro Puro AMOLED
-* **Opciones disponibles:**
-  * **Tema Claro:** Interfaz luminosa y moderna con contraste óptimo.
-  * **Tema Oscuro:** Tonos grises oscuros elegantes para uso nocturno.
-  * **Negro Puro (AMOLED):** Fondo negro absoluto (`#000000`) que apaga los píxeles de las pantallas OLED para un ahorro extra de batería.
-  * **Seguir al sistema:** Conmutación automática según la configuración del sistema Android.
+### 2.6. Soporte Completo de Tema Claro, Oscuro y Negro Puro AMOLED
+* **Opciones:** Tema Claro luminoso, Tema Oscuro elegante, Negro Puro AMOLED (apaga los píxeles de pantallas OLED para máximo ahorro de batería) y modo Automático según el sistema Android.
 
 ---
 
 ## ⏩ 3. Calidad de Vida (QoL) y Usabilidad
 
 ### 3.1. Contador de FPS y Frame Time en Tiempo Real
-* **Qué es:** Un ajuste configurable en *Ajustes > Vídeo* que añade un overlay sutil y minimalista en la esquina superior de la pantalla.
-* **Qué muestra:** Tasa de cuadros por segundo en tiempo real (ej. `60.0 FPS`) y tiempo de respuesta en milisegundos (ej. `16.6 ms`).
-* **Utilidad:** Permite verificar con precisión matemática la fluidez del juego y el impacto de los modos de rendimiento.
+* **Qué es:** Overlay sutil en la esquina superior con cuadros por segundo exactos (`60.0 FPS`) y tiempo de respuesta (`16.6 ms`).
+* **Utilidad:** Comprobación matemática en tiempo real de la estabilidad del motor.
 
-### 3.2. Modo Fast-Forward / Acelerador de Juego (1.5x / 2.0x — Experimental)
-* **Objetivo:** Acelerar el avance en crianza, entrenamiento o cinemáticas lentas.
-* **Diseño:** Multiplicador dinámico del reloj de GameMaker con sincronización de audio (modo mute o tono ajustado) y activación configurable por pulsación sostenida o conmutación (*toggle*).
+### 3.2. Copia de Seguridad Instantánea "Punto de Retorno" (Snapshot Pre-Gimnasio)
+* **Qué es:** Botón en el menú de pausa que genera un punto de retorno seguro (*"Snapshot_Antes_De_Combate"*) antes de enfrentar a un líder, Alto Mando o legendario.
+* **Impacto:** Seguridad para experimentar estrategias arriesgadas sin miedo a perder horas de progreso.
+
+### 3.3. Visor de Tabla de Tipos y Guías Integrado (In-App Battle Guide)
+* **Qué es:** Ventana modal flotante dentro del juego que abre la tabla de tipos (`data/image/Efectividades.png`) y listas de MTs/MOs sin salir de la app ni arriesgar que Android cierre el juego por falta de memoria.
+
+### 3.4. Historial de Mensajes y Diálogos Recientes (Text Log)
+* **Qué es:** Historial con los últimos 10 diálogos en pantalla para recuperar pistas o conversaciones que se hayan saltado por accidente al tocar rápido.
 
 ---
 
-## 📦 4. Escalabilidad, Mods y Rendimiento de Instalación
+## 📦 4. Escalabilidad, Seguridad y Compatibilidad
 
 ### 4.1. Importación Ultra Rápida del ZIP del Juego (De 3-5 min a 30-45 s)
-* **Problema actual:** Actualmente el importador copia el `.zip` de 700MB a la memoria interna (`import.zip`) y luego lo descomprime secuencialmente con un solo hilo y un búfer pequeño de 64KB, escribiendo casi 2GB en la memoria flash del teléfono.
-* **Solución técnica implementada:**
-  1. **Zero-Copy Streaming:** Descompresión directa desde el archivo seleccionado en Descargas vía `ParcelFileDescriptor`, eliminando la copia intermedia de 700MB.
-  2. **Descompresión Multihilo en Paralelo:** Aprovechamiento de los 8 núcleos del procesador del móvil para descomprimir lotes de archivos concurrentemente con corrutinas de Kotlin.
-  3. **Búfer de I/O de 1MB:** Reducción del 80% en los cambios de contexto del sistema operativo.
-  4. **Caché de directorios creados:** Evita llamadas redundantes a `mkdirs()`.
-* **Resultado:** La importación de Pokémon Reloaded se completa en un 70% a 80% menos de tiempo.
+* **Tecnología:** Streaming Zero-Copy directo desde el archivo en Descargas (sin la copia intermedia de 700MB), descompresión paralela en los 8 núcleos del CPU con corrutinas de Kotlin, búfer de 1MB y caché de directorios.
+* **Impacto:** Reduce el tiempo de instalación entre un 70% y 80%.
 
-### 4.2. Packs Externos de Música y Sprites (`.gif`) en `custom_assets/`
-* **Qué es:** El motor buscará prioritariamente en la carpeta `Android/data/com.klisee.reloaded/files/custom_assets/`:
-  * SoundFonts (`soundfont.sf2`) alternativos o remixes de música (`.ogg`).
-  * Sprites alternativos (`pkmn_front/`, `pkmn_back/`).
-* Si el archivo no existe en la carpeta personalizada, el juego utiliza el original sin alterar el zip base.
+### 4.2. Escudo de Partidas contra Borrado de Android (Scoped Storage Shield)
+* **Qué es:** Réplica de seguridad protegida fuera de la carpeta volátil `Android/data/`.
+* **Impacto:** Las partidas sobreviven al 100% incluso si el usuario desinstala la aplicación o borra datos del almacenamiento.
 
-### 4.3. Crash Dump & Telemetría Local (Reporte en 1 Toque)
-* Si ocurre un cierre inesperado o error de GameMaker, el motor intercepta la excepción y muestra un diálogo modal con el script de GML y línea exacta del fallo, con un botón para copiar el reporte formateado en 1 toque.
+### 4.3. Auto-Diagnóstico de Integridad de Archivos (Health Checker de los 34,388 archivos)
+* **Qué es:** Verificador de suma y tamaño de los 34,388 archivos para detectar assets a 0 bytes o corruptos tras copias incompletas, ofreciendo reparación automática.
+
+### 4.4. Soporte de Parches Ligeros (`.patch` / Actualizaciones Modulares)
+* **Qué es:** Descarga y aplicación de parches de corrección de unos pocos megas sin requerir volver a descargar el zip de 700MB.
+
+### 4.5. Packs Externos de Música y Sprites (`.gif`) en `custom_assets/`
+* **Qué es:** El motor prioriza archivos de `custom_assets/` (música `.ogg`, SoundFonts `.sf2` y sprites `.gif`) sobre los originales sin tocar el zip base.
+
+### 4.6. Crash Dump & Telemetría Local (Reporte en 1 Toque)
+* Diálogo modal con script GML, línea y variables ante cualquier fallo, con botón de copiado en 1 toque.
 
 ---
 
@@ -110,8 +135,8 @@ Reorganización integral de la pantalla de Ajustes en pestañas/secciones limpia
 
 | Fase | Bloque | Entregables Clave | Estado |
 | :---: | :--- | :--- | :---: |
-| **Fase 1** | **Instalador & Apariencia** | • Importador ultra-rápido de ZIP (Zero-Copy + Multihilo).<br>• Reorganización de Ajustes por categorías.<br>• Temas Claro, Oscuro y Negro Puro AMOLED. | ⏳ Siguiente |
-| **Fase 2** | **Controles & QoL** | • Editor flotante in-game (arrastrar y soltar + pinch-to-zoom).<br>• Contador de FPS y Frame Time en pantalla.<br>• Standby inteligente 0% en segundo plano. | ⏳ Planificado |
-| **Fase 3** | **Rendimiento & QoL** | • Poda de VRAM sin pérdida + Escalado Pixel-Perfect.<br>• Audio lock-free independiente.<br>• Modo Fast-Forward experimental (1.5x / 2.0x). | ⏳ Planificado |
-| **Fase 4** | **Mods & Estabilidad** | • Soporte de packs en `custom_assets/` (música y gifs).<br>• Crash Dump modal en 1 toque. | ⏳ Planificado |
-| **Fase 5** | **Optimización Profunda** | • JIT con Cranelift para rutinas críticas de combate. | ⏳ Planificado |
+| **Fase 1** | **Instalador, Seguridad & UI Base** | • Importador ultra-rápido de ZIP (Zero-Copy + Multihilo).<br>• Escudo Scoped Storage para partidas.<br>• Reorganización de Ajustes por categorías.<br>• Temas Claro, Oscuro y Negro Puro AMOLED. | ⏳ Siguiente |
+| **Fase 2** | **Controles & Turbo Táctil** | • Editor flotante in-game (arrastrar y soltar + pinch-to-zoom).<br>• Botón rápido de Turbo (1-toque) y botón Mute.<br>• Contador de FPS y Frame Time en pantalla.<br>• Standby inteligente 0% en segundo plano. | ⏳ Planificado |
+| **Fase 3** | **Rendimiento Gráfico & Batalla** | • Índice en RAM para los 26,240 sprites `.gmspr` de combate.<br>• Poda de VRAM sin pérdida + Escalado Pixel-Perfect.<br>• Audio lock-free independiente.<br>• Visor in-game de tabla de tipos (`Efectividades.png`). | ⏳ Planificado |
+| **Fase 4** | **QoL Avanzado & Diagnóstico** | • Snapshot rápido pre-combate.<br>• Historial de textos recientes (Text Log).<br>• Bordes temáticos Bezel Art en modo 4:3.<br>• Auto-diagnóstico de integridad de archivos (Health Checker). | ⏳ Planificado |
+| **Fase 5** | **Mods & Optimización Profunda** | • Soporte de packs en `custom_assets/` (música y gifs).<br>• Crash Dump modal en 1 toque y soporte de parches ligeros.<br>• Compilación JIT con Cranelift para rutinas de físicas/IA. | ⏳ Planificado |
