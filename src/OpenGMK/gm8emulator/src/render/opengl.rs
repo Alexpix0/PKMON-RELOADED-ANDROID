@@ -235,6 +235,7 @@ pub struct RendererImpl {
     overlay: Option<Overlay>,
 }
 
+#[derive(Clone, Copy)]
 struct SkinSlot {
     name: &'static str,
     uv: [f32; 4],
@@ -770,14 +771,12 @@ impl RendererImpl {
     }
 
     fn setup_frame(&mut self, clear_colour: Colour) {
-        unsafe {
-            let width = self.framebuffer.width as i32;
-            let height = self.framebuffer.height as i32;
-            // set view
-            self.set_view(0, 0, width, height, 0.0, 0, 0, width, height);
-            // clear screen
-            self.clear_view(clear_colour, 1.0);
-        }
+        let width = self.framebuffer.width as i32;
+        let height = self.framebuffer.height as i32;
+        // set view
+        self.set_view(0, 0, width, height, 0.0, 0, 0, width, height);
+        // clear screen
+        self.clear_view(clear_colour, 1.0);
     }
 
     fn get_rect_mut(&mut self, id: AtlasRef) -> Option<&mut AtlasRect> {
@@ -1225,18 +1224,8 @@ fn push_text(out: &mut Vec<f32>, ww: f32, wh: f32, text: &str, cx: f32, cy: f32,
 impl RendererImpl {
     /// Builds (once) the tiny program used to draw the touch controls over the frame.
     fn overlay_program(&mut self) -> Overlay {
-        if let Some(o) = &self.overlay {
-            return Overlay {
-                program: o.program,
-                vao: o.vao,
-                vbo: o.vbo,
-                white: o.white,
-                skin: o.skin,
-                slots: o.slots,
-                loc_tex: o.loc_tex,
-                party: o.party,
-                party_version: o.party_version,
-            }
+        if let Some(o) = self.overlay {
+            return o;
         }
         unsafe {
             let vs_src = b"#version 300 es\nlayout(location=0) in vec2 a_pos;\nlayout(location=1) in vec4 a_col;\nlayout(location=2) in vec2 a_uv;\nout vec4 v_col;\nout vec2 v_uv;\nvoid main(){ gl_Position = vec4(a_pos, 0.0, 1.0); v_col = a_col; v_uv = a_uv; }\0";
