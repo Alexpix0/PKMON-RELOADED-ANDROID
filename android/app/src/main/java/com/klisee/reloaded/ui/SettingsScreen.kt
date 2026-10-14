@@ -249,11 +249,10 @@ fun SettingsScreen(
                                     scope.launch {
                                         val created = repo.createSnapshot(newSnapshotSlot, newSnapshotLabel.trim().ifEmpty { "Snapshot" })
                                         snapshotsList = repo.listSnapshots()
-                                        if (created != null) {
-                                            snackbar.showSnackbar("Punto de retorno guardado (${created.name})")
-                                        } else {
-                                            snackbar.showSnackbar("No se pudo crear el snapshot. Comprueba que el juego esté instalado.")
-                                        }
+                                        created.fold(
+                                            onSuccess = { snapFile -> snackbar.showSnackbar("Punto de retorno guardado (${snapFile.name})") },
+                                            onFailure = { err -> snackbar.showSnackbar("No se pudo crear el snapshot: ${err.message}") }
+                                        )
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
