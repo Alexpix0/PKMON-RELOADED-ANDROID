@@ -73,6 +73,15 @@ extern "C" {
     fn AAudioStream_getSampleRate(stream: *mut c_void) -> i32;
 }
 
+/// Set once the mixer has produced something audible. The launcher waits for this before handing the
+/// screen over: the game paints a small "Loading…" screen well before its first sound.
+static SOUND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether anything has actually been heard yet.
+pub fn sound_started() -> bool {
+    SOUND.load(Ordering::Relaxed)
+}
+
 /// Pulls `num_frames` of interleaved f32 audio out of the mixer. AAudio calls this from its own
 /// real-time thread, so a failed `try_lock` just yields silence instead of blocking that thread.
 extern "C" fn data_callback(
@@ -96,6 +105,10 @@ extern "C" fn data_callback(
             }
         },
         None => buffer.iter_mut().for_each(|x| *x = 0.0),
+    }
+    // Cheap after the first time: the check is skipped once something has been heard.
+    if !SOUND.load(Ordering::Relaxed) && buffer.iter().any(|x| *x != 0.0) {
+        SOUND.store(true, Ordering::Relaxed);
     }
     AAUDIO_CALLBACK_RESULT_CONTINUE
 }

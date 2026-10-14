@@ -556,6 +556,10 @@ impl Game {
 
     pub fn screen_redraw(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
+        // A dialogue redraws from inside its own wait, so the controls' state is refreshed here as
+        // well as once per frame; otherwise the frame loop never comes round during a dialogue.
+        #[cfg(target_os = "android")]
+        self.sync_overlay();
         self.draw()?;
         let (width, height) = self.window_inner_size;
         if self.play_type != PlayType::Record {
@@ -566,6 +570,8 @@ impl Game {
 
     pub fn screen_refresh(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
+        #[cfg(target_os = "android")]
+        self.sync_overlay();
         let (width, height) = self.window_inner_size;
         if self.play_type != PlayType::Record {
             self.renderer.present(width, height, self.scaling);

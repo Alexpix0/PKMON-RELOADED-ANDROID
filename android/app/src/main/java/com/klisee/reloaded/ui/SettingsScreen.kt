@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Save

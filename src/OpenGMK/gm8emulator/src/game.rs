@@ -1919,6 +1919,70 @@ impl Game {
         Ok(Default::default())
     }
 
+    /// Keeps the on-screen controls' idea of the game's state current: which room, and whether a
+    /// dialogue box is open.
+    ///
+    /// Called wherever the game draws, not only once per frame: the game shows a dialogue from
+    /// inside its own wait loop (it calls `screen_redraw` while it waits for a key), so the frame
+    /// loop does not come back round until the dialogue is over, and sampling there would never see
+    /// one.
+    #[cfg(target_os = "android")]
+    pub(crate) fn sync_overlay(&self) {
+        crate::touch_controls::set_room(self.room.id);
+        crate::touch_controls::set_dialogue(self.dialogue_open());
+        crate::touch_controls::set_party(self.party_species());
+    }
+
+    /// Each party slot's stored species value (0 = empty) straight from `global.pkmn1[0..5]`.
+    #[cfg(target_os = "android")]
+    fn party_species(&self) -> [i32; crate::touch_controls::PICKER_SLOTS] {
+        let mut species = [0; crate::touch_controls::PICKER_SLOTS];
+        for (index, slot) in species.iter_mut().enumerate() {
+            *slot = self.global_number(b"pkmn1", index as u32).unwrap_or(0);
+        }
+        species
+    }
+
+    /// Some number in a GML global, if the game has declared it.
+    #[cfg(target_os = "android")]
+    fn global_number(&self, name: &[u8], index: u32) -> Option<i32> {
+        let field_id = self.compiler.find_field_id(name)?;
+        match self.globals.fields.get(&field_id)?.get(index)? {
+            crate::gml::Value::Real(n) => Some(n.into_inner() as i32),
+            _ => None,
+        }
+    }
+
+    /// The id of the modal the game is drawing, or a negative code when it cannot be read:
+    /// -1 nothing open, -2 the variable is unknown to the compiler, -3 not present in the globals.
+    #[cfg(target_os = "android")]
+    fn modal_system(&self) -> i32 {
+        let Some(field_id) = self.compiler.find_field_id(b"drawModalSystem") else {
+            return -2
+        };
+        let Some(field) = self.globals.fields.get(&field_id) else {
+            return -3
+        };
+        let Some(modal) = field.get(0) else {
+            return -1
+        };
+        match modal {
+            crate::gml::Value::Real(n) => n.into_inner() as i32,
+            _ => -4,
+        }
+    }
+
+    /// True while the game is showing one of its dialogue boxes, so the touch overlay can step aside
+    /// and leave a single button to advance it.
+    ///
+    /// The game draws its dialogues (and the rest of its modals) through a script whose id it keeps
+    /// in `global.drawModalSystem`; -1 means nothing is open. 6937 is the box with a portrait, 6949
+    /// the plain one and 6941 the mobile one.
+    #[cfg(target_os = "android")]
+    fn dialogue_open(&self) -> bool {
+        matches!(self.modal_system(), 6937 | 6949 | 6941)
+    }
+
     /// Runs a frame loop and draws the screen. Exits immediately, without waiting for any FPS limitation.
     pub fn frame(&mut self) -> gml::Result<()> {
         // Nothing to draw to while the activity has the window, which is exactly when the app is in
@@ -1947,7 +2011,7 @@ impl Game {
 
         // The touch overlay shows different controls depending on where we are in the game.
         #[cfg(target_os = "android")]
-        crate::touch_controls::set_room(self.room.id);
+        self.sync_overlay();
 
         if self.esc_close_game && self.input.keyboard_lastkey() == input::Button::Escape as u8 {
             self.scene_change = Some(SceneChange::End);

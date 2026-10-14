@@ -17,7 +17,7 @@ val keystoreProperties = Properties().apply {
 // Copy it into jniLibs before packaging, refusing a missing or zeroed-out (unclean shutdown) .so.
 val emulatorSo = rootProject.file("../src/OpenGMK/target/aarch64-linux-android/release/libgm8emulator.so")
 val jniLibDir = layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a")
-val copyEmulatorSo by tasks.registering {
+val copyEmulatorSo = tasks.register("copyEmulatorSo") {
     inputs.file(emulatorSo).withPropertyName("emulatorSo").optional()
     outputs.dir(jniLibDir)
     doLast {
@@ -39,8 +39,8 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.3.1 EX"
+        versionCode = 9
+        versionName = "0.3.2 EX"
         ndk { abiFilters += "arm64-v8a" }
     }
 

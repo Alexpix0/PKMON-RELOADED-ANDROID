@@ -96,7 +96,6 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     var marginY by remember { mutableStateOf(prefs.touchMarginY.toFloat()) }
     var haptics by remember { mutableStateOf(prefs.touchHaptics) }
     var deadzone by remember { mutableStateOf(prefs.touchDeadzone.toFloat()) }
-    var showNumKeys by remember { mutableStateOf(prefs.showNumKeys) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
@@ -111,7 +110,6 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         newMarginY: Int = marginY.toInt(),
         newHaptics: Boolean = haptics,
         newDeadzone: Int = deadzone.toInt(),
-        newShowNumKeys: Boolean = showNumKeys,
     ) {
         bindings = newBindings
         stick = newStick
@@ -121,7 +119,6 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         marginY = newMarginY.toFloat()
         haptics = newHaptics
         deadzone = newDeadzone.toFloat()
-        showNumKeys = newShowNumKeys
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
         prefs.touchOpacity = newOpacity
@@ -130,7 +127,6 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         prefs.touchMarginY = newMarginY
         prefs.touchHaptics = newHaptics
         prefs.touchDeadzone = newDeadzone
-        prefs.showNumKeys = newShowNumKeys
         writeControlsFile(
             filesDir,
             newBindings,
@@ -142,7 +138,6 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
             newMarginY,
             newHaptics,
             newDeadzone,
-            newShowNumKeys,
         )
     }
 
@@ -370,21 +365,11 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                             steps = 7,
                         )
                     }
-
-                    SwitchRow(
-                        icon = Icons.Filled.SportsEsports,
-                        title = "Mostrar botones de atajo (1 a 6)",
-                        subtitle = "Muestra la fila superior de botones numéricos para combate y bayas",
-                        checked = showNumKeys,
-                        items = 1,
-                        index = 0,
-                        onCheckedChange = { store(newShowNumKeys = it) },
-                    )
                 }
             }
 
             Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                TextButton(onClick = { store(emptyMap(), true, 70, 100, 0, 0, true, 35, true) }) {
+                TextButton(onClick = { store(emptyMap(), true, 70, 100, 0, 0, true, 35) }) {
                     Icon(Icons.Filled.RestartAlt, contentDescription = null)
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     Text("Restaurar los controles por defecto")

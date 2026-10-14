@@ -24,6 +24,11 @@ use udon::{
     wav::WavPlayer,
 };
 
+#[cfg(target_os = "android")]
+pub fn sound_started() -> bool {
+    aaudio::sound_started()
+}
+
 pub use self::midi::MidiHandle;
 use self::{
     mixer::{Mixer, MixerHandle},

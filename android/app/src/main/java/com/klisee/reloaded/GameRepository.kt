@@ -445,6 +445,20 @@ class GameRepository(private val context: Context) {
                 metaFile.writeText(meta.toString())
             }
         }
+        // The touch controls' pixel-art artwork ships inside the APK, but the engine can only read
+        // files from its own folder, so every sprite is copied there (a few hundred bytes each,
+        // refreshed on every start so an app update takes effect). Any `<control>.png` dropped in
+        // the assets is picked up.
+        val sprites = runCatching { context.assets.list("")?.filter { it.endsWith(".png", ignoreCase = true) } }
+            .getOrNull()
+            .orEmpty()
+        for (name in sprites) {
+            runCatching {
+                context.assets.open(name).use { input ->
+                    File(files, name).outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
         if (!gameDir.isDirectory) return@withContext
         val target = File(gameDir, "soundfont.sf2")
         if (target.isFile && target.length() > 0) return@withContext

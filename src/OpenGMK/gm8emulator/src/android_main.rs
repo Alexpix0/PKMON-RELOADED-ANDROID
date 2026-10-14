@@ -286,6 +286,16 @@ pub fn haptics_enabled() -> bool {
     HAPTICS_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// The pointer the party wheel is following, if any.
+static WHEEL_PTR: Mutex<Option<i32>> = Mutex::new(None);
+
+/// Sends a key as a quick tap. The engine defers the release to the end of the poll, so the game
+/// still sees it as pressed.
+fn tap_key(key: ramen::input::Key) {
+    android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
+    android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+}
+
 fn jni_vibrate(duration_ms: i64) {
     if !haptics_enabled() {
         return;
@@ -358,17 +368,35 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         joystick_update(x, y);
         return
     }
-    let hit = if w > 0 && h > 0 { crate::touch_controls::hit(x / wf, y / hf) } else { None };
+    let hit = if w > 0 && h > 0 { crate::touch_controls::hit(x / wf, y / hf, wf, hf) } else { None };
     match hit {
         Some(index) => {
-            control_key_down(index);
-            POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
+            if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::PARTY_NAME {
+                // Holding it opens the party wheel instead of pressing a key of its own.
+                crate::touch_controls::set_wheel_open(true);
+                *WHEEL_PTR.lock().unwrap() = Some(id);
+                jni_vibrate(18);
+            } else {
+                control_key_down(index);
+                POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
+            }
         },
         None => mouse_down(id, x, y),
     }
 }
 
 fn pointer_up(id: i32, x: f32, y: f32) {
+    if WHEEL_PTR.lock().unwrap().take() == Some(id) {
+        // The key only goes out now, on the release, and only if a slot was picked. Letting go over
+        // the middle of the wheel, or letting go without moving at all, sends nothing.
+        let selected = crate::touch_controls::wheel_selected();
+        if selected >= 0 {
+            tap_key(crate::touch_controls::PICKER_KEYS[selected as usize]);
+            jni_vibrate(22);
+        }
+        crate::touch_controls::set_wheel_open(false);
+        return
+    }
     if SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).remove(&id) {
         return
     }
@@ -496,9 +524,10 @@ fn joystick_update(x: f32, y: f32) {
     JOYSTICK_STATE.store(state, Ordering::Relaxed);
 
     // Clamp the drawn knob to the ring.
-    let r = crate::touch_controls::JOYSTICK_R * hf;
-    let mut dx = (x - crate::touch_controls::JOYSTICK_CX * wf) / r;
-    let mut dy = (y - crate::touch_controls::JOYSTICK_CY * hf) / r;
+    let (jcx, jcy) = crate::touch_controls::joystick_center();
+    let r = crate::touch_controls::joystick_radius() * hf;
+    let mut dx = (x - jcx * wf) / r;
+    let mut dy = (y - jcy * hf) / r;
     let len = (dx * dx + dy * dy).sqrt();
     if len > 1.0 {
         dx /= len;
@@ -591,8 +620,24 @@ fn translate(event: &InputEvent) {
                     }
                 },
                 MotionAction::Move | MotionAction::HoverMove => {
+                    let wheel_ptr = *WHEEL_PTR.lock().unwrap();
                     for p in motion.pointers() {
-                        if is_joystick_pointer(p.pointer_id()) {
+                        if wheel_ptr == Some(p.pointer_id()) {
+                            let (w, h) = android::window_size();
+                            let (wf, hf) = (w as f32, h as f32);
+                            if wf > 0.0 && hf > 0.0 {
+                                // Only highlight while the finger moves. The key waits for the
+                                // release: in battle it sends the Pokémon out, so it must never go
+                                // out on a touch that was not meant as a pick.
+                                let picked = crate::touch_controls::wheel_item_at(p.x() / wf, p.y() / hf, wf, hf);
+                                let prev = crate::touch_controls::wheel_selected();
+                                let next = picked.map(|i| i as i32).unwrap_or(-1);
+                                if prev != next && next >= 0 {
+                                    jni_vibrate(12);
+                                }
+                                crate::touch_controls::set_wheel_selected(next);
+                            }
+                        } else if is_joystick_pointer(p.pointer_id()) {
                             joystick_update(p.x(), p.y());
                         } else if !pointer_is_control(p.pointer_id()) {
                             android::push_input(ramen::platform::android::InputEvent::PointerMoved { x: p.x(), y: p.y() });
@@ -600,6 +645,9 @@ fn translate(event: &InputEvent) {
                     }
                 },
                 MotionAction::Cancel => {
+                    if WHEEL_PTR.lock().unwrap().take().is_some() {
+                        crate::touch_controls::set_wheel_open(false);
+                    }
                     joystick_release();
                     let ids: Vec<i32> =
                         POINTER_CONTROLS.lock().unwrap().as_ref().map(|m| m.keys().copied().collect()).unwrap_or_default();
@@ -699,6 +747,19 @@ pub fn android_entry(app: AndroidApp) {
     let game_over_thread = game_over.clone();
 
     std::thread::spawn(move || {
+        // The activity asks for landscape in the manifest, so the window is normally already the right
+        // way round; the rotate still takes a moment on some phones. The engine lays its screens out
+        // from the size of the window it is given, and whatever it gets here is what the whole session
+        // keeps, so wait for the landscape window instead of racing it. Bounded, so a phone that never
+        // reports one cannot hang the launch.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        while std::time::Instant::now() < deadline {
+            let (w, h) = android::window_size();
+            if w > h {
+                break
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
         let game_exe = match ensure_game_extracted() {
             Ok(exe) => exe,
             Err(e) => {

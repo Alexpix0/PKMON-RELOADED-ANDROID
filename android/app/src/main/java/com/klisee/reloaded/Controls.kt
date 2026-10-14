@@ -83,7 +83,6 @@ fun writeControlsFile(
     marginY: Int = 0,
     haptics: Boolean = true,
     deadzone: Int = 35,
-    numKeys: Boolean = true,
 ) {
     val text = buildString {
         appendLine("# Escrito por la pantalla de Controles. El emulador lo lee al arrancar.")
@@ -100,7 +99,6 @@ fun writeControlsFile(
         appendLine("margin_y=$marginY")
         appendLine("haptics=${if (haptics) 1 else 0}")
         appendLine("deadzone=$deadzone")
-        appendLine("num_keys=${if (numKeys) 1 else 0}")
     }
     runCatching { File(filesDir, "controls.conf").writeText(text) }
 }

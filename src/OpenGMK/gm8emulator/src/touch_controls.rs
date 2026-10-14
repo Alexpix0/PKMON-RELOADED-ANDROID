@@ -18,7 +18,7 @@
 
 use ramen::input::Key;
 use std::sync::{
-    atomic::{AtomicI32, AtomicU32, Ordering},
+    atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering},
     Mutex,
 };
 
@@ -26,6 +26,8 @@ use std::sync::{
 pub const MENU: u8 = 1;
 pub const WORLD: u8 = 2;
 pub const BATTLE: u8 = 4;
+/// A dialogue box is open: only the button that advances it is shown, so nothing covers the text.
+pub const DIALOG: u8 = 8;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Shape {
@@ -49,6 +51,9 @@ pub enum Label {
 }
 
 pub struct Control {
+    /// Stable name, used as the key when the layout is saved and loaded. Reordering the array of
+    /// controls must not move a player's customised button, so the name is what identifies it.
+    pub name: &'static str,
     pub key: Key,
     pub shape: Shape,
     pub label: Label,
@@ -56,36 +61,113 @@ pub struct Control {
     pub contexts: u8,
 }
 
+/// The joystick is not a button but is customised (and saved) the same way.
+pub const JOYSTICK_NAME: &str = "joystick";
+
 pub const CONTROLS: &[Control] = &[
-    // Party Pokémon 1-6 (battle: pick a Pokémon).
-    Control { key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: BATTLE },
-    Control { key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: BATTLE },
-    Control { key: Key::Alpha3, shape: Shape::Circle { cx: 0.444, cy: 0.055, r: 0.020 }, label: Label::Text("3"), contexts: BATTLE },
-    Control { key: Key::Alpha4, shape: Shape::Circle { cx: 0.516, cy: 0.055, r: 0.020 }, label: Label::Text("4"), contexts: BATTLE },
-    Control { key: Key::Alpha5, shape: Shape::Circle { cx: 0.588, cy: 0.055, r: 0.020 }, label: Label::Text("5"), contexts: BATTLE },
-    Control { key: Key::Alpha6, shape: Shape::Circle { cx: 0.660, cy: 0.055, r: 0.020 }, label: Label::Text("6"), contexts: BATTLE },
     // Menu / misc keys (second row along the top).
-    Control { key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
-    Control { key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
-    Control { key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE },
-    Control { key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE },
-    Control { key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE },
-    Control { key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE },
-    Control { key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE },
-    // Main actions.
-    Control { key: Key::Z, shape: Shape::Circle { cx: 0.930, cy: 0.840, r: 0.034 }, label: Label::Text("Z"), contexts: WORLD | BATTLE },
-    Control { key: Key::X, shape: Shape::Circle { cx: 0.800, cy: 0.868, r: 0.031 }, label: Label::Text("X"), contexts: WORLD | BATTLE },
-    Control { key: Key::C, shape: Shape::Circle { cx: 0.858, cy: 0.635, r: 0.030 }, label: Label::Text("C"), contexts: WORLD | BATTLE },
-    Control { key: Key::V, shape: Shape::Circle { cx: 0.950, cy: 0.665, r: 0.028 }, label: Label::Text("V"), contexts: WORLD | BATTLE },
+    Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
+    Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
+    Control { name: "m", key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE },
+    Control { name: "e", key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE },
+    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE },
+    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE },
+    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE },
+    // Main actions, in the diamond a gamepad's face buttons use: the main one at the bottom, cancel
+    // to the right, and the other two on the left and on top. The cluster is about the size of the
+    // movement joystick and sits at the same height, so the two thumbs fall in the same place.
+    Control { name: "z", key: Key::Z, shape: Shape::Circle { cx: 0.865, cy: 0.851, r: 0.033 }, label: Label::Text("Z"), contexts: WORLD | BATTLE },
+    Control { name: "x", key: Key::X, shape: Shape::Circle { cx: 0.933, cy: 0.700, r: 0.033 }, label: Label::Text("X"), contexts: WORLD | BATTLE },
+    Control { name: "c", key: Key::C, shape: Shape::Circle { cx: 0.797, cy: 0.700, r: 0.033 }, label: Label::Text("C"), contexts: WORLD | BATTLE },
+    Control { name: "v", key: Key::V, shape: Shape::Circle { cx: 0.865, cy: 0.549, r: 0.033 }, label: Label::Text("V"), contexts: WORLD | BATTLE },
     // Secondary.
-    Control { key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE },
-    Control { key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
-    Control { key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD },
-    Control { key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD },
+    Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE },
+    Control { name: "s", key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
+    // Holding this opens the party wheel (see below): each slot is one Pokémon of the team.
+    Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
+    Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD },
+    Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD },
     // Menu keys.
-    Control { key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | BATTLE },
-    Control { key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | BATTLE },
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE },
+    // While a dialogue box is open the overlay steps aside and leaves only this, so the text and the
+    // portrait are not buried under buttons. Its position is measured from the game image (not the
+    // window), so it sits on the box whatever the screen's shape is. It sends the key the game
+    // advances dialogues with.
+    Control { name: "dialogo", key: Key::Z, shape: Shape::Circle { cx: 0.940, cy: 0.880, r: 0.024 }, label: Label::Text("OK"), contexts: DIALOG },
 ];
+
+pub fn effective_shape(index: usize) -> Shape {
+    let c = &CONTROLS[index];
+    if c.contexts & DIALOG != 0 {
+        return c.shape;
+    }
+    let s = scale();
+    let mx = margin_x();
+    let my = margin_y();
+
+    let (mut cx, mut cy) = match c.shape {
+        Shape::Circle { cx, cy, .. } => (cx, cy),
+        Shape::Rect { cx, cy, .. } => (cx, cy),
+    };
+
+    if cx > 0.55 {
+        cx -= mx;
+    } else if cx < 0.45 {
+        cx += mx;
+    }
+
+    if cy > 0.50 {
+        cy -= my;
+    }
+
+    match c.shape {
+        Shape::Circle { r, .. } => Shape::Circle { cx, cy, r: r * s },
+        Shape::Rect { w, h, .. } => Shape::Rect { cx, cy, w: w * s, h: h * s },
+    }
+}
+
+/// The rectangle the game image occupies in the window (normalised), as the renderer last presented
+/// it. Dialogue controls are placed inside it, so the button lands on the dialogue box whatever the
+/// screen's shape is and whichever scaling mode is in use.
+static VIEWPORT: Mutex<(f32, f32, f32, f32)> = Mutex::new((0.0, 0.0, 1.0, 1.0));
+
+pub fn set_viewport(x: f32, y: f32, w: f32, h: f32) {
+    *VIEWPORT.lock().unwrap() = (x, y, w, h);
+}
+
+fn viewport() -> (f32, f32, f32, f32) {
+    *VIEWPORT.lock().unwrap()
+}
+
+/// A control's shape in window coordinates. Most controls are placed relative to the window (they
+/// live around its edges, where the thumbs are); the dialogue button is placed relative to the game
+/// image, because it has to sit on the dialogue box the game draws.
+pub fn window_shape(index: usize) -> Shape {
+    let shape = effective_shape(index);
+    if CONTROLS[index].contexts & DIALOG == 0 {
+        return shape
+    }
+    let (vx, vy, vw, vh) = viewport();
+    match shape {
+        Shape::Circle { cx, cy, r } => Shape::Circle { cx: vx + cx * vw, cy: vy + cy * vh, r: r * vw },
+        Shape::Rect { cx, cy, w, h } => Shape::Rect { cx: vx + cx * vw, cy: vy + cy * vh, w: w * vw, h: h * vh },
+    }
+}
+
+/// The inverse: a point in window coordinates, expressed in a control's own coordinates.
+pub fn control_point(index: usize, nx: f32, ny: f32) -> (f32, f32) {
+    if CONTROLS[index].contexts & DIALOG == 0 {
+        return (nx, ny)
+    }
+    let (vx, vy, vw, vh) = viewport();
+    ((nx - vx) / vw.max(0.0001), (ny - vy) / vh.max(0.0001))
+}
+
+/// Looks a control up by its name.
+pub fn index_of(name: &str) -> Option<usize> {
+    CONTROLS.iter().position(|control| control.name == name)
+}
 
 /// The room the emulator reported, or -1 before the first frame.
 static ROOM: AtomicI32 = AtomicI32::new(-1);
@@ -96,26 +178,37 @@ pub fn set_room(room: i32) {
     log_state_change(room);
 }
 
+/// Whether the game has one of its dialogue boxes open. Reported every frame by the engine, which
+/// reads it from the game's own modal state; the overlay then leaves a single button.
+static DIALOGUE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_dialogue(open: bool) {
+    let was = DIALOGUE.swap(open, Ordering::Relaxed);
+    if was != open {
+        eprintln!("[overlay] dialogo {}", if open { "abierto: solo el boton de avanzar" } else { "cerrado" });
+    }
+}
+
+pub fn dialogue_open() -> bool {
+    DIALOGUE.load(Ordering::Relaxed)
+}
+
 /// Records every change of state, which is what decides which on-screen controls exist.
-///
-/// A report of buttons missing, or in the wrong place, cannot be chased without knowing what the
-/// overlay believed at the time: which room, which group of controls it picked, and how many of
-/// them it counted as active. It only writes when something changes, so it stays quiet while
-/// playing.
 #[cfg(target_os = "android")]
 fn log_state_change(room: i32) {
     static LAST: AtomicU32 = AtomicU32::new(u32::MAX);
+    static LAST_ROOM: AtomicI32 = AtomicI32::new(i32::MIN);
     let group = u32::from(current_context());
+    let room_changed = LAST_ROOM.swap(room, Ordering::Relaxed) != room;
     if LAST.swap(group, Ordering::Relaxed) == group {
+        if room_changed {
+            eprintln!("[overlay] sala {} -> grupo {}", room, group);
+        }
         return
     }
     let (window_w, window_h) = ramen::platform::android::window_size();
     let active = (0..CONTROLS.len()).filter(|index| is_active(*index)).count();
     eprintln!("[overlay] sala {} -> grupo {} | ventana {}x{} | {} de {} activos", room, group, window_w, window_h, active, CONTROLS.len());
-    // Every control, one per line, so a report of "buttons missing" can be checked against what the
-    // overlay actually decided: which key, where it was put, how big it is, and whether it counted
-    // as visible. Normalised coordinates are fractions of the window, so they can be compared
-    // between devices of any size.
     for (index, control) in CONTROLS.iter().enumerate() {
         let (at, size) = match control.shape {
             Shape::Circle { cx, cy, r } => (format!("{:.3},{:.3}", cx, cy), format!("r={:.3}", r)),
@@ -138,17 +231,21 @@ fn log_state_change(room: i32) {
     }
 }
 
-/// Nothing to report where there is no overlay.
 #[cfg(not(target_os = "android"))]
 fn log_state_change(_room: i32) {}
 
 /// Which group of controls the current game state needs.
 pub fn current_context() -> u8 {
+    // A dialogue box takes over the overlay: only the button that advances it is shown, so the text
+    // and the portrait stay readable.
+    if dialogue_open() {
+        return DIALOG
+    }
     match ROOM.load(Ordering::Relaxed) {
-        // IntroROOM, InicioROOM, MultijugadorMenu, CreditosInicioScreen, OptionsROOM: these screens
-        // are fully clickable (once the game's own click boxes are fixed, see `crate::patches`), so
-        // they need no on-screen controls at all.
-        22 | 30 | 461 | 465 | 466 => MENU,
+        // IntroROOM, InicioROOM, CargarPartida, MultijugadorMenu, CreditosInicioScreen, OptionsROOM:
+        // these screens are fully clickable (once the game's own click boxes are fixed, see
+        // `crate::patches`), so they need no on-screen controls at all.
+        22 | 30 | 43 | 461 | 465 | 466 => MENU,
         // BattleROOM, BattleROOMAqua, BattleROOMLava.
         47 | 191 | 709 => BATTLE,
         // Before the first frame we don't know the room yet; show nothing rather than flashing the
@@ -171,79 +268,23 @@ pub fn pad_active() -> bool {
     PAD_ACTIVE.load(Ordering::Relaxed)
 }
 
-static NUM_KEYS_VISIBLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
-
-pub fn set_num_keys_visible(visible: bool) {
-    NUM_KEYS_VISIBLE.store(visible, Ordering::Relaxed);
-}
-
-pub fn num_keys_visible() -> bool {
-    NUM_KEYS_VISIBLE.load(Ordering::Relaxed)
-}
-
 pub fn is_active(index: usize) -> bool {
-    if pad_active() || CONTROLS[index].contexts & current_context() == 0 {
-        return false;
-    }
-    if index < 6 && !num_keys_visible() {
-        return false;
-    }
-    true
+    !pad_active() && CONTROLS[index].contexts & current_context() != 0
 }
 
 /// The joystick drives the arrow keys, which is how the game's menus (the ones that still show
 /// controls) and the overworld are navigated.
 pub fn joystick_active() -> bool {
-    !pad_active() && current_context() & (WORLD | BATTLE) != 0
+    !pad_active() && joystick_visible() && current_context() & (WORLD | BATTLE) != 0
 }
 
-/// Calculates the effective shape and position of a control accounting for scale and margins.
-pub fn effective_shape(index: usize) -> Option<Shape> {
-    if !is_active(index) {
-        return None;
-    }
-    let c = &CONTROLS[index];
-    let s = scale();
-    let mx = margin_x();
-    let my = margin_y();
-
-    let (mut cx, mut cy) = match c.shape {
-        Shape::Circle { cx, cy, .. } => (cx, cy),
-        Shape::Rect { cx, cy, .. } => (cx, cy),
-    };
-
-    // Lateral margins: controls on the right move inward (left), controls on the left move inward (right).
-    if cx > 0.55 {
-        cx -= mx;
-    } else if cx < 0.45 {
-        cx += mx;
-    }
-
-    // Vertical margins: controls in the lower half move upward.
-    if cy > 0.50 {
-        cy -= my;
-    }
-
-    match c.shape {
-        Shape::Circle { r, .. } => Some(Shape::Circle { cx, cy, r: r * s }),
-        Shape::Rect { w, h, .. } => Some(Shape::Rect { cx, cy, w: w * s, h: h * s }),
-    }
-}
-
-/// Returns the index of the control containing the normalised point, if any.
-pub fn hit(nx: f32, ny: f32) -> Option<usize> {
-    CONTROLS.iter().enumerate().position(|(index, _)| {
-        let Some(shape) = effective_shape(index) else {
-            return false;
-        };
-        match shape {
-            Shape::Circle { cx, cy, r } => {
-                let (dx, dy) = (nx - cx, ny - cy);
-                dx * dx + dy * dy <= r * r
-            },
-            Shape::Rect { cx, cy, w, h } => (nx - cx).abs() <= w / 2.0 && (ny - cy).abs() <= h / 2.0,
-        }
-    })
+/// Returns the index of the control containing the point, if any. The point is normalised, but the
+/// test is done in pixels so the touchable area matches what is drawn on a screen that is not square.
+pub fn hit(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
+    CONTROLS
+        .iter()
+        .enumerate()
+        .position(|(index, _)| is_active(index) && contains(window_shape(index), nx, ny, ww, wh))
 }
 
 static PRESSED: AtomicU32 = AtomicU32::new(0);
@@ -283,12 +324,18 @@ pub fn joystick_dead() -> f32 {
     JOYSTICK_DEAD.load(Ordering::Relaxed) as f32 / 100.0
 }
 
+/// The joystick's centre, in normalised coordinates.
 pub fn joystick_center() -> (f32, f32) {
     (JOYSTICK_CX + margin_x(), JOYSTICK_CY - margin_y())
 }
 
+/// Radius as a fraction of the window height.
 pub fn joystick_radius() -> f32 {
     JOYSTICK_R * scale()
+}
+
+pub fn joystick_visible() -> bool {
+    true
 }
 
 pub fn joystick_hit(nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
@@ -375,3 +422,135 @@ pub fn margin_y() -> f32 {
     MARGIN_Y.load(Ordering::Relaxed) as f32 / 100.0
 }
 
+/// Point-in-shape, in pixels so it matches what is drawn.
+pub fn contains(shape: Shape, nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
+    match shape {
+        Shape::Circle { cx, cy, r } => {
+            let (dx, dy) = ((nx - cx) * ww, (ny - cy) * wh);
+            let radius = r * ww;
+            dx * dx + dy * dy <= radius * radius
+        },
+        Shape::Rect { cx, cy, w, h } => (nx - cx).abs() * ww <= w * ww / 2.0 && (ny - cy).abs() * wh <= h * wh / 2.0,
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Party data. The game keeps it in `global.pkmn1[0..5]` (each slot's species); `game.rs` reads it
+// and drops it here, so the overlay can draw each Pokémon's own sprite in its hexagon.
+
+/// Name of the button that opens the party wheel. It presses no key of its own. It deliberately has
+/// no `pkmn.png` of its own: the honeycomb artwork belongs to the wheel, not to the button.
+pub const PARTY_NAME: &str = "pkmn";
+
+pub const PICKER_SLOTS: usize = 6;
+
+/// The key each slot presses: the game's 1..6.
+pub const PICKER_KEYS: [Key; PICKER_SLOTS] =
+    [Key::Alpha1, Key::Alpha2, Key::Alpha3, Key::Alpha4, Key::Alpha5, Key::Alpha6];
+
+static PARTY_SPECIES: Mutex<Option<[i32; PICKER_SLOTS]>> = Mutex::new(None);
+static PARTY_VERSION: AtomicU64 = AtomicU64::new(0);
+
+pub fn set_party(species: [i32; PICKER_SLOTS]) {
+    let changed = PARTY_SPECIES.lock().unwrap().as_ref() != Some(&species);
+    *PARTY_SPECIES.lock().unwrap() = Some(species);
+    if changed {
+        // The renderer watches this to know when the GIFs under the slots changed.
+        PARTY_VERSION.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+pub fn party_species() -> [i32; PICKER_SLOTS] {
+    PARTY_SPECIES.lock().unwrap().unwrap_or([0; PICKER_SLOTS])
+}
+
+pub fn party_version() -> u64 {
+    PARTY_VERSION.load(Ordering::Relaxed)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Party wheel. Holding the selector button opens the team around the middle of the screen, like the
+// weapon wheel in a certain game: slide towards the one you want and let go. Each step sends the key
+// the game uses to pick, so its own screen highlights the same one as you move.
+
+static WHEEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static WHEEL_SEL: AtomicI32 = AtomicI32::new(-1);
+
+pub fn wheel_open() -> bool {
+    WHEEL.load(Ordering::Relaxed)
+}
+
+pub fn wheel_selected() -> i32 {
+    WHEEL_SEL.load(Ordering::Relaxed)
+}
+
+pub fn set_wheel_open(open: bool) {
+    WHEEL.store(open, Ordering::Relaxed);
+    if !open {
+        WHEEL_SEL.store(-1, Ordering::Relaxed);
+    }
+}
+
+pub fn set_wheel_selected(index: i32) {
+    WHEEL_SEL.store(index, Ordering::Relaxed);
+}
+
+/// The wheel's centre, in pixels: the middle of the screen, since the honeycomb needs the room.
+pub fn wheel_center(ww: f32, wh: f32) -> (f32, f32) {
+    (ww * 0.5, wh * 0.5)
+}
+
+/// How far out the slots sit, in pixels: the honeycomb is three of these wide.
+pub fn wheel_radius(ww: f32, wh: f32) -> f32 {
+    ww.min(wh) * 0.21
+}
+
+/// Where each of the honeycomb's six slots sits, taken from the shape of the artwork (79x74). A
+/// honeycomb of seven hexagons is 2(1+√3) radii wide and 5 radii tall, so its hexagons have a
+/// circumradius of 79/2/(1+√3) ≈ 14.5: each side slot sits √3 radii out and each diagonal
+/// (√3/2, 1.5) radii out. Horizontal offsets are fractions of the width, vertical of the height,
+/// which is how the renderer scales it.
+const WHEEL_OFFSETS: [(f32, f32); PICKER_SLOTS] = [
+    (-0.159, -0.293), // up-left
+    (0.159, -0.293),  // up-right
+    (-0.317, 0.0),    // left
+    (0.317, 0.0),     // right
+    (-0.159, 0.293),  // down-left
+    (0.159, 0.293),   // down-right
+];
+
+/// How far a slot's centre sits from the selector's, as a fraction of the artwork's half-width. The
+/// renderer sizes the artwork with this so its hexagons land exactly on the slots.
+pub const SELECTOR_SLOT_DISTANCE: f32 = 0.634;
+
+/// The artwork is very slightly wider than it is tall; the renderer keeps that when scaling it.
+pub const SELECTOR_ASPECT: f32 = 74.0 / 79.0;
+
+/// The centre of one of the wheel's slots, in pixels.
+pub fn wheel_item_center(index: usize, ww: f32, wh: f32) -> (f32, f32) {
+    let (cx, cy) = wheel_center(ww, wh);
+    let half = wheel_radius(ww, wh) / SELECTOR_SLOT_DISTANCE;
+    let (fx, fy) = WHEEL_OFFSETS[index];
+    // The artwork is scaled by its width, so its vertical distances have to follow the same squeeze.
+    (cx + fx * 2.0 * half, cy + fy * 2.0 * half * SELECTOR_ASPECT)
+}
+
+/// Which slot the finger is pointing at, once it is far enough from the middle.
+pub fn wheel_item_at(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
+    let (cx, cy) = wheel_center(ww, wh);
+    let half = wheel_radius(ww, wh) / SELECTOR_SLOT_DISTANCE;
+    let (fx, fy) = ((nx * ww - cx) / (2.0 * half), (ny * wh - cy) / (2.0 * half * SELECTOR_ASPECT));
+    if fx * fx + fy * fy < 0.10 {
+        return None
+    }
+    let mut best = None;
+    let mut closest = f32::MAX;
+    for (index, (ox, oy)) in WHEEL_OFFSETS.iter().enumerate() {
+        let apart = (fx - ox).powi(2) + (fy - oy).powi(2);
+        if apart < closest {
+            closest = apart;
+            best = Some(index);
+        }
+    }
+    best
+}

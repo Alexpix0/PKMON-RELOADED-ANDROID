@@ -224,5 +224,32 @@ El APK se genera en: `android/app/build/outputs/apk/release/app-release.apk`.
 * **Archivos:** [`Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt), [`SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
 * **Mejora:** Nuevo ajuste de consumo para mantener el procesador y la batería en rangos óptimos de temperatura durante sesiones prolongadas en dispositivos con chips MediaTek Helio.
 
+---
+
+## 10. Versión 0.3.2 EX — Rueda de Equipo Pokémon (SEL), Rediseño de Controles y Fixes CI (Alexpix0 / Armando)
+
+* **Versión oficial:** `versionCode = 9`, `versionName = "0.3.2 EX"`.
+
+### A. Nuevo Selector de Equipo Radial (Botón SEL en Combate)
+* **Archivos:** [`touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs), [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs), [`opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs), [`game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs), [`kernel.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/kernel.rs)
+* **Mejora:** Sustitución definitiva de los botones numéricos 1 al 6 por un selector circular ergonómico (botón `SEL`). Al mantener presionado `SEL` durante el combate, se despliega una rueda con los seis Pokémon del equipo activo. Cada ranura dibuja su hexágono y el sprite original extraído dinámicamente de la memoria del juego (`global.pkmn1`..`6`). La selección se realiza deslizando el dedo con respuesta háptica y el cambio de Pokémon solo se ejecuta al soltar la pantalla.
+
+### B. Rediseño Completo de Controles y Botón de Diálogo Dinámico
+* **Archivos:** [`touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs), [`android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+* **Mejora:** Botones principales alineados en disposición diamante para un alcance pulgar natural (`Z`, `X`, `C`, `V`). Integración de modo diálogo contextual: cuando se activa un diálogo en el juego (`global.drawModalSystem`), aparece automáticamente un botón de avance rápido posicionado y centrado sobre el cuadro de texto.
+
+### C. Nuevas Texturas Pixel-Art en los Controles Táctiles
+* **Archivos:** [`assets/`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/assets), [`GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt), [`opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+* **Mejora:** 13 nuevos assets pixel-art de alta fidelidad: joystick virtual texturizado con base (`joystick-base.png`) y perilla móvil (`joystick-knob.png`), botones `OK` (`return.png`) y `ESC` (`escape.png`) con las texturas del juego de pausa y salir, botón de diálogo (`dialogo.png`), y marcos hexágonales de selección (`seleccionarpokemon.png`, `bordeseleccionar.png`). Extracción automática en arranque sin dependencias externas.
+
+### D. Corrección de Compilación CI en GitHub Actions y Modernización Gradle
+* **Archivos:** [`SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt), [`build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts), [`gradle.properties`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/gradle.properties), [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+* **Corrección:**
+  - Solucionado el error de compilación Kotlin en CI `Unresolved reference 'Memory'` mediante la adición de la importación requerida de la extensión de Compose.
+  - Actualizado el registro de tareas en `build.gradle.kts` a la API recomendada `tasks.register("copyEmulatorSo")` eliminando advertencias de Gradle 9.8+.
+  - Eliminado el parámetro obsoleto `android.defaults.buildfeatures.buildconfig` de `gradle.properties`.
+  - Actualizado el pipeline de GitHub Actions para publicar el artefacto como `pokemon-reloaded-0.3.2-EX-release`.
+
+
 
 
