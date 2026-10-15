@@ -570,6 +570,28 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 | [`android/app/src/main/res/drawable/`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/res/drawable/) y `mipmap-*/` | Activos del nuevo icono oficial 3D adaptativo de alta resolución |
 | [`ROADMAP-0.4.0-EX.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.4.0-EX.md) | Cierre definitivo de la Fase 5 y finalización del 100% del Roadmap v0.4.0 EX |
 
+---
+
+## 13. Hotfix Crítico: Motor de Importación Resiliente y Auto-Sanación de Almacenamiento (Snapdragon 865+ / Android 11–14)
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 12`, `versionName = "0.4.0 EX"`.
+* **Archivos afectados:** [`GameRepository.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameRepository.kt), [`HomeScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/HomeScreen.kt), [`AboutScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/AboutScreen.kt), [`build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts).
+
+### Problemas Solucionados
+1. **Falso fallo por discrepancia de tamaño en `copyFromUri`:**
+   En Android 11-14 (Samsung OneUI, Xiaomi MIUI/HyperOS, Snapdragon 865+), `OpenableColumns.SIZE` a menudo difiere del número exacto de bytes leídos por diferencias de bloques (4KB) o cabeceras virtuales. La comprobación estricta `size != expected` abortaba la copia tirando una excepción. Ahora se valida que el archivo tenga un tamaño mínimo razonable (>= 1MB) y posea la firma mágica ZIP `PK\x03\x04`.
+2. **Extracción ultrarrápida y segura con `ZipFile` local:**
+   Se implementó extracción nativa basada en `java.util.zip.ZipFile` sobre almacenamiento interno seguro tras el streaming inicial, lo que evita desconexiones por pipes rotos (`EPIPE`/`EBADF`) de Binder/SAF durante la descompresión de más de 34,000 archivos.
+3. **Desenvolvimiento Recursivo y Flexible (`normalizeGameStructure`):**
+   El antiguo método `unwrapSingleFolder` fallaba si el archivo `.zip` contenía archivos adicionales en la raíz (ej. `Leeme.txt`, `_Registro de cambios.txt`, `desktop.ini`, `.DS_Store`). Ahora se realiza una búsqueda de hasta 2 niveles de profundidad para ubicar exactamente la carpeta contenedora del `.exe` y de `data/`, moviendo todo su contenido a la raíz de `gameDir`.
+4. **Normalización de mayúsculas en `data/`:**
+   Dado que los sistemas de archivos de Android (ext4/f2fs) son estrictamente sensibles a mayúsculas y minúsculas, carpetas nombradas `Data` o `DATA` en zips creados en Windows provocaban que el lanzador y OpenGMK no encontraran los assets. Se normaliza automáticamente a `data` en minúsculas.
+5. **Auto-Sanación Instantánea en el Arranque (`autoHealIfNeeded`):**
+   Si el usuario ya contaba con 300MB ocupados por una importación previa que quedó atascada en `game.staging` o en carpetas anidadas dentro de `game/`, al abrir la aplicación el sistema detecta y rescata automáticamente la instalación completa, desbloqueando de inmediato el botón de **"JUGAR"** sin necesidad de volver a importar el juego.
+6. **Limpieza integral en `deleteGame()` y en caso de error:**
+   Tanto en caso de fallo durante la extracción como al seleccionar eliminar juego en Ajustes, se eliminan completamente `game.staging` y `import.zip`, garantizando que no queden archivos huérfanos ocupando almacenamiento.
+
+
 
 
 

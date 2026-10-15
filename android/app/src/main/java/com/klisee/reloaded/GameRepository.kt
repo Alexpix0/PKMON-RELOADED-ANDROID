@@ -42,6 +42,7 @@ class GameRepository(private val context: Context) {
 
     /** The emulator's executable name is not pinned, so it is discovered by extension. */
     fun status(): Status {
+        autoHealIfNeeded()
         val exe = gameDir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
             ?: return Status.Missing
         // A gutted `data` folder is not an install either: the game would start and fail.
@@ -66,6 +67,8 @@ class GameRepository(private val context: Context) {
     /** Frees the extracted game, leaving the launcher ready for another import or download. */
     suspend fun deleteGame() = withContext(Dispatchers.IO) {
         gameDir.deleteRecursively()
+        File(files, "game.staging").deleteRecursively()
+        File(files, "import.zip").delete()
         metaFile.delete()
         Unit
     }
@@ -818,53 +821,55 @@ class GameRepository(private val context: Context) {
         Unit
     }
 
-    /** Imports a zip picked with the system file chooser using zero-copy streaming. */
+    /** Imports a zip picked with the system file chooser using resilient dual-engine processing. */
     suspend fun import(uri: Uri, onProgress: (Int) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            trace("import: inicio de importacion streaming directa desde uri=$uri")
-            val total = contentResolverSize(uri).coerceAtLeast(1L)
-            val pfd = runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
-            val stream = if (pfd != null) {
-                java.io.FileInputStream(pfd.fileDescriptor)
-            } else {
-                context.contentResolver.openInputStream(uri) ?: error("No pude abrir el archivo seleccionado.")
-            }
-            var success = false
+            trace("import: inicio de importacion desde uri=$uri")
+            val temp = File(files, "import.zip")
+            var imported = false
+
+            // Metodo 1 (Principal): Copia segura a almacenamiento local + extraccion nativa ultrarrapida con ZipFile
             try {
-                installFromStream(stream, total, version = null, source = "manual", onProgress = onProgress).getOrThrow()
+                trace("import: copiando zip a almacenamiento seguro temporal...")
+                copyFromUri(uri, temp, onProgress = { onProgress((it / 2).coerceIn(0, 49)) })
+                trace("import: extrayendo archivo zip con motor ZipFile...")
+                installFromZipFile(temp, version = null, source = "manual", onProgress = { onProgress((50 + it / 2).coerceIn(50, 99)) }).getOrThrow()
                 prepare()
-                success = true
+                imported = true
             } catch (e: Throwable) {
-                trace("import: streaming directo fallo (${e.message}); probando modo seguro con copia temporal")
+                trace("import: copia segura o extraccion local fallo (${e.message}); probando modo streaming directo...")
             } finally {
-                runCatching { stream.close() }
-                pfd?.let { runCatching { it.close() } }
+                if (temp.exists()) temp.delete()
             }
 
-            if (!success) {
-                val temp = File(files, "import.zip")
+            // Metodo 2 (Fallback): Streaming directo por si el dispositivo tiene poco espacio temporal libre
+            if (!imported) {
+                val total = contentResolverSize(uri).coerceAtLeast(1L)
+                val stream = context.contentResolver.openInputStream(uri)
+                    ?: error("No pude abrir el archivo seleccionado.")
                 try {
-                    copyFromUri(uri, temp, onProgress)
-                    temp.inputStream().buffered(512 * 1024).use { fileIn ->
-                        installFromStream(fileIn, temp.length(), version = null, source = "manual", onProgress = onProgress).getOrThrow()
-                    }
+                    installFromStream(stream, total, version = null, source = "manual", onProgress = onProgress).getOrThrow()
                     prepare()
+                    imported = true
                 } finally {
-                    temp.delete()
+                    runCatching { stream.close() }
                 }
             }
+
+            onProgress(100)
+            trace("import: importacion completada exitosamente")
         }
     }
 
     /**
-     * Copies the chosen zip into `dest`, tolerating the flaky streams some pickers hand out.
+     * Copies the chosen zip into `dest`, tolerating flaky streams and metadata mismatches.
      */
     private fun copyFromUri(uri: Uri, dest: File, onProgress: (Int) -> Unit) {
         val expected = contentResolverSize(uri)
         var last: Throwable? = null
         for (attempt in 1..3) {
             try {
-                dest.delete()
+                if (dest.exists()) dest.delete()
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     dest.outputStream().buffered(512 * 1024).use { output ->
                         val buffer = ByteArray(512 * 1024)
@@ -874,20 +879,34 @@ class GameRepository(private val context: Context) {
                             if (n < 0) break
                             output.write(buffer, 0, n)
                             copied += n
-                            if (expected > 0) onProgress(((copied * 100) / expected).toInt().coerceIn(0, 99))
+                            if (expected > 0) {
+                                onProgress(((copied * 100) / expected).toInt().coerceIn(0, 99))
+                            }
                         }
                     }
-                } ?: error("No pude abrir el fichero elegido.")
+                } ?: error("No pude abrir el archivo seleccionado.")
+
                 val size = dest.length()
-                if (size == 0L) error("La copia vino vacia.")
-                if (expected > 0 && size != expected) error("Copia incompleta: $size de $expected bytes.")
+                if (size < 1024 * 1024) {
+                    error("El archivo copiado es demasiado pequeño ($size bytes).")
+                }
+
+                // Verify ZIP header magic 'PK' (0x50, 0x4B)
+                RandomAccessFile(dest, "r").use { raf ->
+                    if (raf.length() < 4) error("Archivo vacio o incompleto.")
+                    val b0 = raf.read()
+                    val b1 = raf.read()
+                    if (b0 != 0x50 || b1 != 0x4B) {
+                        error("El archivo no es un archivo ZIP valido.")
+                    }
+                }
                 return
             } catch (e: Throwable) {
                 last = e
-                trace("import: intento $attempt de copiar fallo (${e.message}); reintentando")
+                trace("import: intento $attempt de copiar fallo (${e.message}); reintentando...")
             }
         }
-        throw last ?: error("No pude copiar el zip.")
+        throw last ?: error("No pude copiar el archivo zip.")
     }
 
     /** The size the content provider advertises for a document, or -1 if it does not say. */
@@ -897,7 +916,7 @@ class GameRepository(private val context: Context) {
         } ?: -1L
     }.getOrDefault(-1L)
 
-    /** Downloads a zip from a direct URL and streams directly into installFromStream. */
+    /** Downloads a zip from a direct URL and unpacks into gameDir. */
     suspend fun download(url: String, cookies: String?, onProgress: (Int) -> Unit): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -910,14 +929,116 @@ class GameRepository(private val context: Context) {
             connection.connect()
             if (connection.responseCode !in 200..299) error("El servidor respondio ${connection.responseCode}.")
             val total = connection.contentLengthLong.takeIf { it > 0 } ?: -1L
-            connection.inputStream.use { input ->
-                installFromStream(input, total, version = null, source = "descarga", onProgress = onProgress).getOrThrow()
+            val temp = File(files, "import.zip")
+            try {
+                if (temp.exists()) temp.delete()
+                connection.inputStream.use { input ->
+                    temp.outputStream().buffered(512 * 1024).use { output ->
+                        val buffer = ByteArray(512 * 1024)
+                        var downloaded = 0L
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            output.write(buffer, 0, n)
+                            downloaded += n
+                            if (total > 0) onProgress(((downloaded * 100) / total).toInt().coerceIn(0, 49))
+                        }
+                    }
+                }
+                installFromZipFile(temp, version = null, source = "descarga", onProgress = { onProgress((50 + it / 2).coerceIn(50, 99)) }).getOrThrow()
+                prepare()
+                onProgress(100)
+            } finally {
+                if (temp.exists()) temp.delete()
             }
-            prepare()
         }
     }
 
-    /** Validates, inflates and swaps in a game zip from an input stream with directory caching and high-throughput buffering. */
+    /** Extracts and installs a game directly from a local zip file using ZipFile. */
+    private fun installFromZipFile(
+        zipFile: File,
+        version: String?,
+        source: String,
+        onProgress: (Int) -> Unit
+    ): Result<Unit> = runCatching {
+        val staging = File(files, "game.staging")
+        staging.deleteRecursively()
+        staging.mkdirs()
+
+        try {
+            trace("import: extrayendo desde ${zipFile.name} (${zipFile.length() / (1024 * 1024)} MB)...")
+            ZipFile(zipFile, java.nio.charset.StandardCharsets.ISO_8859_1).use { zip ->
+                val totalEntries = zip.size()
+                val buffer = ByteArray(256 * 1024)
+                var count = 0
+                val createdDirs = HashSet<File>()
+                createdDirs.add(staging)
+                fun ensureDir(dir: File) {
+                    if (createdDirs.add(dir)) dir.mkdirs()
+                }
+
+                val entries = zip.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    val rawName = entry.name.replace('\\', '/')
+                    val cleanName = rawName.replace('\u00A1', 'i').replace('\u00A2', 'o').replace('í', 'i').replace('ó', 'o')
+                    val normalized = cleanName.trimStart('/', '\\')
+                    if (normalized.isEmpty() || normalized == "." || normalized == "./") continue
+
+                    val target = File(staging, normalized)
+                    val stagingCanon = staging.canonicalPath
+                    val targetCanon = target.canonicalPath
+                    if (targetCanon != stagingCanon && !targetCanon.startsWith(stagingCanon + File.separator)) {
+                        trace("import: omitiendo entrada fuera de staging: $rawName")
+                        continue
+                    }
+
+                    if (entry.isDirectory || normalized.endsWith('/')) {
+                        ensureDir(target)
+                    } else {
+                        target.parentFile?.let { ensureDir(it) }
+                        zip.getInputStream(entry).use { input ->
+                            target.outputStream().buffered(256 * 1024).use { output ->
+                                var n = input.read(buffer)
+                                while (n > 0) {
+                                    output.write(buffer, 0, n)
+                                    n = input.read(buffer)
+                                }
+                            }
+                        }
+                    }
+
+                    count++
+                    if (count % 2000 == 0 && totalEntries > 0) {
+                        onProgress(((count * 100) / totalEntries).coerceIn(0, 99))
+                    }
+                }
+            }
+
+            if (!normalizeGameStructure(staging)) {
+                error("El archivo zip no contiene los archivos de Pokemon Reloaded (.exe y carpeta data/).")
+            }
+
+            moveDirectoryContents(staging, gameDir)
+            staging.deleteRecursively()
+
+            val exe = gameDir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+            metaFile.writeText(
+                JSONObject()
+                    .put("version", version ?: (exe?.let { versionFromName(it.name) } ?: ""))
+                    .put("source", source)
+                    .put("installedAt", System.currentTimeMillis())
+                    .put("sizeBytes", gameDir.walkTopDown().filter { it.isFile }.sumOf { it.length() })
+                    .toString(),
+            )
+            onProgress(100)
+        } catch (e: Throwable) {
+            staging.deleteRecursively()
+            throw e
+        }
+    }
+
+    /** Validates, inflates and swaps in a game zip from an input stream with high-throughput buffering. */
     private fun installFromStream(
         stream: java.io.InputStream,
         totalBytes: Long,
@@ -937,73 +1058,80 @@ class GameRepository(private val context: Context) {
             }
         }
 
-        trace("import: extrayendo en streaming directo de alta velocidad...")
-        // StandardCharsets.ISO_8859_1 prevents any malformed charset exceptions on CP437 accents without file rewriting!
-        ZipInputStream(java.io.BufferedInputStream(stream, 512 * 1024), java.nio.charset.StandardCharsets.ISO_8859_1).use { input ->
-            val buffer = ByteArray(512 * 1024)
-            var written = 0L
-            var entries = 0
-            var entry = input.nextEntry
-            while (entry != null) {
-                val rawName = entry.name.replace('\\', '/')
-                // Sanitize non-ASCII accented characters to prevent filesystem incompatibilities
-                val cleanName = rawName.replace('\u00A1', 'i').replace('\u00A2', 'o').replace('í', 'i').replace('ó', 'o')
-                val target = File(staging, cleanName)
-                // Reject zip-slip: entries must stay inside the staging directory.
-                if (!target.canonicalPath.startsWith(staging.canonicalPath + File.separator)) {
-                    error("El zip tiene una ruta no valida: $cleanName")
-                }
-                if (entry.isDirectory) {
-                    ensureDir(target)
-                } else {
-                    target.parentFile?.let { ensureDir(it) }
-                    target.outputStream().buffered(256 * 1024).use { output ->
-                        var n = input.read(buffer)
-                        while (n > 0) {
-                            output.write(buffer, 0, n)
-                            written += n
-                            if (totalBytes > 0) {
-                                onProgress(((written * 100) / totalBytes).toInt().coerceIn(0, 99))
+        try {
+            trace("import: extrayendo en streaming directo...")
+            ZipInputStream(java.io.BufferedInputStream(stream, 512 * 1024), java.nio.charset.StandardCharsets.ISO_8859_1).use { input ->
+                val buffer = ByteArray(512 * 1024)
+                var written = 0L
+                var entries = 0
+                var entry = input.nextEntry
+                while (entry != null) {
+                    val rawName = entry.name.replace('\\', '/')
+                    val cleanName = rawName.replace('\u00A1', 'i').replace('\u00A2', 'o').replace('í', 'i').replace('ó', 'o')
+                    val normalized = cleanName.trimStart('/', '\\')
+                    if (normalized.isEmpty() || normalized == "." || normalized == "./") {
+                        input.closeEntry()
+                        entry = input.nextEntry
+                        continue
+                    }
+
+                    val target = File(staging, normalized)
+                    val stagingCanon = staging.canonicalPath
+                    val targetCanon = target.canonicalPath
+                    if (targetCanon != stagingCanon && !targetCanon.startsWith(stagingCanon + File.separator)) {
+                        trace("import: omitiendo ruta fuera de staging: $rawName")
+                        input.closeEntry()
+                        entry = input.nextEntry
+                        continue
+                    }
+
+                    if (entry.isDirectory || normalized.endsWith('/')) {
+                        ensureDir(target)
+                    } else {
+                        target.parentFile?.let { ensureDir(it) }
+                        target.outputStream().buffered(256 * 1024).use { output ->
+                            var n = input.read(buffer)
+                            while (n > 0) {
+                                output.write(buffer, 0, n)
+                                written += n
+                                if (totalBytes > 0) {
+                                    onProgress(((written * 100) / totalBytes).toInt().coerceIn(0, 99))
+                                }
+                                n = input.read(buffer)
                             }
-                            n = input.read(buffer)
                         }
                     }
+                    input.closeEntry()
+                    entries++
+                    if (entries % 5000 == 0) {
+                        trace("import: extraidas $entries entradas (${written / (1024 * 1024)} MB)")
+                    }
+                    entry = input.nextEntry
                 }
-                input.closeEntry()
-                entries++
-                if (entries % 5000 == 0) {
-                    trace("import: extraidas $entries entradas (${written / (1024 * 1024)} MB)")
-                }
-                entry = input.nextEntry
+                trace("import: extraccion en streaming terminada ($entries entradas, ${written / (1024 * 1024)} MB)")
             }
-            trace("import: extraccion en streaming terminada ($entries entradas, ${written / (1024 * 1024)} MB)")
-        }
 
-        // A zip of the game folder keeps it one level down, and the emulator wants it at the root.
-        unwrapSingleFolder(staging)
-        trace("import: primer nivel de ${staging.name} = ${staging.listFiles()?.joinToString { it.name } ?: "vacio"}")
+            if (!normalizeGameStructure(staging)) {
+                error("El zip no trae el .exe y la carpeta data/.")
+            }
 
-        if (staging.listFiles()?.none { it.isFile && it.extension.equals("exe", ignoreCase = true) } != false ||
-            !File(staging, "data").isDirectory
-        ) {
+            moveDirectoryContents(staging, gameDir)
             staging.deleteRecursively()
-            error("El zip no trae el .exe y la carpeta data/.")
-        }
 
-        gameDir.deleteRecursively()
-        if (!staging.renameTo(gameDir)) {
+            val exe = gameDir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+            metaFile.writeText(
+                JSONObject()
+                    .put("version", version ?: (exe?.let { versionFromName(it.name) } ?: ""))
+                    .put("source", source)
+                    .put("installedAt", System.currentTimeMillis())
+                    .put("sizeBytes", gameDir.walkTopDown().filter { it.isFile }.sumOf { it.length() })
+                    .toString(),
+            )
+            onProgress(100)
+        } catch (e: Throwable) {
             staging.deleteRecursively()
-            error("No pude mover el juego a su carpeta definitiva.")
+            throw e
         }
-        metaFile.writeText(
-            JSONObject()
-                .put("version", version ?: "")
-                .put("source", source)
-                .put("installedAt", System.currentTimeMillis())
-                .put("sizeBytes", gameDir.walkTopDown().filter { it.isFile }.sumOf { it.length() })
-                .toString(),
-        )
-        onProgress(100)
     }
 
     /** Cheap structural check before doing the expensive extraction. */
@@ -1155,23 +1283,148 @@ class GameRepository(private val context: Context) {
     }
 
     /**
-     * Moves the contents of a lone top-level folder up to `staging`.
-     *
-     * A zip made by compressing the game folder keeps the game one level down, and the emulator
-     * wants it at the root: refusing those is what made importing fail for most people. It only
-     * acts when that folder really looks like the game, and does nothing when the top level holds
-     * several things, because then there is no telling which one is the game.
+     * Automatically attempts to recover existing installs where files may be trapped in
+     * game.staging or nested inside subdirectories of gameDir.
      */
-    private fun unwrapSingleFolder(staging: File) {
-        val top = staging.listFiles()?.filter { it.name != "__MACOSX" && !it.name.startsWith(".") } ?: return
-        val only = top.singleOrNull()?.takeIf { it.isDirectory } ?: return
-        val inner = only.listFiles()?.toList().orEmpty()
-        val hasExe = inner.any { it.isFile && it.extension.equals("exe", ignoreCase = true) }
-        val hasData = inner.any { it.isDirectory && it.name == "data" }
-        if (!hasExe || !hasData) return
-        for (child in inner) {
-            if (!child.renameTo(File(staging, child.name))) return
+    private fun autoHealIfNeeded() {
+        runCatching {
+            val staging = File(files, "game.staging")
+            val tempZip = File(files, "import.zip")
+
+            // Case 1: Check if gameDir has nested folders or uppercase Data
+            if (gameDir.isDirectory && (gameDir.listFiles()?.isNotEmpty() == true)) {
+                normalizeGameStructure(gameDir)
+            }
+
+            val currentExe = gameDir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+            val currentData = File(gameDir, "data")
+            var isValid = currentExe != null && currentData.isDirectory && (currentData.listFiles()?.size ?: 0) >= 5
+
+            // Case 2: gameDir is empty or incomplete, but game.staging has files
+            if (!isValid && staging.isDirectory && (staging.listFiles()?.isNotEmpty() == true)) {
+                if (normalizeGameStructure(staging)) {
+                    trace("status: autoHeal rescatando juego valido desde game.staging a gameDir")
+                    moveDirectoryContents(staging, gameDir)
+                    staging.deleteRecursively()
+                    isValid = true
+                }
+            }
+
+            // Case 3: Once valid, clean up lingering temp files and ensure metadata exists
+            if (isValid) {
+                if (staging.exists()) staging.deleteRecursively()
+                if (tempZip.exists()) tempZip.delete()
+
+                val exe = gameDir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+                if (!metaFile.exists() && exe != null) {
+                    metaFile.writeText(
+                        JSONObject()
+                            .put("version", versionFromName(exe.name) ?: "")
+                            .put("source", "recuperado")
+                            .put("installedAt", System.currentTimeMillis())
+                            .put("sizeBytes", gameDir.walkTopDown().filter { it.isFile }.sumOf { it.length() })
+                            .toString()
+                    )
+                }
+            }
         }
-        only.delete()
+    }
+
+    /**
+     * Moves all files and directories from [src] to [dst], handling overwrites safely.
+     */
+    private fun moveDirectoryContents(src: File, dst: File) {
+        if (!dst.exists()) dst.mkdirs()
+        src.listFiles()?.forEach { child ->
+            val target = File(dst, child.name)
+            if (target.exists()) target.deleteRecursively()
+            if (!child.renameTo(target)) {
+                if (child.isDirectory) {
+                    child.copyRecursively(target, overwrite = true)
+                    child.deleteRecursively()
+                } else {
+                    child.copyTo(target, overwrite = true)
+                    child.delete()
+                }
+            }
+        }
+    }
+
+    /**
+     * Normalizes the game folder structure so that the .exe and data/ folder
+     * are located directly at the root of [root], handling nested folders,
+     * accompanying files (Leeme.txt, etc.), and casing differences (Data -> data).
+     */
+    private fun normalizeGameStructure(root: File): Boolean {
+        if (!root.isDirectory) return false
+
+        // 1. Check if root already has .exe and data/
+        var exeFile = root.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+        var dataFolder = root.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("data", ignoreCase = true) }
+
+        // 2. If not found at root, search subdirectories (up to depth 2)
+        if (exeFile == null || dataFolder == null) {
+            val candidateDirs = mutableListOf<File>()
+            root.listFiles()?.filter { it.isDirectory && it.name != "__MACOSX" && !it.name.startsWith(".") }?.forEach { sub1 ->
+                candidateDirs.add(sub1)
+                sub1.listFiles()?.filter { it.isDirectory && it.name != "__MACOSX" && !it.name.startsWith(".") }?.forEach { sub2 ->
+                    candidateDirs.add(sub2)
+                }
+            }
+
+            for (cand in candidateDirs) {
+                val candExe = cand.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+                val candData = cand.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("data", ignoreCase = true) }
+                if (candExe != null && candData != null) {
+                    trace("import: encontrado juego anidado en ${cand.relativeTo(root)}; desenvolviendo a la raiz")
+                    val children = cand.listFiles().orEmpty()
+                    for (child in children) {
+                        val dest = File(root, child.name)
+                        if (dest.exists()) dest.deleteRecursively()
+                        if (!child.renameTo(dest)) {
+                            if (child.isDirectory) {
+                                child.copyRecursively(dest, overwrite = true)
+                                child.deleteRecursively()
+                            } else {
+                                child.copyTo(dest, overwrite = true)
+                                child.delete()
+                            }
+                        }
+                    }
+                    cand.deleteRecursively()
+                    var parent = cand.parentFile
+                    while (parent != null && parent != root) {
+                        if (parent.listFiles()?.isEmpty() == true) {
+                            parent.delete()
+                        }
+                        parent = parent.parentFile
+                    }
+                    break
+                }
+            }
+        }
+
+        // 3. Normalize data folder name to lowercase "data"
+        val foundData = root.listFiles()?.firstOrNull { it.isDirectory && it.name.equals("data", ignoreCase = true) }
+        if (foundData != null && foundData.name != "data") {
+            val targetData = File(root, "data")
+            if (!targetData.exists()) {
+                val tempRename = File(root, "data_norm_temp_${System.currentTimeMillis()}")
+                if (foundData.renameTo(tempRename)) {
+                    tempRename.renameTo(targetData)
+                }
+            }
+        }
+
+        // 4. Remove system metadata/junk files
+        File(root, "__MACOSX").takeIf { it.exists() }?.deleteRecursively()
+        File(root, ".DS_Store").takeIf { it.exists() }?.delete()
+        File(root, "desktop.ini").takeIf { it.exists() }?.delete()
+        File(root, "Thumbs.db").takeIf { it.exists() }?.delete()
+
+        // 5. Final validation
+        val finalExe = root.listFiles()?.firstOrNull { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+        val finalData = File(root, "data")
+        return finalExe != null && finalData.isDirectory && (finalData.listFiles()?.size ?: 0) >= 5
     }
 }

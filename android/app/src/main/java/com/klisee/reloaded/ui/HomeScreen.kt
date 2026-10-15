@@ -135,7 +135,7 @@ fun HomeScreen(
                             shape = MaterialTheme.shapes.small,
                         ) {
                             Text(
-                                text = "0.3.2 EX",
+                                text = "0.4.0 EX",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
