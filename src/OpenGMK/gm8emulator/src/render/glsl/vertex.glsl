@@ -1,4 +1,6 @@
-#define IS_NAN(v) ((v) != (v))
+bool is_untextured(vec2 tc) {
+    return tc.x < -0.5 || any(isnan(tc)) || tc.x != tc.x || tc.y != tc.y;
+}
 
 
 struct Light {
@@ -47,8 +49,8 @@ void main() {
     frag_atlas_xywh = atlas_xywh;
     frag_blend_flat = vec4(1.0);
 
-    if (IS_NAN(tex_coord)) {
-        frag_tex_coord = vec2(0.0);
+    if (is_untextured(tex_coord)) {
+        frag_tex_coord = vec2(-1000.0);
         frag_blend = blend;
     } else {
         frag_tex_coord = tex_coord;

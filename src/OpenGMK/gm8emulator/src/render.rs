@@ -170,7 +170,7 @@ impl PrimitiveBuilder {
     }
 
     fn push_vertex(&mut self, pos: [f32; 3], tex_coord: [f32; 2], blend: [f32; 4], normal: [f32; 3]) -> &mut Self {
-        let tex_coord = if self.textured { tex_coord } else { [f32::NAN; 2] };
+        let tex_coord = if self.textured { tex_coord } else { [-1000.0, -1000.0] };
         self.push_vertex_raw(Vertex { pos, tex_coord, blend, normal, atlas_xywh: self.atlas_ref.into() });
         self
     }

@@ -35,7 +35,7 @@ use egl as native_gl;
 /// GLSL version header, plus any prelude GLES needs that desktop GLSL doesn't.
 /// GLSL ES 3.00 has no default float precision in the fragment shader, so it must be declared.
 #[cfg(target_os = "android")]
-const SHADER_VERSION: &str = "#version 300 es\nprecision highp float;\n";
+const SHADER_VERSION: &str = "#version 300 es\nprecision highp float;\nprecision highp int;\n";
 #[cfg(not(target_os = "android"))]
 const SHADER_VERSION: &str = "#version 330 core\n";
 
@@ -775,6 +775,23 @@ impl RendererImpl {
         let height = self.framebuffer.height as i32;
         // set view
         self.set_view(0, 0, width, height, 0.0, 0, 0, width, height);
+        // ensure default blending and depth test states are active for the new frame
+        unsafe {
+            if self.queue_render_state.alpha_blending {
+                self.gl.Enable(gl::BLEND);
+            } else {
+                self.gl.Disable(gl::BLEND);
+            }
+            let (src, dst) = self.queue_render_state.blend_mode;
+            self.gl.BlendFunc(src.into(), dst.into());
+
+            if bool::from(self.queue_render_state.depth_test) {
+                self.gl.Enable(gl::DEPTH_TEST);
+            } else {
+                self.gl.Disable(gl::DEPTH_TEST);
+            }
+            self.gl.Enable(gl::SCISSOR_TEST);
+        }
         // clear screen
         self.clear_view(clear_colour, 1.0);
     }
@@ -1976,9 +1993,22 @@ impl RendererImpl {
             gl.BindBuffer(gl::ARRAY_BUFFER, prev_vbo as u32);
             gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, prev_fbo as u32);
             gl.UseProgram(prev_program as u32);
-            gl.Viewport(0, 0, window_width as i32, window_height as i32);
-            gl.Disable(gl::BLEND);
-            gl.Enable(gl::DEPTH_TEST);
+            gl.Enable(gl::SCISSOR_TEST);
+
+            // Restore the emulator's exact render pipeline states (blend, blend func, depth test)
+            if self.queue_render_state.alpha_blending {
+                gl.Enable(gl::BLEND);
+            } else {
+                gl.Disable(gl::BLEND);
+            }
+            let (src, dst) = self.queue_render_state.blend_mode;
+            gl.BlendFunc(src.into(), dst.into());
+
+            if bool::from(self.queue_render_state.depth_test) {
+                gl.Enable(gl::DEPTH_TEST);
+            } else {
+                gl.Disable(gl::DEPTH_TEST);
+            }
         }
     }
 }
@@ -3147,7 +3177,7 @@ impl RendererTrait for RendererImpl {
         self.setup_queue(self.white_pixel.atlas_id, PrimitiveShape::Point);
         self.vertex_queue.push(Vertex {
             pos: [x as f32, y as f32, self.depth],
-            tex_coord: [f32::NAN; 2],
+            tex_coord: [-1000.0, -1000.0],
             blend: split_colour(colour, alpha),
             atlas_xywh: self.white_pixel.into(),
             normal: [0.0, 0.0, 0.0],

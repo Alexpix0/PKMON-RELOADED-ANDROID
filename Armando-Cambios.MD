@@ -592,9 +592,38 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
    Tanto en caso de fallo durante la extracción como al seleccionar eliminar juego en Ajustes, se eliminan completamente `game.staging` y `import.zip`, garantizando que no queden archivos huérfanos ocupando almacenamiento.
 
 
+---
 
+## 14. Corrección de Renderizado OpenGL en GPUs Antiguas y Gama Baja (Tablets / PowerVR / Mali-T)
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 13`, `versionName = "0.4.0 EX"`.
+* **Archivos afectados:** 
+  - [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  - [`src/OpenGMK/gm8emulator/src/render/glsl/vertex.glsl`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/glsl/vertex.glsl)
+  - [`src/OpenGMK/gm8emulator/src/render/glsl/fragment.glsl`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/glsl/fragment.glsl)
+  - [`src/OpenGMK/gm8emulator/src/render.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render.rs)
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
 
+### Causa Raíz Identificada
+1. **Fuga y Destrucción del Estado del Pipeline en `draw_touch_overlay`:**
+   Al renderizar el HUD de controles táctiles en cada fotograma, el código ejecutaba `gl.Disable(gl::BLEND);` y `gl.Enable(gl::DEPTH_TEST);` antes de devolver el control. Debido a que el estado interno del emulador (`queue_render_state`) conservaba `alpha_blending = true` y `depth_test = false`, la función `update_render_state()` asumía erróneamente que la GPU ya tenía el estado correcto y **jamás volvía a llamar a `gl.Enable(gl::BLEND)` ni a `gl.Disable(gl::DEPTH_TEST)`**.
+   * **Consecuencia de `GL_BLEND` desactivado:** Las formas semi-transparentes (como la sombra elíptica debajo de personajes y Pokémon en el mapa y batalla) no se mezclaban con el fondo.
+   * **Consecuencia de `GL_DEPTH_TEST` forzado en 2D:** En modo 2D de Game Maker, la profundidad Z es idéntica (0.0) para todos los elementos de la capa. Al evaluarse la función de profundidad `GL_LESS`, el test `0.0 < 0.0` fallaba sistemáticamente para cualquier elemento dibujado sobre otro, descartando por completo las barras de estadísticas (rectángulos de `draw_healthbar` / `draw_rectangle`) y los fondos de diálogo / opciones.
+2. **Optimizaciones Fast-Math del Compilador GPU sobre Coordenadas de Textura `NaN`:**
+   Para formas 2D planas sin textura (`ShapeBuilder`), OpenGMK asignaba `[f32::NAN; 2]` como coordenadas de textura y comprobaba `#define IS_NAN(v) ((v) != (v))` en el shader. En GPUs de gama baja (PowerVR Rogue, Mali-T) cuyos controladores activan simplificación algebraica agresiva, `v != v` se doblaba en tiempo de compilación a `false`. Esto provocaba que `frag_tex_coord` recibiera `NaN`, muestreara la textura del atlas fuera de rango o con alpha 0.0, y fuera descartada por el test `if (alpha_test && colour.a <= 0.0) discard;`.
 
-
+### Soluciones Aplicadas
+1. **Restauración Fiel del Pipeline de OpenGL:**
+   Tanto al final de `draw_touch_overlay` como al inicio de cada nuevo fotograma en `setup_frame()`, se restauran explícitamente los estados exactos del emulador:
+   - `GL_BLEND` se sincroniza con `queue_render_state.alpha_blending`.
+   - `glBlendFunc` se restaura con `queue_render_state.blend_mode`.
+   - `GL_DEPTH_TEST` se sincroniza con `queue_render_state.depth_test` (siempre `false` en 2D).
+   - `GL_SCISSOR_TEST` se re-habilita de forma garantizada.
+2. **Ruta Dedicada y Segura para Primitivas Sin Textura en Shaders:**
+   - En `render.rs` y `opengl.rs`, las primitivas sin textura se identifican mediante una coordenada centinela numérica inmune a optimizaciones algebraicas: `[-1000.0, -1000.0]`.
+   - En `vertex.glsl`, la función `is_untextured(tc)` valida `tc.x < -0.5 || any(isnan(tc)) || tc.x != tc.x || tc.y != tc.y`.
+   - En `fragment.glsl`, si `frag_tex_coord.x < -0.5`, se asigna directamente `tex_col = vec4(1.0)` **sin consultar la unidad de texturas del atlas**. Esto elimina cualquier fuga de bordes transparentes, evita llamadas innecesarias a `textureSize()` y asegura un rendimiento 100% fluido y libre de artefactos.
+3. **Declaración Explícita de Precisión en GLES 3.0:**
+   Se añadió `precision highp int;` al preludio de GLSL ES 3.0 para evitar imprecisiones de enteros en drivers antiguos de tablets.
 
 
