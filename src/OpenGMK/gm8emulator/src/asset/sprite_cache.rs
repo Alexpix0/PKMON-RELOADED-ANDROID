@@ -7,8 +7,13 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    },
+    time::Duration,
 };
+
 
 #[derive(Clone)]
 pub struct ParsedFrameTemplate {
@@ -182,3 +187,89 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
 
     Ok(template)
 }
+
+static STREAMER_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Launches the background asset streaming worker thread.
+/// It pre-indexes the directory and progressively warms the most critical battle sprites
+/// (starter sprites, common battle UI elements, etc.) into RAM during idle cycles,
+/// so in-game battles launch with 0 ms storage wait.
+pub fn start_background_asset_streamer(battle_dir: &Path) {
+    if STREAMER_ACTIVE.swap(true, Ordering::SeqCst) {
+        return; // already active
+    }
+
+    let dir = battle_dir.to_path_buf();
+    let _ = std::thread::Builder::new()
+        .name("bg-asset-streamer".into())
+        .spawn(move || {
+            // Step 1: Pre-index directory
+            index_directory(&dir);
+
+            // Step 2: Warm up common battle sprites in the background
+            // Prioritize starter pokemon (p001-p009, p025, etc.) and battle HUD assets
+            let priority_prefixes = [
+                "p001", "p004", "p007", "p025", "p133", "p150", "p151",
+                "p152", "p155", "p158", "p252", "p255", "p258", "p387",
+                "p390", "p393", "p495", "p498", "p501", "p650", "p653", "p656",
+            ];
+
+            // Get a snapshot of known filenames
+            let candidates: Vec<String> = if let Ok(index) = get_path_index().lock() {
+                index.keys().cloned().collect()
+            } else {
+                Vec::new()
+            };
+
+            // Stream priority sprites first with small yield between each
+            for key in &candidates {
+                let is_priority = priority_prefixes.iter().any(|p| key.starts_with(p));
+                if is_priority {
+                    let _ = get_or_load_template(key);
+                    std::thread::sleep(Duration::from_millis(15));
+                }
+            }
+
+            // Next, progressively warm up remaining battle assets up to 256 cached sprites
+            let mut warmed = 0;
+            for key in &candidates {
+                if warmed >= 256 {
+                    break;
+                }
+                let is_cached = if let Ok(cache) = get_cache().lock() {
+                    cache.contains_key(key)
+                } else {
+                    false
+                };
+                if !is_cached {
+                    if get_or_load_template(key).is_ok() {
+                        warmed += 1;
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                }
+            }
+        });
+}
+
+/// Spawns a background task to pre-decode a specific list of sprites into RAM asynchronously
+pub fn prefetch_sprites_async(fnames: Vec<String>) {
+    if fnames.is_empty() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("sprite-prefetcher".into())
+        .spawn(move || {
+            for fname in fnames {
+                let key = normalize_key(&fname);
+                let cached = if let Ok(cache) = get_cache().lock() {
+                    cache.contains_key(&key)
+                } else {
+                    false
+                };
+                if !cached {
+                    let _ = get_or_load_template(&fname);
+                }
+            }
+        });
+}
+

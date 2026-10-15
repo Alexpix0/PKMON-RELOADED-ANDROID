@@ -8,7 +8,7 @@ use crate::{
 };
 use ramen::{connection::Connection, window::Window};
 use rect_packer::DensePacker;
-use std::{any::Any, f64::consts::PI, ffi::{CStr, CString}, mem::{offset_of, size_of}, ptr};
+use std::{any::Any, f64::consts::PI, ffi::{CStr, CString}, fs, mem::{offset_of, size_of}, path::{Path, PathBuf}, ptr};
 
 /// Auto-generated OpenGL bindings from gl_generator
 pub mod gl {
@@ -301,6 +301,68 @@ unsafe fn shader_info_log(gl: &gl::Gl, name: &str, id: GLuint) -> String {
     )
 }
 
+fn get_shader_cache_path() -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
+        PathBuf::from("/data/data/com.klisee.reloaded/files/shader_cache/reloaded_main.bin")
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        std::env::temp_dir().join("pokemon_reloaded_shader_cache").join("reloaded_main.bin")
+    }
+}
+
+unsafe fn try_load_program_binary(gl: &gl::Gl, program: GLuint, cache_path: &Path) -> bool {
+    let mut num_formats: GLint = 0;
+    gl.GetIntegerv(gl::NUM_PROGRAM_BINARY_FORMATS, &mut num_formats);
+    if num_formats <= 0 {
+        return false;
+    }
+
+    let bytes = match fs::read(cache_path) {
+        Ok(b) if b.len() > 4 => b,
+        _ => return false,
+    };
+
+    let format = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as GLenum;
+    let data = &bytes[4..];
+
+    gl.ProgramBinary(program, format, data.as_ptr().cast(), data.len() as GLsizei);
+
+    let mut success = gl::FALSE as GLint;
+    gl.GetProgramiv(program, gl::LINK_STATUS, &mut success);
+    success == gl::TRUE as GLint
+}
+
+unsafe fn try_save_program_binary(gl: &gl::Gl, program: GLuint, cache_path: &Path) {
+    let mut num_formats: GLint = 0;
+    gl.GetIntegerv(gl::NUM_PROGRAM_BINARY_FORMATS, &mut num_formats);
+    if num_formats <= 0 {
+        return;
+    }
+
+    let mut binary_len: GLint = 0;
+    gl.GetProgramiv(program, gl::PROGRAM_BINARY_LENGTH, &mut binary_len);
+    if binary_len <= 0 {
+        return;
+    }
+
+    let mut binary = vec![0u8; binary_len as usize];
+    let mut length: GLsizei = 0;
+    let mut format: GLenum = 0;
+
+    gl.GetProgramBinary(program, binary_len, &mut length, &mut format, binary.as_mut_ptr().cast());
+    if length > 0 {
+        if let Some(parent) = cache_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let mut out = Vec::with_capacity(4 + length as usize);
+        out.extend_from_slice(&(format as u32).to_le_bytes());
+        out.extend_from_slice(&binary[..length as usize]);
+        let _ = fs::write(cache_path, &out);
+    }
+}
+
 fn make_view_matrix(x: f64, y: f64, z: f64, w: f64, h: f64, angle: f64) -> [f32; 16] {
     // Note: sin is negated because it's the same as negating the angle, which is how GM8 does view angles
     let angle = angle.to_radians();
@@ -508,53 +570,68 @@ impl RendererImpl {
                 (gl::DEPTH_COMPONENT16 as GLint, gl::FLOAT)
             };
 
-            // Compile vertex shader
-            let vertex_shader = gl.CreateShader(gl::VERTEX_SHADER);
-            let vertex_source = shader_source(VERTEX_SHADER_SOURCE);
-            gl.ShaderSource(vertex_shader, 1, &(vertex_source.as_ptr().cast()), ptr::null());
-            gl.CompileShader(vertex_shader);
-
-            // Check for vertex shader compile errors
-            let mut success = gl::FALSE as GLint;
-            gl.GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                return Err(shader_info_log(&gl, "vertex", vertex_shader))
-            }
-
-            // Compile fragment shader
-            let fragment_shader = gl.CreateShader(gl::FRAGMENT_SHADER);
-            let fragment_source = shader_source(FRAGMENT_SHADER_SOURCE);
-            gl.ShaderSource(fragment_shader, 1, &(fragment_source.as_ptr().cast()), ptr::null());
-            gl.CompileShader(fragment_shader);
-
-            // Check for fragment shader compile errors
-            gl.GetShaderiv(fragment_shader, gl::COMPILE_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                return Err(shader_info_log(&gl, "fragment", fragment_shader))
-            }
-
-            // Link shaders
             let program = gl.CreateProgram();
-            gl.AttachShader(program, vertex_shader);
-            gl.AttachShader(program, fragment_shader);
-            gl.LinkProgram(program);
+            let cache_path = get_shader_cache_path();
+            let mut binary_loaded = false;
 
-            // Check for linking errors
-            // TODO: generalize this like with shader info logs!! please!!!
-            gl.GetProgramiv(program, gl::LINK_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                let mut info_len: GLint = 0;
-                gl.GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut info_len);
-                let mut info = vec![0u8; info_len as usize];
-                gl.GetProgramInfoLog(program, info_len as GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut GLchar);
-                info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
-                return Err(format!(
-                    "Failed to link shaders, compiler output:\n{}",
-                    std::str::from_utf8(&info).unwrap_or("<INVALID UTF-8>")
-                ))
+            if try_load_program_binary(&gl, program, &cache_path) {
+                binary_loaded = true;
             }
-            gl.DeleteShader(vertex_shader);
-            gl.DeleteShader(fragment_shader);
+
+            if !binary_loaded {
+                // Compile vertex shader
+                let vertex_shader = gl.CreateShader(gl::VERTEX_SHADER);
+                let vertex_source = shader_source(VERTEX_SHADER_SOURCE);
+                gl.ShaderSource(vertex_shader, 1, &(vertex_source.as_ptr().cast()), ptr::null());
+                gl.CompileShader(vertex_shader);
+
+                // Check for vertex shader compile errors
+                let mut success = gl::FALSE as GLint;
+                gl.GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
+                if success != gl::TRUE as GLint {
+                    return Err(shader_info_log(&gl, "vertex", vertex_shader))
+                }
+
+                // Compile fragment shader
+                let fragment_shader = gl.CreateShader(gl::FRAGMENT_SHADER);
+                let fragment_source = shader_source(FRAGMENT_SHADER_SOURCE);
+                gl.ShaderSource(fragment_shader, 1, &(fragment_source.as_ptr().cast()), ptr::null());
+                gl.CompileShader(fragment_shader);
+
+                // Check for fragment shader compile errors
+                gl.GetShaderiv(fragment_shader, gl::COMPILE_STATUS, &mut success);
+                if success != gl::TRUE as GLint {
+                    return Err(shader_info_log(&gl, "fragment", fragment_shader))
+                }
+
+                // Link shaders
+                gl.AttachShader(program, vertex_shader);
+                gl.AttachShader(program, fragment_shader);
+                gl.ProgramParameteri(program, gl::PROGRAM_BINARY_RETRIEVABLE_HINT, gl::TRUE as GLint);
+                gl.LinkProgram(program);
+
+                // Check for linking errors
+                // TODO: generalize this like with shader info logs!! please!!!
+                gl.GetProgramiv(program, gl::LINK_STATUS, &mut success);
+                if success != gl::TRUE as GLint {
+                    let mut info_len: GLint = 0;
+                    gl.GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut info_len);
+                    let mut info = vec![0u8; info_len as usize];
+                    gl.GetProgramInfoLog(program, info_len as GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut GLchar);
+                    info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
+                    return Err(format!(
+                        "Failed to link shaders, compiler output:\n{}",
+                        std::str::from_utf8(&info).unwrap_or("<INVALID UTF-8>")
+                    ))
+                }
+
+                // Cache precompiled binary to disk for 0 ms subsequent launches
+                try_save_program_binary(&gl, program, &cache_path);
+
+                gl.DeleteShader(vertex_shader);
+                gl.DeleteShader(fragment_shader);
+            }
+
 
             // set up vertex array
             let mut vao = 0;

@@ -4392,51 +4392,66 @@ impl Game {
 
     pub fn dot_product(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        let l1 = Real::from(x1.into_inner().hypot(y1.into_inner()));
-        let l2 = Real::from(x2.into_inner().hypot(y2.into_inner()));
-        let (x1, y1) = (x1 / l1, y1 / l1);
-        let (x2, y2) = (x2 / l2, y2 / l2);
-        Ok((x1 * x2 + y1 * y2).into())
+        let (x1, y1, x2, y2) = (x1.into_inner(), y1.into_inner(), x2.into_inner(), y2.into_inner());
+        let l1 = x1.hypot(y1);
+        let l2 = x2.hypot(y2);
+        if l1 == 0.0 || l2 == 0.0 {
+            return Ok(Real::from(0.0).into());
+        }
+        let (nx1, ny1) = (x1 / l1, y1 / l1);
+        let (nx2, ny2) = (x2 / l2, y2 / l2);
+        Ok(Real::from(nx1 * nx2 + ny1 * ny2).into())
     }
 
     pub fn dot_product_3d(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, z1, x2, y2, z2) = expect_args!(args, [real, real, real, real, real, real])?;
+        let (x1, y1, z1) = (x1.into_inner(), y1.into_inner(), z1.into_inner());
+        let (x2, y2, z2) = (x2.into_inner(), y2.into_inner(), z2.into_inner());
         let l1 = (x1 * x1 + y1 * y1 + z1 * z1).sqrt();
         let l2 = (x2 * x2 + y2 * y2 + z2 * z2).sqrt();
-        let (x1, y1, z1) = (x1 / l1, y1 / l1, z1 / l1);
-        let (x2, y2, z2) = (x2 / l2, y2 / l2, z2 / l2);
-        Ok((x1 * x2 + y1 * y2 + z1 * z2).into())
+        if l1 == 0.0 || l2 == 0.0 {
+            return Ok(Real::from(0.0).into());
+        }
+        let (nx1, ny1, nz1) = (x1 / l1, y1 / l1, z1 / l1);
+        let (nx2, ny2, nz2) = (x2 / l2, y2 / l2, z2 / l2);
+        Ok(Real::from(nx1 * nx2 + ny1 * ny2 + nz1 * nz2).into())
     }
 
     pub fn point_distance_3d(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, z1, x2, y2, z2) = expect_args!(args, [real, real, real, real, real, real])?;
-        let xdist = x2 - x1;
-        let ydist = y2 - y1;
-        let zdist = z2 - z1;
-        Ok((xdist * xdist + ydist * ydist + zdist * zdist).sqrt().into())
+        let dx = x2.into_inner() - x1.into_inner();
+        let dy = y2.into_inner() - y1.into_inner();
+        let dz = z2.into_inner() - z1.into_inner();
+        Ok(Real::from((dx * dx + dy * dy + dz * dz).sqrt()).into())
     }
 
     pub fn point_distance(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        let xdist = x2 - x1;
-        let ydist = y2 - y1;
-        Ok((xdist * xdist + ydist * ydist).sqrt().into())
+        let dx = x2.into_inner() - x1.into_inner();
+        let dy = y2.into_inner() - y1.into_inner();
+        Ok(Real::from(dx.hypot(dy)).into())
     }
 
     pub fn point_direction(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        Ok((y1 - y2).arctan2(x2 - x1).to_degrees().rem_euclid(360.into()).into())
+        let dy = y1.into_inner() - y2.into_inner();
+        let dx = x2.into_inner() - x1.into_inner();
+        let deg = dy.atan2(dx).to_degrees().rem_euclid(360.0);
+        Ok(Real::from(deg).into())
     }
 
     pub fn lengthdir_x(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        Ok((dir.to_radians().cos() * len).into())
+        let rad = dir.into_inner().to_radians();
+        Ok(Real::from(rad.cos() * len.into_inner()).into())
     }
 
     pub fn lengthdir_y(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        Ok((dir.to_radians().sin() * -len).into())
+        let rad = dir.into_inner().to_radians();
+        Ok(Real::from(rad.sin() * -len.into_inner()).into())
     }
+
 
     pub fn move_random(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (hsnap, vsnap) = expect_args!(args, [int, int])?;
@@ -4571,10 +4586,13 @@ impl Game {
     pub fn move_towards_point(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x, y, speed) = expect_args!(args, [real, real, real])?;
         let instance = self.room.instance_list.get(context.this);
-        let direction = (instance.y.get() - y).arctan2(x - instance.x.get()).to_degrees();
+        let dy = instance.y.get().into_inner() - y.into_inner();
+        let dx = x.into_inner() - instance.x.get().into_inner();
+        let direction = Real::from(dy.atan2(dx).to_degrees().rem_euclid(360.0));
         instance.set_speed_direction(speed, direction);
         Ok(Default::default())
     }
+
 
     pub fn move_contact(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let direction = expect_args!(args, [any])?;
@@ -4590,8 +4608,9 @@ impl Game {
         };
 
         // Figure out how far we're going to step in x and y between each check
-        let step_x = direction.to_radians().cos();
-        let step_y = -direction.to_radians().sin();
+        let rad = direction.into_inner().to_radians();
+        let step_x = Real::from(rad.cos());
+        let step_y = Real::from(-rad.sin());
 
         // Check if we're already colliding with a solid, do nothing if so
         if self.check_collision_solid(context.this).is_none() {
@@ -4627,8 +4646,9 @@ impl Game {
         };
 
         // Figure out how far we're going to step in x and y between each check
-        let step_x = direction.to_radians().cos();
-        let step_y = -direction.to_radians().sin();
+        let rad = direction.into_inner().to_radians();
+        let step_x = Real::from(rad.cos());
+        let step_y = Real::from(-rad.sin());
 
         // Check if we're already colliding with another instance, do nothing if so
         if self.check_collision_any(context.this).is_none() {
@@ -4664,8 +4684,9 @@ impl Game {
         };
 
         // Figure out how far we're going to step in x and y between each check
-        let step_x = direction.to_radians().cos();
-        let step_y = -direction.to_radians().sin();
+        let rad = direction.into_inner().to_radians();
+        let step_x = Real::from(rad.cos());
+        let step_y = Real::from(-rad.sin());
 
         // Check if we're already outside all solids, do nothing if so
         if self.check_collision_solid(context.this).is_some() {
@@ -4696,8 +4717,10 @@ impl Game {
         };
 
         // Figure out how far we're going to step in x and y between each check
-        let step_x = direction.to_radians().cos();
-        let step_y = -direction.to_radians().sin();
+        let rad = direction.into_inner().to_radians();
+        let step_x = Real::from(rad.cos());
+        let step_y = Real::from(-rad.sin());
+
 
         // Check if we're already not colliding with anything, do nothing if so
         if self.check_collision_any(context.this).is_some() {

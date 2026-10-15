@@ -56,5 +56,6 @@ jobs:
       - name: Subir APK como artefacto descargable
         uses: actions/upload-artifact@v4
         with:
-          name: pokemon-reloaded-0.5.1-release
+          name: pokemon-reloaded-0.6.0-release
           path: android/app/build/outputs/apk/release/*.apk
+

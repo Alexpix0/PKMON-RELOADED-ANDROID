@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-static OPENGL_EXTENSIONS: &[&str] = &[];
+static OPENGL_EXTENSIONS: &[&str] = &["GL_ARB_get_program_binary"];
 
 fn main() -> Result<(), Box<dyn Error>> {
     let out = env::var("OUT_DIR")?;

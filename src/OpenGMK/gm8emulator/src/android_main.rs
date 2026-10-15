@@ -1147,11 +1147,8 @@ pub fn android_entry(app: AndroidApp) {
         let game_parent = game_exe.parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
         provision_soundfont(&game_parent);
         let battle_dir = game_parent.join("data").join("pkmnbattle");
-        let _ = std::thread::Builder::new()
-            .name("sprite_indexer".into())
-            .spawn(move || {
-                crate::asset::sprite_cache::index_directory(&battle_dir);
-            });
+        crate::asset::sprite_cache::start_background_asset_streamer(&battle_dir);
+
         logf(&format!("arrancando {}", game_exe.display()));
         crate::run_game(vec![
             "gm8emulator".to_string(),

@@ -721,4 +721,39 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 7. **Hito de Compilación y Distribución v0.5.1:**
    * Actualizado `versionCode = 16`, `versionName = "0.5.1"` y artefacto de build CI `pokemon-reloaded-0.5.1-release`.
 
+---
+
+## 18. Hito Versión 0.6.0: Inyección de 4 Módulos de Rendimiento Extremo (mimalloc, Binary Shader Cache en Disco, Multithreaded Background Asset Streamer y Fast-Math HLE Plugins)
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 17`, `versionName = "0.6.0"`.
+* **Rama de respaldo creada:** `pre-inyecciones-dll` (preservada en remoto `origin/pre-inyecciones-dll` como punto de restauración seguro).
+* **Archivos afectados:**
+  - [`src/OpenGMK/gm8emulator/Cargo.toml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/Cargo.toml)
+  - [`src/OpenGMK/gm8emulator/src/lib.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/lib.rs)
+  - [`src/OpenGMK/gm8emulator/build.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/build.rs)
+  - [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  - [`src/OpenGMK/gm8emulator/src/asset/sprite_cache.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/asset/sprite_cache.rs)
+  - [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  - [`src/OpenGMK/gm8emulator/src/gml/kernel.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/kernel.rs)
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+  - [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+
+### Inyección de los 4 Módulos de Rendimiento Nativo en v0.6.0:
+1. **Módulo 1: Asignador de Memoria de Alto Rendimiento Microsoft `mimalloc` (`libgm8emulator.so`):**
+   * Se configuró Microsoft `mimalloc` como el asignador global nativo en Rust (`#[global_allocator] static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;`) para compilaciones de Android.
+   * Elimina la contención de bloqueos (mutex locks) y la severa fragmentación de memoria que sufre el asignador estándar de Android libc (Bionic malloc) al crear y destruir millones de valores GML (`Value`), cadenas de texto y vectores por segundo en núcleos de CPU de baja potencia como Cortex-A53.
+2. **Módulo 2: Caché Binario de Shaders en Disco (`glProgramBinary` / `glGetProgramBinary`):**
+   * En `render/opengl.rs`, el motor comprueba la presencia de un blob precompilado (`reloaded_main.bin`) en el almacenamiento local de la app.
+   * Si existe un binario compatible con la GPU del dispositivo, se carga al instante saltándose por completo la compilación de cadenas GLSL en tiempo de ejecución.
+   * Si no existe, compila los shaders con la directiva `GL_PROGRAM_BINARY_RETRIEVABLE_HINT` y guarda el binario en disco, erradicando los tirones de compilación de shaders entre pantallas.
+3. **Módulo 3: Multithreaded Background Asset Streamer (`Background Asset Streamer`):**
+   * En `asset/sprite_cache.rs`, se implementó un pipeline en segundo plano (`start_background_asset_streamer`) ejecutado en núcleos de CPU ociosos (`bg-asset-streamer`).
+   * Indexa los 26,240 sprites `.gmspr` en RAM y precalienta/descomprime de forma progresiva los recursos gráficos más críticos de combate (sprites iniciales de Pokémon, barras de vida, efectos de batalla) mientras el jugador navega por menús o salas previas, de modo que al empezar un combate no se produce latencia de lectura ni descompresión.
+4. **Módulo 4: HLE Native Fast-Math Plugins (Intrínsecos Hardware IEEE f64):**
+   * En `gml/kernel.rs`, las funciones matemáticas más invocadas del juego (`point_distance`, `point_distance_3d`, `point_direction`, `lengthdir_x`, `lengthdir_y`, `dot_product`, `dot_product_3d`, `move_towards_point`, `move_contact_solid`, `move_contact_all`, `move_outside_solid`, `move_outside_all`) se reescribieron para ejecutarse directamente en registros numéricos nativos de la CPU.
+   * Utiliza funciones intrínsecas de hardware (`hypot`, `atan2`, `to_degrees`, `to_radians`, `sin`, `cos`), evitando las llamadas y sobrecarga de conversión de envoltorios intermedios.
+5. **Hito de Compilación y Publicación v0.6.0:**
+   * Actualizado `versionCode = 17`, `versionName = "0.6.0"` y artefacto de build CI `pokemon-reloaded-0.6.0-release`.
+
+
 
