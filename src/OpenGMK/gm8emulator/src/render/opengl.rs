@@ -3005,11 +3005,18 @@ impl RendererTrait for RendererImpl {
         let right: f64 = left + width;
         let bottom: f64 = top + height;
 
-        // get texture corners
-        let tex_left = f64::from(part_x) / f64::from(atlas_ref.w);
-        let tex_top = f64::from(part_y) / f64::from(atlas_ref.h);
-        let tex_right = tex_left + f64::from(part_w) / f64::from(atlas_ref.w);
-        let tex_bottom = tex_top + f64::from(part_h) / f64::from(atlas_ref.h);
+        // get texture corners.
+        // A negative part_w/part_h means the part is mirrored: its size is still |part_w|/|part_h|,
+        // but using the signed value put the UVs *outside* the sprite's atlas cell (0 .. -1), so the
+        // draw sampled whatever sat next to it in the atlas. The flip itself is already handled by
+        // the destination geometry (width/height carry the scale sign), so take the source extent as
+        // positive and just swap the corners each vertex samples.
+        let tex_x0 = f64::from(part_x) / f64::from(atlas_ref.w);
+        let tex_y0 = f64::from(part_y) / f64::from(atlas_ref.h);
+        let tex_x1 = tex_x0 + f64::from(part_w.abs()) / f64::from(atlas_ref.w);
+        let tex_y1 = tex_y0 + f64::from(part_h.abs()) / f64::from(atlas_ref.h);
+        let (tex_left, tex_right) = if part_w < 0.0 { (tex_x1, tex_x0) } else { (tex_x0, tex_x1) };
+        let (tex_top, tex_bottom) = if part_h < 0.0 { (tex_y1, tex_y0) } else { (tex_y0, tex_y1) };
 
         let (tex_left, tex_top, tex_right, tex_bottom) =
             (tex_left as f32, tex_top as f32, tex_right as f32, tex_bottom as f32);

@@ -328,11 +328,13 @@ impl Collider {
             && y >= self.bbox_top as i32
             && x <= self.bbox_right as i32
             && y <= self.bbox_bottom as i32;
-        // A collision map with no pixels at all means the sprite has no precise mask (GM8 then does
+        // A collision map with no set pixel means the sprite has no precise mask (GM8 then does
         // a plain bounding-box collision). This is the case for the game's own `.gmspr` battle
         // sprites, which store a bbox but no pixel mask: treating them as "never collides" is what
-        // made the "Vuelo" effect never land on the Pokémon.
-        if self.data.is_empty() {
+        // made the "Vuelo" effect never land on the Pokémon. The map is not always literally empty:
+        // when the file carries the placeholder 1x1 mask it comes back as a single `false`, so the
+        // "missing mask" test has to look at the pixels, not just at the length.
+        if self.data.iter().all(|&px| !px) {
             within_bbox
         } else {
             within_bbox && self.data.get((y as usize * self.width as usize) + x as usize).copied().unwrap_or(false)

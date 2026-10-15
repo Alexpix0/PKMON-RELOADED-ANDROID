@@ -1932,6 +1932,7 @@ impl Game {
     pub(crate) fn sync_overlay(&self) {
         crate::touch_controls::set_room(self.room.id);
         crate::touch_controls::set_dialogue(self.dialogue_open());
+        crate::touch_controls::set_box_open(self.inside_box());
         crate::touch_controls::set_party(self.party_species());
     }
 
@@ -1983,6 +1984,14 @@ impl Game {
     #[cfg(target_os = "android")]
     pub(crate) fn dialogue_open(&self) -> bool {
         matches!(self.modal_system(), 6937 | 6949 | 6941)
+    }
+
+    /// True while the game's own Pokémon box (the PC storage) is open. There is no single room id to
+    /// look at - the box can be reached from several places - but the game keeps `global.ENCAJA` set
+    /// while it is showing, and that is what tells it apart.
+    #[cfg(target_os = "android")]
+    fn inside_box(&self) -> bool {
+        self.global_number(b"ENCAJA", 0).is_some_and(|value| value != 0)
     }
 
     /// Runs a frame loop and draws the screen. Exits immediately, without waiting for any FPS limitation.

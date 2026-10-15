@@ -76,6 +76,12 @@ pub const LOG_NAME: &str = "log";
 pub const CONTROLS: &[Control] = &[
     // Trigger button for the Drastic-style Radial Quick-Menu (at the bottom center)
     Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.958, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
+    // Number keys (first row along the top). They are for the base game only: in battle those keys
+    // pick a party Pokémon, and that is what the SEL wheel below is for, so showing them there would
+    // only get in the way.
+    Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: WORLD },
+    Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: WORLD },
+    Control { name: "alpha3", key: Key::Alpha3, shape: Shape::Circle { cx: 0.444, cy: 0.055, r: 0.020 }, label: Label::Text("3"), contexts: WORLD },
     // Menu / misc keys (second row along the top).
     Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
@@ -405,6 +411,19 @@ pub fn dialogue_open() -> bool {
     DIALOGUE.load(Ordering::Relaxed)
 }
 
+/// Whether the game's own Pokémon box (the PC storage) is open. Its screen is driven entirely with
+/// the game's own click boxes, so nothing of the overlay is wanted there; the engine reports it from
+/// the game's `ENCAJA` global.
+static BOX_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_box_open(open: bool) {
+    BOX_OPEN.store(open, Ordering::Relaxed);
+}
+
+pub fn box_open() -> bool {
+    BOX_OPEN.load(Ordering::Relaxed)
+}
+
 /// Records every change of state, which is what decides which on-screen controls exist.
 #[cfg(target_os = "android")]
 fn log_state_change(room: i32) {
@@ -453,6 +472,11 @@ pub fn current_context() -> u8 {
     if dialogue_open() {
         return DIALOG
     }
+    // The Pokémon box is entirely point-and-click, so nothing is needed next to it: no controls at
+    // all. MENU is the context no control belongs to, which is exactly that.
+    if box_open() {
+        return MENU
+    }
     match ROOM.load(Ordering::Relaxed) {
         // IntroROOM, InicioROOM, CargarPartida, MultijugadorMenu, CreditosInicioScreen, OptionsROOM:
         // these screens are fully clickable (once the game's own click boxes are fixed, see
@@ -481,11 +505,11 @@ pub fn pad_active() -> bool {
 }
 
 pub fn is_active(index: usize) -> bool {
-    if pad_active() {
+    if pad_active() || box_open() {
         return false;
     }
     let c = &CONTROLS[index];
-    if !show_num_keys() && (c.name == "space" || c.name == "o" || c.name == "m" || c.name == "e" || c.name == "t" || c.name == "l" || c.name == "p") {
+    if !show_num_keys() && (c.name.starts_with("alpha") || c.name == "space" || c.name == "o" || c.name == "m" || c.name == "e" || c.name == "t" || c.name == "l" || c.name == "p") {
         return false;
     }
     c.contexts & current_context() != 0
@@ -494,7 +518,7 @@ pub fn is_active(index: usize) -> bool {
 /// The joystick drives the arrow keys, which is how the game's menus (the ones that still show
 /// controls) and the overworld are navigated.
 pub fn joystick_active() -> bool {
-    !pad_active() && joystick_visible() && current_context() & (WORLD | BATTLE) != 0
+    !pad_active() && !box_open() && joystick_visible() && current_context() & (WORLD | BATTLE) != 0
 }
 
 /// Returns the index of the control containing the point, if any. The point is normalised, but the
