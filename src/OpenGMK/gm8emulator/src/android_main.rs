@@ -160,6 +160,33 @@ fn load_video() {
             } else if name == "weather_opt" {
                 eprintln!("[video] weather_opt: {}", value);
                 std::env::set_var("OPENGMK_WEATHER_OPT", value);
+            } else if name == "backend" {
+                eprintln!("[video] backend: {}", value);
+                let vulkan = value.eq_ignore_ascii_case("vulkan");
+                crate::touch_controls::set_vulkan_backend(vulkan);
+                std::env::set_var("OPENGMK_BACKEND", value);
+            } else if name == "force_60fps" {
+                let force = value == "1" || value.eq_ignore_ascii_case("true");
+                eprintln!("[video] force_60fps: {}", force);
+                crate::touch_controls::set_force_60fps(force);
+            } else if name == "bgm_volume" {
+                if let Ok(vol) = value.parse::<u32>() {
+                    eprintln!("[video] bgm_volume: {}", vol);
+                    crate::touch_controls::set_bgm_volume(vol);
+                }
+            } else if name == "sfx_volume" {
+                if let Ok(vol) = value.parse::<u32>() {
+                    eprintln!("[video] sfx_volume: {}", vol);
+                    crate::touch_controls::set_sfx_volume(vol);
+                }
+            } else if name == "autofire" {
+                let af = value == "1" || value.eq_ignore_ascii_case("true");
+                eprintln!("[video] autofire: {}", af);
+                crate::touch_controls::set_autofire_enabled(af);
+            } else if name == "dynamic_dpad" {
+                let dd = value == "1" || value.eq_ignore_ascii_case("true");
+                eprintln!("[video] dynamic_dpad: {}", dd);
+                crate::touch_controls::set_dynamic_dpad_enabled(dd);
             }
         }
     }
@@ -209,6 +236,10 @@ fn load_controls() {
                 }
             } else if name.trim() == "show_num_keys" {
                 crate::touch_controls::set_show_num_keys(value.trim() != "0");
+            } else if name.trim() == "autofire" {
+                crate::touch_controls::set_autofire_enabled(value.trim() != "0");
+            } else if name.trim() == "dynamic_dpad" {
+                crate::touch_controls::set_dynamic_dpad_enabled(value.trim() != "0");
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }
@@ -368,6 +399,10 @@ fn jni_vibrate(duration_ms: i64) {
 
 fn control_key_down(index: usize) {
     crate::touch_controls::set_pressed(index, true);
+    let name = crate::touch_controls::CONTROLS[index].name;
+    if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
+        crate::touch_controls::register_autofire(index);
+    }
     jni_vibrate(18);
     android::push_input(ramen::platform::android::InputEvent::KeyDown {
         key: crate::touch_controls::CONTROLS[index].key,
@@ -377,6 +412,7 @@ fn control_key_down(index: usize) {
 
 fn control_key_up(index: usize) {
     crate::touch_controls::set_pressed(index, false);
+    crate::touch_controls::unregister_autofire(index);
     android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::CONTROLS[index].key });
 }
 
@@ -576,12 +612,24 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         return;
     }
 
-    if wf > 0.0 && hf > 0.0 && crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
-        *JOYSTICK_PTR.lock().unwrap() = Some(id);
-        joystick_update(x, y);
-        return
-    }
     let hit = if w > 0 && h > 0 { crate::touch_controls::hit(x / wf, y / hf, wf, hf) } else { None };
+    if hit.is_none() && wf > 0.0 && hf > 0.0 && crate::touch_controls::joystick_active() {
+        if crate::touch_controls::is_dynamic_dpad_enabled() {
+            let nx = x / wf;
+            let ny = y / hf;
+            if nx < 0.45 && ny > 0.20 && ny < 0.95 {
+                crate::touch_controls::set_dynamic_anchor(Some((nx, ny)));
+                *JOYSTICK_PTR.lock().unwrap() = Some(id);
+                joystick_update(x, y);
+                jni_vibrate(12);
+                return;
+            }
+        } else if crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
+            *JOYSTICK_PTR.lock().unwrap() = Some(id);
+            joystick_update(x, y);
+            return;
+        }
+    }
     match hit {
         Some(index) => {
             let name = crate::touch_controls::CONTROLS[index].name;
@@ -796,6 +844,7 @@ fn joystick_release() {
         }
     }
     crate::touch_controls::set_joystick_offset(0.0, 0.0);
+    crate::touch_controls::set_dynamic_anchor(None);
     *JOYSTICK_PTR.lock().unwrap() = None;
 }
 

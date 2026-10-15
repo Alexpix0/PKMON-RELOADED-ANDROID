@@ -679,3 +679,46 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 4. **Hito de Versión 0.5.0:**
    * Actualización de `versionCode = 15` y `versionName = "0.5.0"` con artefacto de descarga firmado `pokemon-reloaded-0.5.0-release`.
 
+---
+
+## 17. Hito Versión 0.5.1: Autofire a 15 pulsaciones/s, Separación de Audio (BGM/SFX), Desbloqueo de 60 FPS, D-Pad Flotante, Backend Vulkan/OpenGL y Aceleración SIMD NEON
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 16`, `versionName = "0.5.1"`.
+* **Archivos afectados:**
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+  - [`android/app/src/main/java/com/klisee/reloaded/Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/Video.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Video.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+  - [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  - [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  - [`src/OpenGMK/gm8emulator/src/game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs)
+  - [`src/OpenGMK/gm8emulator/src/game/audio/midi.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game/audio/midi.rs)
+  - [`src/OpenGMK/gm8emulator/src/game/audio/mixer.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game/audio/mixer.rs)
+  - [`src/OpenGMK/gm8emulator/src/render.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render.rs)
+  - [`src/OpenGMK/gm8emulator/src/asset/sprite.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/asset/sprite.rs)
+  - [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+
+### Nuevas Características y Mejoras de Rendimiento en v0.5.1
+1. **Autofire / Disparo Continuo Individual (15 pulsaciones por segundo):**
+   * Al mantener presionado `Z`, `X`, `C`, `V` o el botón contextual de `diálogo`, el motor envía un ciclo continuo y perfectamente sincronizado de pulsación/liberación cada 4 fotogramas (2 frames KeyDown, 2 frames KeyUp).
+   * Permite pasar textos extensos, conversaciones y cinemáticas con solo descansar el pulgar sin fatiga, y disparar ataques consecutivos en ráfaga rápida durante el combate. Configurable con interruptor en Ajustes.
+2. **Separación de Volumen de Audio (BGM y SFX Independientes):**
+   * Control independiente de volumen para la Música de Fondo (BGM) y los Efectos de Sonido (SFX).
+   * La música de fondo (tanto el sintetizador MIDI de canciones como las pistas exclusivas) se modula a través de `bgm_volume()`, permitiendo silenciar la música al 0% para jugar escuchando podcasts, Spotify o música propia mientras se mantienen los efectos de sonido de combate y menús al 100%.
+   * Los efectos de sonido se modulan a través de `sfx_volume()`, con opciones de escala en el Launcher (100%, 50%, 0%).
+3. **Desbloqueo de 60 FPS en Zonas Capadas a 30 FPS:**
+   * Interruptor dedicado en Ajustes: *"Desbloquear 60 FPS (Forzar en zonas a 30 FPS)"*.
+   * En salas, menús y cinemáticas donde el juego original de Game Maker fija `room.speed = 30`, el limitador de fotogramas de OpenGMK calcula dinámicamente la cadencia objetivo a 60 FPS (`effective_speed = 60`), eliminando el tope de 30 FPS y otorgando una suavidad de imagen total.
+4. **D-Pad Flotante Dinámico:**
+   * Nueva opción en Ajustes de Controles.
+   * Al tocar en cualquier punto de la mitad izquierda de la pantalla (`nx < 0.45`), la base y el centro del joystick analógico se anclan instantáneamente justo debajo de donde el jugador apoya su pulgar (`DYNAMIC_JOYSTICK_ANCHOR`), y calculan el desplazamiento angular y vector de dirección de forma relativa a ese punto. Al soltar la pantalla, el anclaje dinámico se libera limpiamente.
+5. **Selector de Motor Gráfico (Backend): OpenGL ES vs Vulkan Experimental:**
+   * Elección en Ajustes entre **OpenGL ES (Nativo Estable)** y **Vulkan (Experimental - Pipeline Optimizado)**.
+   * El modo Vulkan activa la señalización de baja sobrecarga y empaquetamiento agresivo de texturas (Texture Atlasing) en RAM para reducir las llamadas de dibujo (*draw calls*) en GPUs compatibles.
+6. **Aceleración Matemática SIMD NEON ARM64 y Optimización de Colisiones:**
+   * En `render.rs`, la multiplicación de matrices 4x4 (`mat4mult`) se optimizó utilizando instrucciones vectoriales intrínsecas nativas de ARM64 NEON (`core::arch::aarch64::*` con `vld1q_f32`, `vdupq_n_f32`, `vmulq_f32`, `vmlaq_f32` y `vst1q_f32`), resolviendo transformaciones de vértices y proyecciones en paralelo en registros de 128 bits.
+   * En `asset/sprite.rs`, la verificación precisa de colisiones por píxel (`check_collision_point_precise`) ahora realiza un corte temprano con el bounding box (`if !within_bbox { return false; }`), evitando recorrer arrays completos de píxeles (`data.iter().all(...)`) cuando el punto está fuera de los límites de la entidad.
+7. **Hito de Compilación y Distribución v0.5.1:**
+   * Actualizado `versionCode = 16`, `versionName = "0.5.1"` y artefacto de build CI `pokemon-reloaded-0.5.1-release`.
+
+

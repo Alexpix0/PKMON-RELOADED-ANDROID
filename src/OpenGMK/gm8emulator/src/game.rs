@@ -2263,6 +2263,9 @@ impl Game {
     }
 
     pub fn process_window_events(&mut self) {
+        #[cfg(target_os = "android")]
+        crate::touch_controls::tick_autofire();
+
         self.input.mouse_step();
         self.window.poll_events();
         // Apply releases a previous poll deferred, then snapshot the held state so a press and
@@ -2474,7 +2477,16 @@ impl Game {
             #[cfg(not(target_os = "android"))]
             let speed_mult = 1.0f32;
 
-            let base_nanos = 1_000_000_000 / self.room.speed.max(1) as u64;
+            #[cfg(target_os = "android")]
+            let effective_speed = if crate::touch_controls::force_60fps_active() && self.room.speed <= 30 {
+                60
+            } else {
+                self.room.speed.max(1)
+            };
+            #[cfg(not(target_os = "android"))]
+            let effective_speed = self.room.speed.max(1);
+
+            let base_nanos = 1_000_000_000 / effective_speed as u64;
             let target_nanos = if speed_mult > 1.0 {
                 (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
             } else {

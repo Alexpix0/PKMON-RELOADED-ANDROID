@@ -190,6 +190,48 @@ class Preferences(context: Context) {
             prefs.edit().putString("videoBezel", value).apply()
         }
 
+    /** Graphics backend: "opengl" or "vulkan" */
+    var graphicsBackend: String
+        get() = prefs.getString("graphicsBackend", "opengl") ?: "opengl"
+        set(value) {
+            prefs.edit().putString("graphicsBackend", value).apply()
+        }
+
+    /** Force unlock 60 FPS in 30 FPS capped rooms and menus */
+    var force60Fps: Boolean
+        get() = prefs.getBoolean("force60Fps", false)
+        set(value) {
+            prefs.edit().putBoolean("force60Fps", value).apply()
+        }
+
+    /** Background music (BGM) volume percentage: 0 to 100 */
+    var bgmVolume: Int
+        get() = prefs.getInt("bgmVolume", 100)
+        set(value) {
+            prefs.edit().putInt("bgmVolume", value).apply()
+        }
+
+    /** Sound effects (SFX) volume percentage: 0 to 100 */
+    var sfxVolume: Int
+        get() = prefs.getInt("sfxVolume", 100)
+        set(value) {
+            prefs.edit().putInt("sfxVolume", value).apply()
+        }
+
+    /** Autofire: continuous rapid press on holding action buttons (Z/X/dialogo) */
+    var autofireEnabled: Boolean
+        get() = prefs.getBoolean("autofireEnabled", true)
+        set(value) {
+            prefs.edit().putBoolean("autofireEnabled", value).apply()
+        }
+
+    /** Dynamic Floating D-Pad: joystick anchors where thumb touches */
+    var dynamicDpad: Boolean
+        get() = prefs.getBoolean("dynamicDpad", false)
+        set(value) {
+            prefs.edit().putBoolean("dynamicDpad", value).apply()
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
     fun writeVideo(filesDir: File) = writeVideoFile(
         filesDir = filesDir,
@@ -200,6 +242,12 @@ class Preferences(context: Context) {
         frameSkip = frameSkip,
         renderScale = renderScale,
         filter = videoFilter,
-        weatherOpt = weatherOpt
+        weatherOpt = weatherOpt,
+        backend = graphicsBackend,
+        force60Fps = force60Fps,
+        bgmVolume = bgmVolume,
+        sfxVolume = sfxVolume,
+        autofire = autofireEnabled,
+        dynamicDpad = dynamicDpad
     )
 }

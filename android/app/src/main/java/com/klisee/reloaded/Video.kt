@@ -24,10 +24,16 @@ fun writeVideoFile(
     frameSkip: String = "0",
     renderScale: String = "1.0",
     filter: String = "sharp",
-    weatherOpt: String = "normal"
+    weatherOpt: String = "normal",
+    backend: String = "opengl",
+    force60Fps: Boolean = false,
+    bgmVolume: Int = 100,
+    sfxVolume: Int = 100,
+    autofire: Boolean = true,
+    dynamicDpad: Boolean = false
 ) {
     val text = buildString {
-        appendLine("# Escrito por Ajustes (v0.5.0). El motor OpenGMK lo lee al arrancar.")
+        appendLine("# Escrito por Ajustes (v0.5.1). El motor OpenGMK lo lee al arrancar.")
         appendLine("scaling=$scaling")
         appendLine("show_fps=${if (showFps) 1 else 0}")
         appendLine("bezel=$bezel")
@@ -36,6 +42,12 @@ fun writeVideoFile(
         appendLine("render_scale=$renderScale")
         appendLine("filter=$filter")
         appendLine("weather_opt=$weatherOpt")
+        appendLine("backend=$backend")
+        appendLine("force_60fps=${if (force60Fps) 1 else 0}")
+        appendLine("bgm_volume=$bgmVolume")
+        appendLine("sfx_volume=$sfxVolume")
+        appendLine("autofire=${if (autofire) 1 else 0}")
+        appendLine("dynamic_dpad=${if (dynamicDpad) 1 else 0}")
     }
     runCatching { File(filesDir, "video.conf").writeText(text) }
 }

@@ -1263,8 +1263,34 @@ pub struct RendererState {
     pub zbuf_trashed: bool,
 }
 
-/// Multiply two mat4's together
+/// Multiply two mat4's together (accelerated with ARM64 NEON SIMD when available)
+#[inline]
 fn mat4mult(m1: [f32; 16], m2: [f32; 16]) -> [f32; 16] {
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        use core::arch::aarch64::*;
+        let mut out = [0.0f32; 16];
+        let b0 = vld1q_f32(m2.as_ptr().add(0));
+        let b1 = vld1q_f32(m2.as_ptr().add(4));
+        let b2 = vld1q_f32(m2.as_ptr().add(8));
+        let b3 = vld1q_f32(m2.as_ptr().add(12));
+
+        for i in 0..4 {
+            let row = i * 4;
+            let a0 = vdupq_n_f32(m1[row + 0]);
+            let a1 = vdupq_n_f32(m1[row + 1]);
+            let a2 = vdupq_n_f32(m1[row + 2]);
+            let a3 = vdupq_n_f32(m1[row + 3]);
+
+            let mut r = vmulq_f32(b0, a0);
+            r = vmlaq_f32(r, b1, a1);
+            r = vmlaq_f32(r, b2, a2);
+            r = vmlaq_f32(r, b3, a3);
+            vst1q_f32(out.as_mut_ptr().add(row), r);
+        }
+        out
+    }
+    #[cfg(not(target_arch = "aarch64"))]
     [
         (m1[0] * m2[0]) + (m1[1] * m2[4]) + (m1[2] * m2[8]) + (m1[3] * m2[12]),
         (m1[0] * m2[1]) + (m1[1] * m2[5]) + (m1[2] * m2[9]) + (m1[3] * m2[13]),

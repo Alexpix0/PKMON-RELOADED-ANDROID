@@ -88,6 +88,11 @@ impl Source for Mixer {
             }
         }
 
+        #[cfg(target_os = "android")]
+        let (bgm_vol, sfx_vol) = (crate::touch_controls::bgm_volume(), crate::touch_controls::sfx_volume());
+        #[cfg(not(target_os = "android"))]
+        let (bgm_vol, sfx_vol) = (1.0f32, 1.0f32);
+
         if let Some((source, _id)) = &mut self.exclusive_source {
             let count = source.write_samples(buffer);
             if buffer.len() != count {
@@ -95,6 +100,11 @@ impl Source for Mixer {
                 // looping music track).
                 buffer[count..].iter_mut().for_each(|x| *x = 0.0);
                 self.exclusive_source = None;
+            }
+            if bgm_vol != 1.0 {
+                for sample in buffer.iter_mut() {
+                    *sample *= bgm_vol;
+                }
             }
         } else {
             buffer.iter_mut().for_each(|x| *x = 0.0);
@@ -109,7 +119,7 @@ impl Source for Mixer {
             let count = source.write_samples(input_buffer);
 
             for (in_sample, out_sample) in input_buffer.iter().take(count).copied().zip(buffer.iter_mut()) {
-                *out_sample += in_sample * volume * global_volume;
+                *out_sample += in_sample * volume * global_volume * sfx_vol;
             }
 
             count == input_buffer.len()

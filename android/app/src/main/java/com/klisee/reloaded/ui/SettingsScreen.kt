@@ -111,6 +111,12 @@ fun SettingsScreen(
     var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
     var currentTheme by remember { mutableStateOf(prefs.themeMode) }
     var persistentShield by remember { mutableStateOf(prefs.persistentShield) }
+    var graphicsBackend by remember { mutableStateOf(prefs.graphicsBackend) }
+    var force60Fps by remember { mutableStateOf(prefs.force60Fps) }
+    var bgmVolume by remember { mutableStateOf(prefs.bgmVolume) }
+    var sfxVolume by remember { mutableStateOf(prefs.sfxVolume) }
+    var autofireEnabled by remember { mutableStateOf(prefs.autofireEnabled) }
+    var dynamicDpad by remember { mutableStateOf(prefs.dynamicDpad) }
     var checking by remember { mutableStateOf(false) }
 
     // Snapshots state
@@ -515,9 +521,148 @@ fun SettingsScreen(
                     icon = Icons.Filled.SportsEsports,
                     title = "Configuración de Controles",
                     subtitle = "Personaliza botones en pantalla, opacidad, escala y mandos físicos",
-                    items = 1,
+                    items = 3,
                     index = 0,
                     onClick = onControls,
+                )
+                SwitchRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Autofire / Disparo continuo rápido (15 pulsaciones/s)",
+                    subtitle = "Mantén pulsado Z o X para avanzar textos automáticamente o atacar en ráfagas",
+                    checked = autofireEnabled,
+                    items = 3,
+                    index = 1,
+                    onCheckedChange = {
+                        autofireEnabled = it
+                        prefs.autofireEnabled = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "D-Pad Flotante Dinámico",
+                    subtitle = "El joystick aparece dinámicamente donde apoyes el pulgar izquierdo en la pantalla",
+                    checked = dynamicDpad,
+                    items = 3,
+                    index = 2,
+                    onCheckedChange = {
+                        dynamicDpad = it
+                        prefs.dynamicDpad = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Motor Gráfico de Renderizado (Backend)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Memory,
+                    title = "OpenGL ES (Nativo Estable)",
+                    subtitle = "Pipeline nativo para máxima compatibilidad y estabilidad en todos los chips Mali, Adreno y PowerVR",
+                    selected = graphicsBackend == "opengl",
+                    items = 2,
+                    index = 0,
+                    onSelect = {
+                        graphicsBackend = "opengl"
+                        prefs.graphicsBackend = "opengl"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Vulkan (Experimental - Pipeline Optimizado)",
+                    subtitle = "Texture Atlasing agresivo y llamadas de dibujo por lotes directas para máxima tasa de cuadros (FPS)",
+                    selected = graphicsBackend == "vulkan",
+                    items = 2,
+                    index = 1,
+                    onSelect = {
+                        graphicsBackend = "vulkan"
+                        prefs.graphicsBackend = "vulkan"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Tasa de Refresco y Rendimiento (60 FPS)") {
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Desbloquear 60 FPS (Forzar en zonas a 30 FPS)",
+                    subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
+                    checked = force60Fps,
+                    items = 1,
+                    index = 0,
+                    onCheckedChange = {
+                        force60Fps = it
+                        prefs.force60Fps = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Audio Independiente (BGM y SFX)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Música BGM: 100% (Normal)",
+                    subtitle = "Banda sonora completa del juego",
+                    selected = bgmVolume == 100,
+                    items = 5,
+                    index = 0,
+                    onSelect = {
+                        bgmVolume = 100
+                        prefs.bgmVolume = 100
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Música BGM: 50% (Volumen suave)",
+                    subtitle = "Música de fondo atenuada",
+                    selected = bgmVolume == 50,
+                    items = 5,
+                    index = 1,
+                    onSelect = {
+                        bgmVolume = 50
+                        prefs.bgmVolume = 50
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Música BGM: 0% (Silenciada)",
+                    subtitle = "Silencia la música del juego para escuchar tu propia música o podcasts",
+                    selected = bgmVolume == 0,
+                    items = 5,
+                    index = 2,
+                    onSelect = {
+                        bgmVolume = 0
+                        prefs.bgmVolume = 0
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Efectos SFX: 100% (Normal)",
+                    subtitle = "Sonidos de golpes, ataques, Pokéballs y menús audibles",
+                    selected = sfxVolume == 100,
+                    items = 5,
+                    index = 3,
+                    onSelect = {
+                        sfxVolume = 100
+                        prefs.sfxVolume = 100
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Efectos SFX: 0% (Silenciados)",
+                    subtitle = "Silencia todos los efectos sonoros",
+                    selected = sfxVolume == 0,
+                    items = 5,
+                    index = 4,
+                    onSelect = {
+                        sfxVolume = 0
+                        prefs.sfxVolume = 0
+                        prefs.writeVideo(context.filesDir)
+                    },
                 )
             }
 

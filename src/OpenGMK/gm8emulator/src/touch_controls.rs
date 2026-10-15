@@ -233,6 +233,121 @@ pub fn toggle_audio_mute() -> bool {
     muted
 }
 
+static BGM_VOLUME: AtomicU32 = AtomicU32::new(100);
+static SFX_VOLUME: AtomicU32 = AtomicU32::new(100);
+
+pub fn bgm_volume() -> f32 {
+    if is_audio_muted() {
+        return 0.0;
+    }
+    BGM_VOLUME.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+pub fn sfx_volume() -> f32 {
+    if is_audio_muted() {
+        return 0.0;
+    }
+    SFX_VOLUME.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+pub fn set_bgm_volume(pct: u32) {
+    BGM_VOLUME.store(pct.clamp(0, 100), Ordering::Relaxed);
+}
+
+pub fn set_sfx_volume(pct: u32) {
+    SFX_VOLUME.store(pct.clamp(0, 100), Ordering::Relaxed);
+}
+
+static GRAPHICS_BACKEND_VULKAN: AtomicBool = AtomicBool::new(false);
+static FORCE_60FPS: AtomicBool = AtomicBool::new(false);
+
+pub fn is_vulkan_backend() -> bool {
+    GRAPHICS_BACKEND_VULKAN.load(Ordering::Relaxed)
+}
+
+pub fn set_vulkan_backend(enabled: bool) {
+    GRAPHICS_BACKEND_VULKAN.store(enabled, Ordering::Relaxed);
+}
+
+pub fn force_60fps_active() -> bool {
+    FORCE_60FPS.load(Ordering::Relaxed)
+}
+
+pub fn set_force_60fps(force: bool) {
+    FORCE_60FPS.store(force, Ordering::Relaxed);
+}
+
+static AUTOFIRE_ENABLED: AtomicBool = AtomicBool::new(true);
+static AUTOFIRE_HELD: Mutex<Option<std::collections::HashSet<usize>>> = Mutex::new(None);
+static AUTOFIRE_TICK: AtomicU32 = AtomicU32::new(0);
+
+pub fn is_autofire_enabled() -> bool {
+    AUTOFIRE_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn set_autofire_enabled(enabled: bool) {
+    AUTOFIRE_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub fn register_autofire(index: usize) {
+    let mut lock = AUTOFIRE_HELD.lock().unwrap();
+    let set = lock.get_or_insert_with(std::collections::HashSet::new);
+    set.insert(index);
+}
+
+pub fn unregister_autofire(index: usize) {
+    let mut lock = AUTOFIRE_HELD.lock().unwrap();
+    if let Some(set) = lock.as_mut() {
+        set.remove(&index);
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn tick_autofire() {
+    if !is_autofire_enabled() {
+        return;
+    }
+    let buttons = {
+        let lock = AUTOFIRE_HELD.lock().unwrap();
+        match lock.as_ref() {
+            Some(set) if !set.is_empty() => set.iter().copied().collect::<Vec<_>>(),
+            _ => return,
+        }
+    };
+
+    let tick = AUTOFIRE_TICK.fetch_add(1, Ordering::Relaxed);
+    // Cycle every 4 frames (2 frames pressed, 2 frames released) -> 15 pulses/sec at 60 FPS
+    let phase = tick % 4;
+    for index in buttons {
+        if index < CONTROLS.len() {
+            let key = CONTROLS[index].key;
+            if phase == 0 {
+                ramen::platform::android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
+            } else if phase == 2 {
+                ramen::platform::android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn tick_autofire() {}
+
+static DYNAMIC_JOYSTICK_ANCHOR: Mutex<Option<(f32, f32)>> = Mutex::new(None);
+static DYNAMIC_DPAD_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_dynamic_dpad_enabled() -> bool {
+    DYNAMIC_DPAD_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn set_dynamic_dpad_enabled(enabled: bool) {
+    DYNAMIC_DPAD_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+pub fn set_dynamic_anchor(pos: Option<(f32, f32)>) {
+    *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap() = pos;
+}
+
 static EDIT_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static LAYOUT_SNAPSHOT: Mutex<Option<(HashMap<String, (f32, f32)>, u32, u32)>> = Mutex::new(None);
 
@@ -627,6 +742,9 @@ pub fn joystick_dead() -> f32 {
 
 /// The joystick's centre, in normalised coordinates.
 pub fn joystick_center() -> (f32, f32) {
+    if let Some((ax, ay)) = *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap() {
+        return (ax, ay);
+    }
     let (ox, oy) = control_offset(JOYSTICK_NAME);
     (JOYSTICK_CX + margin_x() + ox, JOYSTICK_CY - margin_y() + oy)
 }

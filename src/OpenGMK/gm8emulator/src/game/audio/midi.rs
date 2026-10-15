@@ -200,9 +200,14 @@ impl Source for MidiSource {
         self.right.fill(0.0);
         self.sequencer.render(&mut self.left, &mut self.right);
 
+        #[cfg(target_os = "android")]
+        let bgm_vol = crate::touch_controls::bgm_volume();
+        #[cfg(not(target_os = "android"))]
+        let bgm_vol = 1.0f32;
+
         for (frame, (left, right)) in self.left.iter().zip(self.right.iter()).enumerate() {
-            buffer[frame * channels] = *left;
-            buffer[frame * channels + 1] = *right;
+            buffer[frame * channels] = *left * bgm_vol;
+            buffer[frame * channels + 1] = *right * bgm_vol;
         }
         // The mixer asks for whole frames, but never leave anything it did not ask for unwritten.
         for sample in &mut buffer[frames * channels..] {
