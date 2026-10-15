@@ -195,13 +195,39 @@ pub fn toggle_audio_mute() -> bool {
 }
 
 static EDIT_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LAYOUT_SNAPSHOT: Mutex<Option<(HashMap<String, (f32, f32)>, u32, u32)>> = Mutex::new(None);
+
+pub fn snapshot_layout() {
+    let offsets = CUSTOM_OFFSETS.lock().unwrap().clone().unwrap_or_default();
+    let sc = SCALE.load(Ordering::Relaxed);
+    let op = OPACITY.load(Ordering::Relaxed);
+    *LAYOUT_SNAPSHOT.lock().unwrap() = Some((offsets, sc, op));
+}
+
+pub fn restore_layout_snapshot() {
+    if let Some((offsets, sc, op)) = LAYOUT_SNAPSHOT.lock().unwrap().take() {
+        *CUSTOM_OFFSETS.lock().unwrap() = Some(offsets);
+        SCALE.store(sc, Ordering::Relaxed);
+        OPACITY.store(op, Ordering::Relaxed);
+    }
+}
 
 pub fn is_edit_mode() -> bool {
     EDIT_MODE.load(Ordering::Relaxed)
 }
 
+pub fn set_edit_mode(mode: bool) {
+    if mode && !is_edit_mode() {
+        snapshot_layout();
+    }
+    EDIT_MODE.store(mode, Ordering::Relaxed);
+}
+
 pub fn toggle_edit_mode() -> bool {
     let mode = !is_edit_mode();
+    if mode {
+        snapshot_layout();
+    }
     EDIT_MODE.store(mode, Ordering::Relaxed);
     mode
 }
@@ -586,6 +612,10 @@ pub fn opacity() -> f32 {
     OPACITY.load(Ordering::Relaxed) as f32 / 100.0
 }
 
+pub fn opacity_pct() -> u32 {
+    OPACITY.load(Ordering::Relaxed)
+}
+
 static SCALE: AtomicU32 = AtomicU32::new(100);
 
 pub fn set_scale(pct: u32) {
@@ -594,6 +624,138 @@ pub fn set_scale(pct: u32) {
 
 pub fn scale() -> f32 {
     SCALE.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+pub fn scale_pct() -> u32 {
+    SCALE.load(Ordering::Relaxed)
+}
+
+pub fn save_controls_config(package_dir: &str) {
+    let dir = std::path::PathBuf::from(format!("/data/data/{}/files", package_dir));
+    let controls_path = dir.join("controls.conf");
+    let mut lines = Vec::new();
+    if let Ok(existing) = std::fs::read_to_string(&controls_path) {
+        for l in existing.lines() {
+            let trim = l.trim();
+            if !trim.starts_with("scale=") && !trim.starts_with("opacity=") {
+                lines.push(trim.to_string());
+            }
+        }
+    }
+    lines.push(format!("scale={}", scale_pct()));
+    lines.push(format!("opacity={}", opacity_pct()));
+    let _ = std::fs::write(&controls_path, lines.join("\n"));
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum EditToolbarAction {
+    None,
+    Save,
+    Cancel,
+    ScaleDec,
+    ScaleInc,
+    ScaleSet(u32),
+    OpacityDec,
+    OpacityInc,
+    OpacitySet(u32),
+}
+
+pub struct EditToolbarLayout {
+    pub bar_x1: f32,
+    pub bar_y1: f32,
+    pub bar_x2: f32,
+    pub bar_y2: f32,
+    pub save_x1: f32,
+    pub save_x2: f32,
+    pub cancel_x1: f32,
+    pub cancel_x2: f32,
+    pub scale_btn_minus: (f32, f32),
+    pub scale_btn_plus: (f32, f32),
+    pub scale_track: (f32, f32),
+    pub opac_btn_minus: (f32, f32),
+    pub opac_btn_plus: (f32, f32),
+    pub opac_track: (f32, f32),
+}
+
+pub fn edit_toolbar_layout(ww: f32, wh: f32) -> EditToolbarLayout {
+    let _ = wh;
+    let bar_x1 = (ww * 0.02).max(12.0);
+    let bar_x2 = (ww * 0.98).min(ww - 12.0);
+    let bar_y1 = 8.0;
+    let bar_y2 = 56.0;
+
+    let save_x1 = bar_x1 + 8.0;
+    let save_x2 = save_x1 + 115.0;
+
+    let cancel_x2 = bar_x2 - 8.0;
+    let cancel_x1 = cancel_x2 - 105.0;
+
+    let mid_start = save_x2 + 16.0;
+    let mid_end = cancel_x1 - 16.0;
+    let mid_width = (mid_end - mid_start).max(280.0);
+    let slider_width = (mid_width * 0.40).clamp(110.0, 190.0);
+
+    let scale_track_x1 = mid_start + 26.0;
+    let scale_track_x2 = scale_track_x1 + slider_width;
+    let scale_minus = (scale_track_x1 - 24.0, scale_track_x1 - 4.0);
+    let scale_plus = (scale_track_x2 + 4.0, scale_track_x2 + 24.0);
+
+    let opac_track_x1 = scale_plus.1 + 42.0;
+    let opac_track_x2 = opac_track_x1 + slider_width;
+    let opac_minus = (opac_track_x1 - 24.0, opac_track_x1 - 4.0);
+    let opac_plus = (opac_track_x2 + 4.0, opac_track_x2 + 24.0);
+
+    EditToolbarLayout {
+        bar_x1, bar_y1, bar_x2, bar_y2,
+        save_x1, save_x2,
+        cancel_x1, cancel_x2,
+        scale_btn_minus: scale_minus,
+        scale_btn_plus: scale_plus,
+        scale_track: (scale_track_x1, scale_track_x2),
+        opac_btn_minus: opac_minus,
+        opac_btn_plus: opac_plus,
+        opac_track: (opac_track_x1, opac_track_x2),
+    }
+}
+
+pub fn edit_toolbar_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> EditToolbarAction {
+    let l = edit_toolbar_layout(ww, wh);
+    if ty < l.bar_y1 - 6.0 || ty > l.bar_y2 + 8.0 || tx < l.bar_x1 || tx > l.bar_x2 {
+        return EditToolbarAction::None;
+    }
+
+    if tx >= l.save_x1 && tx <= l.save_x2 {
+        return EditToolbarAction::Save;
+    }
+    if tx >= l.cancel_x1 && tx <= l.cancel_x2 {
+        return EditToolbarAction::Cancel;
+    }
+
+    if tx >= l.scale_btn_minus.0 && tx <= l.scale_btn_minus.1 {
+        return EditToolbarAction::ScaleDec;
+    }
+    if tx >= l.scale_btn_plus.0 && tx <= l.scale_btn_plus.1 {
+        return EditToolbarAction::ScaleInc;
+    }
+    if tx >= l.scale_track.0 && tx <= l.scale_track.1 {
+        let ratio = ((tx - l.scale_track.0) / (l.scale_track.1 - l.scale_track.0)).clamp(0.0, 1.0);
+        let pct = (60.0 + ratio * 90.0).round() as u32; // 60%..150%
+        return EditToolbarAction::ScaleSet(pct);
+    }
+
+    if tx >= l.opac_btn_minus.0 && tx <= l.opac_btn_minus.1 {
+        return EditToolbarAction::OpacityDec;
+    }
+    if tx >= l.opac_btn_plus.0 && tx <= l.opac_btn_plus.1 {
+        return EditToolbarAction::OpacityInc;
+    }
+    if tx >= l.opac_track.0 && tx <= l.opac_track.1 {
+        let ratio = ((tx - l.opac_track.0) / (l.opac_track.1 - l.opac_track.0)).clamp(0.0, 1.0);
+        let pct = (20.0 + ratio * 80.0).round() as u32; // 20%..100%
+        return EditToolbarAction::OpacitySet(pct);
+    }
+
+    EditToolbarAction::None
 }
 
 static MARGIN_X: AtomicU32 = AtomicU32::new(0);
@@ -729,24 +891,49 @@ pub fn wheel_item_center(index: usize, ww: f32, wh: f32) -> (f32, f32) {
     (cx + fx * 2.0 * half, cy + fy * 2.0 * half * SELECTOR_ASPECT)
 }
 
-/// Which slot the finger is pointing at, once it is far enough from the middle.
+/// Which slot the finger is pointing at, computed via continuous polar angle (atan2)
+/// so that dragging/swiping fluidly preselects all 6 slots in the party honeycomb.
 pub fn wheel_item_at(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
     let (cx, cy) = wheel_center(ww, wh);
-    let half = wheel_radius(ww, wh) / SELECTOR_SLOT_DISTANCE;
-    let (fx, fy) = ((nx * ww - cx) / (2.0 * half), (ny * wh - cy) / (2.0 * half * SELECTOR_ASPECT));
-    if fx * fx + fy * fy < 0.10 {
-        return None
+    let radius = wheel_radius(ww, wh);
+    let px = nx * ww;
+    let py = ny * wh;
+    let dx = px - cx;
+    let dy = (py - cy) / SELECTOR_ASPECT;
+    let dist_sq = dx * dx + dy * dy;
+
+    // Center deadzone around Pokéball: within 25% of radius, no slot is selected.
+    let deadzone = radius * 0.25;
+    if dist_sq < deadzone * deadzone {
+        return None;
     }
-    let mut best = None;
-    let mut closest = f32::MAX;
-    for (index, (ox, oy)) in WHEEL_OFFSETS.iter().enumerate() {
-        let apart = (fx - ox).powi(2) + (fy - oy).powi(2);
-        if apart < closest {
-            closest = apart;
-            best = Some(index);
-        }
+
+    // Continuous angular detection via atan2(dy, dx)
+    let mut deg = dy.atan2(dx).to_degrees();
+    if deg < 0.0 {
+        deg += 360.0;
     }
-    best
+
+    // Hexagonal honeycomb slot mapping:
+    // Slot 3 (Right):        [-30°, +30°]   -> [330°, 360°) U [0°, 30°)
+    // Slot 5 (Down-Right):   [+30°, +90°)
+    // Slot 4 (Down-Left):    [+90°, +150°)
+    // Slot 2 (Left):         [+150°, +210°)
+    // Slot 0 (Up-Left):      [+210°, +270°)
+    // Slot 1 (Up-Right):     [+270°, +330°)
+    if deg >= 330.0 || deg < 30.0 {
+        Some(3)
+    } else if deg >= 30.0 && deg < 90.0 {
+        Some(5)
+    } else if deg >= 90.0 && deg < 150.0 {
+        Some(4)
+    } else if deg >= 150.0 && deg < 210.0 {
+        Some(2)
+    } else if deg >= 210.0 && deg < 270.0 {
+        Some(0)
+    } else {
+        Some(1)
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

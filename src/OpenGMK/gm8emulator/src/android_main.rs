@@ -298,6 +298,13 @@ pub fn haptics_enabled() -> bool {
 /// The pointer the party wheel is following, if any.
 static WHEEL_PTR: Mutex<Option<i32>> = Mutex::new(None);
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SliderTarget {
+    Scale,
+    Opacity,
+}
+static EDIT_SLIDER_DRAG: Mutex<Option<(SliderTarget, i32)>> = Mutex::new(None);
+
 /// Sends a key as a quick tap. The engine defers the release to the end of the poll, so the game
 /// still sees it as pressed.
 fn tap_key(key: ramen::input::Key) {
@@ -471,19 +478,69 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         return;
     }
 
-    // If edit mode is active, touching buttons drags them instead of sending game keys
+    // If edit mode is active, handle toolbar actions (Save, Cancel, Sliders) or drag buttons
     if crate::touch_controls::is_edit_mode() {
         if wf > 0.0 && hf > 0.0 {
+            let tb_action = crate::touch_controls::edit_toolbar_hit(x, y, wf, hf);
+            match tb_action {
+                crate::touch_controls::EditToolbarAction::Save => {
+                    let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
+                    crate::touch_controls::save_layout_file(&layout_path);
+                    crate::touch_controls::save_controls_config(PACKAGE_DIR);
+                    crate::touch_controls::set_edit_mode(false);
+                    crate::touch_controls::show_toast("¡CONTROLES GUARDADOS!");
+                    jni_vibrate(28);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::Cancel => {
+                    crate::touch_controls::restore_layout_snapshot();
+                    crate::touch_controls::set_edit_mode(false);
+                    crate::touch_controls::show_toast("EDICION CANCELADA");
+                    jni_vibrate(18);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::ScaleDec => {
+                    let cur = crate::touch_controls::scale_pct();
+                    crate::touch_controls::set_scale(cur.saturating_sub(5));
+                    jni_vibrate(10);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::ScaleInc => {
+                    let cur = crate::touch_controls::scale_pct();
+                    crate::touch_controls::set_scale(cur + 5);
+                    jni_vibrate(10);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::ScaleSet(pct) => {
+                    crate::touch_controls::set_scale(pct);
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = Some((SliderTarget::Scale, id));
+                    jni_vibrate(8);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::OpacityDec => {
+                    let cur = crate::touch_controls::opacity_pct();
+                    crate::touch_controls::set_opacity(cur.saturating_sub(5));
+                    jni_vibrate(10);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::OpacityInc => {
+                    let cur = crate::touch_controls::opacity_pct();
+                    crate::touch_controls::set_opacity(cur + 5);
+                    jni_vibrate(10);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::OpacitySet(pct) => {
+                    crate::touch_controls::set_opacity(pct);
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = Some((SliderTarget::Opacity, id));
+                    jni_vibrate(8);
+                    return;
+                },
+                crate::touch_controls::EditToolbarAction::None => {},
+            }
+
             let hit = crate::touch_controls::hit(x / wf, y / hf, wf, hf);
             if let Some(index) = hit {
                 let name = crate::touch_controls::CONTROLS[index].name;
-                if name == crate::touch_controls::EDIT_NAME {
-                    crate::touch_controls::toggle_edit_mode();
-                    let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
-                    crate::touch_controls::save_layout_file(&layout_path);
-                    jni_vibrate(25);
-                    return;
-                }
                 *DRAGGED_ITEM.lock().unwrap() = Some((name.to_string(), x / wf, y / hf));
                 jni_vibrate(12);
                 return;
@@ -540,6 +597,11 @@ fn pointer_down(id: i32, x: f32, y: f32) {
 
 fn pointer_up(id: i32, x: f32, y: f32) {
     if crate::touch_controls::is_edit_mode() {
+        if let Some((_, drag_id)) = *EDIT_SLIDER_DRAG.lock().unwrap() {
+            if drag_id == id {
+                *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+            }
+        }
         if DRAGGED_ITEM.lock().unwrap().take().is_some() {
             let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
             crate::touch_controls::save_layout_file(&layout_path);
@@ -785,6 +847,31 @@ fn translate(event: &InputEvent) {
                         let (w, h) = android::window_size();
                         let (wf, hf) = (w as f32, h as f32);
                         if wf > 0.0 && hf > 0.0 {
+                            let slider_drag = *EDIT_SLIDER_DRAG.lock().unwrap();
+                            if let Some((target, drag_id)) = slider_drag {
+                                for p in motion.pointers() {
+                                    if p.pointer_id() == drag_id {
+                                        let layout = crate::touch_controls::edit_toolbar_layout(wf, hf);
+                                        match target {
+                                            SliderTarget::Scale => {
+                                                let (st1, st2) = layout.scale_track;
+                                                let ratio = ((p.x() - st1) / (st2 - st1)).clamp(0.0, 1.0);
+                                                let pct = (60.0 + ratio * 90.0).round() as u32;
+                                                crate::touch_controls::set_scale(pct);
+                                            },
+                                            SliderTarget::Opacity => {
+                                                let (ot1, ot2) = layout.opac_track;
+                                                let ratio = ((p.x() - ot1) / (ot2 - ot1)).clamp(0.0, 1.0);
+                                                let pct = (20.0 + ratio * 80.0).round() as u32;
+                                                crate::touch_controls::set_opacity(pct);
+                                            },
+                                        }
+                                        break;
+                                    }
+                                }
+                                return;
+                            }
+
                             let mut item_lock = DRAGGED_ITEM.lock().unwrap();
                             if let Some((name, last_x, last_y)) = item_lock.clone() {
                                 for p in motion.pointers() {

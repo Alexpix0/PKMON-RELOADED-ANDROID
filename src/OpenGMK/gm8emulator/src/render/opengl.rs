@@ -1572,16 +1572,85 @@ impl RendererImpl {
             }
         }
 
-        // Edit mode banner
+        // Edit mode interactive HUD toolbar with Save, Cancel, Size slider, and Opacity slider
         if touch_controls::is_edit_mode() {
-            let bx1 = ww * 0.15;
-            let bx2 = ww * 0.85;
-            let by1 = 12.0;
-            let by2 = 38.0;
-            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by2, [0.04, 0.08, 0.16, 0.85]);
-            push_quad(&mut verts, ww, wh, bx1, by1, bx2, by1 + 1.5, [0.20, 0.80, 1.0, 0.90]);
-            push_quad(&mut verts, ww, wh, bx1, by2 - 1.5, bx2, by2, [0.20, 0.80, 1.0, 0.90]);
-            push_text(&mut verts, ww, wh, "MODO EDICION: ARRASTRA LOS BOTONES", ww * 0.50, 25.0, 2.2, [0.30, 0.90, 1.0, 1.0]);
+            let l = touch_controls::edit_toolbar_layout(ww, wh);
+
+            // Main background toolbar bar
+            push_quad(&mut verts, ww, wh, l.bar_x1, l.bar_y1, l.bar_x2, l.bar_y2, [0.05, 0.08, 0.14, 0.95]);
+            push_quad(&mut verts, ww, wh, l.bar_x1, l.bar_y1, l.bar_x2, l.bar_y1 + 1.5, [0.20, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, l.bar_x1, l.bar_y2 - 1.5, l.bar_x2, l.bar_y2, [0.20, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, l.bar_x1, l.bar_y1, l.bar_x1 + 1.5, l.bar_y2, [0.20, 0.80, 1.0, 0.95]);
+            push_quad(&mut verts, ww, wh, l.bar_x2 - 1.5, l.bar_y1, l.bar_x2, l.bar_y2, [0.20, 0.80, 1.0, 0.95]);
+
+            // 1. [ ✔ GUARDAR ] Button (Emerald Green)
+            let gy1 = l.bar_y1 + 6.0;
+            let gy2 = l.bar_y2 - 6.0;
+            push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x2, gy2, [0.15, 0.75, 0.35, 0.95]);
+            let gt = 1.2;
+            push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x2, gy1 + gt, [0.45, 0.95, 0.60, 1.0]);
+            push_quad(&mut verts, ww, wh, l.save_x1, gy2 - gt, l.save_x2, gy2, [0.45, 0.95, 0.60, 1.0]);
+            push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x1 + gt, gy2, [0.45, 0.95, 0.60, 1.0]);
+            push_quad(&mut verts, ww, wh, l.save_x2 - gt, gy1, l.save_x2, gy2, [0.45, 0.95, 0.60, 1.0]);
+            push_text(&mut verts, ww, wh, "GUARDAR", (l.save_x1 + l.save_x2) / 2.0, (gy1 + gy2) / 2.0, 1.9, [1.0, 1.0, 1.0, 1.0]);
+
+            // 2. Slider 1: TAMAÑO / ESCALA (60% .. 150%)
+            let scale_pct = touch_controls::scale_pct();
+            let scale_ratio = ((scale_pct as f32 - 60.0) / 90.0).clamp(0.0, 1.0);
+            let sy = (l.bar_y1 + l.bar_y2) / 2.0;
+
+            // Minus button [-]
+            push_quad(&mut verts, ww, wh, l.scale_btn_minus.0, gy1 + 3.0, l.scale_btn_minus.1, gy2 - 3.0, [0.12, 0.18, 0.28, 0.95]);
+            push_text(&mut verts, ww, wh, "-", (l.scale_btn_minus.0 + l.scale_btn_minus.1) / 2.0, sy, 2.0, [0.40, 0.85, 1.0, 1.0]);
+
+            // Track
+            let (st1, st2) = l.scale_track;
+            push_quad(&mut verts, ww, wh, st1, sy - 3.0, st2, sy + 3.0, [0.10, 0.14, 0.22, 1.0]);
+            let sknob_x = st1 + scale_ratio * (st2 - st1);
+            push_quad(&mut verts, ww, wh, st1, sy - 3.0, sknob_x, sy + 3.0, [0.20, 0.80, 1.0, 1.0]);
+            // Knob indicator
+            push_circle(&mut verts, ww, wh, sknob_x, sy, 7.5, [1.0, 1.0, 1.0, 1.0]);
+            push_ring(&mut verts, ww, wh, sknob_x, sy, 7.5, 2.0, [0.20, 0.80, 1.0, 1.0]);
+
+            // Plus button [+]
+            push_quad(&mut verts, ww, wh, l.scale_btn_plus.0, gy1 + 3.0, l.scale_btn_plus.1, gy2 - 3.0, [0.12, 0.18, 0.28, 0.95]);
+            push_text(&mut verts, ww, wh, "+", (l.scale_btn_plus.0 + l.scale_btn_plus.1) / 2.0, sy, 2.0, [0.40, 0.85, 1.0, 1.0]);
+
+            let scale_label = format!("TAM: {}%", scale_pct);
+            push_text(&mut verts, ww, wh, &scale_label, (st1 + st2) / 2.0, l.bar_y1 + 10.0, 1.4, [0.35, 0.85, 1.0, 0.95]);
+
+            // 3. Slider 2: OPACIDAD (20% .. 100%)
+            let opac_pct = touch_controls::opacity_pct();
+            let opac_ratio = ((opac_pct as f32 - 20.0) / 80.0).clamp(0.0, 1.0);
+
+            // Minus button [-]
+            push_quad(&mut verts, ww, wh, l.opac_btn_minus.0, gy1 + 3.0, l.opac_btn_minus.1, gy2 - 3.0, [0.18, 0.16, 0.10, 0.95]);
+            push_text(&mut verts, ww, wh, "-", (l.opac_btn_minus.0 + l.opac_btn_minus.1) / 2.0, sy, 2.0, [1.0, 0.85, 0.30, 1.0]);
+
+            // Track
+            let (ot1, ot2) = l.opac_track;
+            push_quad(&mut verts, ww, wh, ot1, sy - 3.0, ot2, sy + 3.0, [0.18, 0.15, 0.10, 1.0]);
+            let oknob_x = ot1 + opac_ratio * (ot2 - ot1);
+            push_quad(&mut verts, ww, wh, ot1, sy - 3.0, oknob_x, sy + 3.0, [1.0, 0.75, 0.15, 1.0]);
+            // Knob indicator
+            push_circle(&mut verts, ww, wh, oknob_x, sy, 7.5, [1.0, 1.0, 1.0, 1.0]);
+            push_ring(&mut verts, ww, wh, oknob_x, sy, 7.5, 2.0, [1.0, 0.80, 0.20, 1.0]);
+
+            // Plus button [+]
+            push_quad(&mut verts, ww, wh, l.opac_btn_plus.0, gy1 + 3.0, l.opac_btn_plus.1, gy2 - 3.0, [0.18, 0.16, 0.10, 0.95]);
+            push_text(&mut verts, ww, wh, "+", (l.opac_btn_plus.0 + l.opac_btn_plus.1) / 2.0, sy, 2.0, [1.0, 0.85, 0.30, 1.0]);
+
+            let opac_label = format!("OPAC: {}%", opac_pct);
+            push_text(&mut verts, ww, wh, &opac_label, (ot1 + ot2) / 2.0, l.bar_y1 + 10.0, 1.4, [1.0, 0.85, 0.30, 0.95]);
+
+            // 4. [ ✖ SALIR ] Button (Crimson Red)
+            push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x2, gy2, [0.85, 0.20, 0.20, 0.95]);
+            let ct = 1.2;
+            push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x2, gy1 + ct, [1.0, 0.50, 0.50, 1.0]);
+            push_quad(&mut verts, ww, wh, l.cancel_x1, gy2 - ct, l.cancel_x2, gy2, [1.0, 0.50, 0.50, 1.0]);
+            push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x1 + ct, gy2, [1.0, 0.50, 0.50, 1.0]);
+            push_quad(&mut verts, ww, wh, l.cancel_x2 - ct, gy1, l.cancel_x2, gy2, [1.0, 0.50, 0.50, 1.0]);
+            push_text(&mut verts, ww, wh, "SALIR", (l.cancel_x1 + l.cancel_x2) / 2.0, (gy1 + gy2) / 2.0, 1.9, [1.0, 1.0, 1.0, 1.0]);
         }
 
         // Real-time FPS counter overlay
@@ -1776,23 +1845,58 @@ impl RendererImpl {
                 ("EDT", [0.25, 0.85, 1.0, 1.0]),                                                                                        // 7: Top-Left
             ];
 
+            let font_scale = (wh / 720.0).clamp(1.0, 1.4);
+            let label_px = 2.1 * font_scale;
+
             for (idx, (label, col)) in sector_labels.iter().enumerate() {
                 let sector_angle = -std::f32::consts::FRAC_PI_2 + (idx as f32) * (std::f32::consts::TAU / 8.0);
                 let (cos_a, sin_a) = (sector_angle.cos(), sector_angle.sin());
                 let (ix, iy) = (cx + r_mid * cos_a, cy + r_mid * sin_a);
-                push_text(&mut verts, ww, wh, label, ix, iy, r_inner * 0.20, *col);
+
+                // Precise bounding box container pill for this sector
+                let pill_w = (label.len() as f32 * 14.0 * font_scale).max(58.0 * font_scale);
+                let pill_h = 24.0 * font_scale;
+                let px1 = ix - pill_w / 2.0;
+                let py1 = iy - pill_h / 2.0;
+                let px2 = ix + pill_w / 2.0;
+                let py2 = iy + pill_h / 2.0;
+
+                // Sector pill background
+                push_quad(&mut verts, ww, wh, px1, py1, px2, py2, [0.06, 0.09, 0.15, 0.92]);
+                // Sector border in matching highlight color
+                let b_col = [col[0], col[1], col[2], 0.70];
+                let t = 1.2;
+                push_quad(&mut verts, ww, wh, px1, py1, px2, py1 + t, b_col);
+                push_quad(&mut verts, ww, wh, px1, py2 - t, px2, py2, b_col);
+                push_quad(&mut verts, ww, wh, px1, py1, px1 + t, py2, b_col);
+                push_quad(&mut verts, ww, wh, px2 - t, py1, px2, py2, b_col);
+
+                // Perfectly centered, delimited text
+                push_text(&mut verts, ww, wh, label, ix, iy, label_px, *col);
             }
 
             // Center Disc: Fast-Forward / Turbo (>>)
             let turbo_active = touch_controls::fast_forward_active();
-            let (c_fill, c_ring, c_ink) = if turbo_active {
-                ([1.0, 0.65, 0.05, 0.96], [1.0, 0.90, 0.30, 1.0], [1.0, 1.0, 1.0, 1.0])
+            let r_center = r_inner * 0.78;
+            let (c_fill, c_ring, c_ink, sub_label) = if turbo_active {
+                ([0.95, 0.55, 0.05, 0.98], [1.0, 0.85, 0.25, 1.0], [1.0, 1.0, 1.0, 1.0], "TURBO ON")
             } else {
-                ([0.14, 0.22, 0.34, 0.96], [0.35, 0.70, 0.95, 0.90], [0.45, 0.85, 1.0, 1.0])
+                ([0.10, 0.16, 0.26, 0.98], [0.30, 0.70, 0.95, 0.90], [0.45, 0.85, 1.0, 1.0], "TURBO")
             };
-            push_circle(&mut verts, ww, wh, cx, cy, r_inner, c_fill);
-            push_ring(&mut verts, ww, wh, cx, cy, r_inner, 3.2, c_ring);
-            push_text(&mut verts, ww, wh, ">>", cx, cy, r_inner * 0.36, c_ink);
+
+            // Subtle ambient glow ring behind center disc
+            push_ring(&mut verts, ww, wh, cx, cy, r_center + 4.0, 2.5, [0.20, 0.50, 0.80, 0.35]);
+            // Metallic inner disc
+            push_circle(&mut verts, ww, wh, cx, cy, r_center, c_fill);
+            // Dual-ring concentric bevel
+            push_ring(&mut verts, ww, wh, cx, cy, r_center, 3.0, c_ring);
+            push_ring(&mut verts, ww, wh, cx, cy, r_center - 5.0, 1.2, [1.0, 1.0, 1.0, 0.25]);
+
+            // Sharp, properly proportioned '>>' glyph
+            let turbo_px = 3.0 * font_scale;
+            push_text(&mut verts, ww, wh, ">>", cx, cy - 6.0 * font_scale, turbo_px, c_ink);
+            // Subtitle indicator
+            push_text(&mut verts, ww, wh, sub_label, cx, cy + 13.0 * font_scale, 1.4 * font_scale, c_ink);
         }
 
         // In-game Toast Notification Banner
@@ -1816,18 +1920,10 @@ impl RendererImpl {
         }
         unsafe {
             let gl = &self.gl;
-            let mut prev_program = 0;
-            gl.GetIntegerv(gl::CURRENT_PROGRAM, &mut prev_program);
-            let mut prev_vp = [0i32; 4];
-            gl.GetIntegerv(gl::VIEWPORT, prev_vp.as_mut_ptr());
-            let mut prev_vbo = 0;
-            gl.GetIntegerv(gl::ARRAY_BUFFER_BINDING, &mut prev_vbo);
-            let mut prev_vao = 0;
-            gl.GetIntegerv(gl::VERTEX_ARRAY_BINDING, &mut prev_vao);
-            let mut prev_fbo = 0;
-            gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut prev_fbo);
-            let prev_blend = gl.IsEnabled(gl::BLEND) == gl::TRUE;
-            let prev_depth = gl.IsEnabled(gl::DEPTH_TEST) == gl::TRUE;
+            let prev_program = self.program;
+            let prev_vao = self.vao;
+            let prev_vbo = self.commands_vbo;
+            let prev_fbo = self.current_target;
 
             // `present` restores whatever framebuffer was bound while the game drew. The overlay
             // must go to the screen (framebuffer 0), not back into the game's offscreen target.
@@ -1880,17 +1976,9 @@ impl RendererImpl {
             gl.BindBuffer(gl::ARRAY_BUFFER, prev_vbo as u32);
             gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, prev_fbo as u32);
             gl.UseProgram(prev_program as u32);
-            gl.Viewport(prev_vp[0], prev_vp[1], prev_vp[2], prev_vp[3]);
-            if prev_blend {
-                gl.Enable(gl::BLEND)
-            } else {
-                gl.Disable(gl::BLEND)
-            }
-            if prev_depth {
-                gl.Enable(gl::DEPTH_TEST)
-            } else {
-                gl.Disable(gl::DEPTH_TEST)
-            }
+            gl.Viewport(0, 0, window_width as i32, window_height as i32);
+            gl.Disable(gl::BLEND);
+            gl.Enable(gl::DEPTH_TEST);
         }
     }
 }

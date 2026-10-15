@@ -9,6 +9,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Maximum active particles per particle system to prevent GPU vertex buffer overload on mobile
+pub const MAX_PARTICLES_PER_SYSTEM: usize = 512;
+
 pub struct PSIterDrawOrder(usize);
 impl PSIterDrawOrder {
     pub fn next(&mut self, manager: &Manager) -> Option<i32> {
@@ -1183,7 +1186,13 @@ impl System {
         rand: &mut Random,
         types: &dyn GetAsset<Box<ParticleType>>,
     ) {
+        if self.particles.len() >= MAX_PARTICLES_PER_SYSTEM {
+            return;
+        }
         for _ in 0..number {
+            if self.particles.len() >= MAX_PARTICLES_PER_SYSTEM {
+                break;
+            }
             if let Some(particle) = Particle::new(ptype, x, y, rand, types, colour) {
                 self.particles.push(particle);
             }
@@ -1452,6 +1461,9 @@ impl Particle {
         }
         size_wiggle_factor -= 1.0;
         let size = self.size + ptype.size_wiggle * size_wiggle_factor.into();
+        if self.alpha <= Real::from(0.001) || size <= Real::from(0.0) {
+            return;
+        }
         if let Some(atlas_ref) = atlas_ref {
             renderer.draw_sprite(
                 atlas_ref,
@@ -1605,7 +1617,13 @@ impl Emitter {
         } else {
             number
         };
+        if particles.len() >= MAX_PARTICLES_PER_SYSTEM {
+            return;
+        }
         for _ in 0..number {
+            if particles.len() >= MAX_PARTICLES_PER_SYSTEM {
+                break;
+            }
             let (xspawn, yspawn) = loop {
                 let mut xspawn = self.distribution.range(rand, Real::from(0.0), Real::from(1.0));
                 let mut yspawn = self.distribution.range(rand, Real::from(0.0), Real::from(1.0));

@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokémon Reloaded Android - Studio Visual de Controles & Rueda</title>
+  <style>
+    :root {
+      --bg: #090c10;
+      --panel: #161b22;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --green: #2ea043;
+      --red: #f85149;
+      --text: #f0f6fc;
+      --subtext: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Left Control Sidebar */
+    .sidebar {
+      width: 380px;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+    }
+    .header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .header h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .header p {
+      font-size: 0.8rem;
+      color: var(--subtext);
+      margin-top: 4px;
+    }
+    .tools {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--subtext);
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover { background: #30363d; border-color: #8b949e; }
+    .btn.active {
+      background: rgba(88, 166, 255, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .btn.primary {
+      background: var(--green);
+      border-color: #3fb950;
+      color: #fff;
+    }
+    .btn.primary:hover { background: #3fb950; }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .control-row label {
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      color: var(--text);
+    }
+    .control-row label span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .code-box {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 0.72rem;
+      color: #79c0ff;
+      max-height: 140px;
+      overflow-y: auto;
+      white-space: pre;
+    }
+
+    /* Main Viewport Workspace */
+    .workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      background: radial-gradient(circle at center, #131922 0%, #080b0f 100%);
+    }
+
+    /* Smartphone Device Frame */
+    .device-bezel {
+      background: #000;
+      border: 14px solid #1c2128;
+      border-radius: 36px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.08);
+      position: relative;
+      display: flex;
+      overflow: hidden;
+      width: 960px;
+      height: 480px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .device-bezel.aspect-20-9 { width: 1000px; height: 450px; }
+    .device-bezel.aspect-16-9 { width: 888px; height: 500px; }
+
+    /* Screen Canvas */
+    .screen {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #0d1117;
+      overflow: hidden;
+    }
+    .game-area {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 12.5%;
+      width: 75%;
+      background: #111b27 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="32" height="32" fill="%23132030"/><rect x="32" y="32" width="32" height="32" fill="%23132030"/></svg>');
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255,255,255,0.18);
+      font-weight: 800;
+      font-size: 1.5rem;
+      letter-spacing: 2px;
+      border-left: 2px solid var(--border);
+      border-right: 2px solid var(--border);
+      pointer-events: none;
+    }
+
+    /* Interactive Draggable Buttons */
+    .touch-btn {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(16, 20, 32, 0.45);
+      border: 2px solid rgba(255, 255, 255, 0.70);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      cursor: grab;
+      user-select: none;
+      backdrop-filter: blur(2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transition: background 0.1s, border-color 0.1s, transform 0.05s;
+    }
+    .touch-btn:active {
+      cursor: grabbing;
+      background: rgba(88, 166, 255, 0.4);
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent);
+    }
+    .touch-btn.selected {
+      border-color: #ffd33d !important;
+      box-shadow: 0 0 14px #ffd33d !important;
+    }
+
+    /* Joystick preview */
+    .joystick-base {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(20, 24, 36, 0.25);
+      border: 3px solid rgba(255, 255, 255, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+    }
+    .joystick-knob {
+      width: 45%;
+      height: 45%;
+      border-radius: 50%;
+      background: rgba(220, 230, 255, 0.50);
+      border: 2px solid #fff;
+    }
+
+    /* Radial Wheel Preview Overlay */
+    .wheel-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 20;
+    }
+    .wheel-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .wheel-container {
+      position: relative;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: #11151f;
+      border: 4px solid #4a5d78;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 25px rgba(88,166,255,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .wheel-center-btn {
+      width: 105px;
+      height: 105px;
+      border-radius: 50%;
+      background: #1a283d;
+      border: 3px solid #58a6ff;
+      color: #79c0ff;
+      font-size: 1.4rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 5;
+      box-shadow: 0 0 16px rgba(88,166,255,0.3);
+      transition: all 0.15s;
+    }
+    .wheel-center-btn:hover {
+      background: #e39500;
+      border-color: #ffd33d;
+      color: #fff;
+      box-shadow: 0 0 24px #ffd33d;
+      transform: scale(1.04);
+    }
+    .wheel-sector {
+      position: absolute;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #d1d9e0;
+      transform: translate(-50%, -50%);
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+    .wheel-sector:hover {
+      color: #fff;
+      background: rgba(88,166,255,0.25);
+      text-shadow: 0 0 8px #58a6ff;
+    }
+
+    /* Toast Notification Banner Preview */
+    .hud-toast {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(14, 24, 40, 0.94);
+      border: 1.5px solid #58a6ff;
+      padding: 6px 20px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      z-index: 25;
+      display: none;
+    }
+
+    /* Selected Item Inspector */
+    .inspector-card {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .inspector-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .inspector-stats {
+      font-size: 0.75rem;
+      color: var(--subtext);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="header">
+      <h1>🎮 Studio Visual Reloaded</h1>
+      <p>Personaliza controles táctiles y la rueda Drastic</p>
+    </div>
+
+    <div class="tools">
+      <!-- Device & Aspect -->
+      <div>
+        <div class="section-title">Formato de Pantalla</div>
+        <div class="btn-group">
+          <button class="btn active" id="btnAspect209" onclick="setAspect('20-9')">20:9 (Móvil Moderno)</button>
+          <button class="btn" id="btnAspect169" onclick="setAspect('16-9')">16:9 (Estándar)</button>
+        </div>
+      </div>
+
+      <!-- Quick Toggles -->
+      <div>
+        <div class="section-title">Vista Interactiva</div>
+        <div class="btn-group">
+          <button class="btn active" id="btnToggleWheel" onclick="toggleWheel()">🎡 Rueda Drastic: OFF</button>
+          <button class="btn" id="btnToggleToast" onclick="triggerToast('PUNTO DE RETORNO GUARDADO')">🔔 Probar Toast</button>
+        </div>
+      </div>
+
+      <!-- Global Controls Sizing -->
+      <div>
+        <div class="section-title">Ajustes Globales</div>
+        <div class="control-row">
+          <label>Escala Global <span id="valScale">100%</span></label>
+          <input type="range" id="rngScale" min="70" max="140" value="100" oninput="updateGlobalScale(this.value)">
+        </div>
+        <div class="control-row" style="margin-top: 8px;">
+          <label>Opacidad Táctil <span id="valOpacity">70%</span></label>
+          <input type="range" id="rngOpacity" min="20" max="100" value="70" oninput="updateGlobalOpacity(this.value)">
+        </div>
+      </div>
+
+      <!-- Inspector of currently dragged / selected button -->
+      <div>
+        <div class="section-title">Inspector de Botón Seleccionado</div>
+        <div class="inspector-card">
+          <div class="inspector-title" id="inspName">Ningún botón seleccionado</div>
+          <div class="inspector-stats" id="inspCoords">Arrastra cualquier botón con el ratón para moverlo.</div>
+          <div class="control-row" style="margin-top: 4px;">
+            <label>Radio Individual <span id="valRadius">-</span></label>
+            <input type="range" id="rngRadius" min="15" max="55" value="26" oninput="updateSelectedRadius(this.value)" disabled>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export to Rust & layout.conf -->
+      <div>
+        <div class="section-title">Exportación Inmediata</div>
+        <div class="btn-group" style="margin-bottom: 8px;">
+          <button class="btn primary" onclick="copyRustCode()">📋 Copiar Código Rust</button>
+          <button class="btn" onclick="copyLayoutConf()">📄 Copiar layout.conf</button>
+        </div>
+        <div class="code-box" id="codeBox">Generando código...</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Workspace Canvas -->
+  <main class="workspace">
+    <div class="device-bezel aspect-20-9" id="deviceBezel">
+      <div class="screen" id="screen">
+        <!-- 4:3 Game Canvas representation -->
+        <div class="game-area">
+          POKÉMON RELOADED 4:3
+        </div>
+
+        <!-- Toast Banner -->
+        <div class="hud-toast" id="hudToast">PUNTO DE RETORNO GUARDADO</div>
+
+        <!-- Drastic Radial Wheel Overlay -->
+        <div class="wheel-overlay" id="wheelOverlay">
+          <div class="wheel-container">
+            <!-- Center Button -->
+            <div class="wheel-center-btn" onclick="triggerToast('TURBO: ALTERNADO')">&gt;&gt;</div>
+
+            <!-- 8 Radial Sectors -->
+            <div class="wheel-sector" style="top: 14%; left: 50%;" onclick="triggerToast('AUDIO: SILENCIADO')">MUT</div>
+            <div class="wheel-sector" style="top: 25%; left: 75%;" onclick="triggerToast('HISTORIAL DIALOGOS')">LOG</div>
+            <div class="wheel-sector" style="top: 50%; left: 86%; color: #3fb950;" onclick="triggerToast('PUNTO DE RETORNO GUARDADO')">SNAP</div>
+            <div class="wheel-sector" style="top: 75%; left: 75%; color: #ffd33d;" onclick="triggerToast('FPS: ALTERNADO')">FPS</div>
+            <div class="wheel-sector" style="top: 86%; left: 50%; color: #8b949e;" onclick="toggleWheel()">CLOSE</div>
+            <div class="wheel-sector" style="top: 75%; left: 25%; color: #79c0ff;" onclick="triggerToast('BEZEL: REPETIR')">BEZEL</div>
+            <div class="wheel-sector" style="top: 50%; left: 14%; color: #56d364;" onclick="triggerToast('TABLA DE TIPOS')">TIP</div>
+            <div class="wheel-sector" style="top: 25%; left: 25%; color: #58a6ff;" onclick="triggerToast('MODO EDICION')">EDT</div>
+          </div>
+        </div>
+
+        <!-- Dynamic Touch Buttons will be injected here -->
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Initial Controls Layout from touch_controls.rs
+    const controls = [
+      { name: "radial_menu", label: "▼", cx: 0.500, cy: 0.958, r: 0.024, type: "menu" },
+      { name: "escape", label: "ESC", cx: 0.405, cy: 0.940, r: 0.026 },
+      { name: "return", label: "OK", cx: 0.595, cy: 0.940, r: 0.026 },
+      { name: "z", label: "Z", cx: 0.865, cy: 0.851, r: 0.033 },
+      { name: "x", label: "X", cx: 0.933, cy: 0.700, r: 0.033 },
+      { name: "c", label: "C", cx: 0.797, cy: 0.700, r: 0.033 },
+      { name: "v", label: "V", cx: 0.865, cy: 0.549, r: 0.033 },
+      { name: "b", label: "B", cx: 0.712, cy: 0.840, r: 0.026 },
+      { name: "s", label: "S", cx: 0.712, cy: 0.700, r: 0.026 },
+      { name: "pkmn", label: "SEL", cx: 0.300, cy: 0.760, r: 0.038 },
+      { name: "a", label: "A", cx: 0.640, cy: 0.900, r: 0.024 },
+      { name: "n", label: "N", cx: 0.640, cy: 0.760, r: 0.024 },
+      { name: "space", label: "PKM", cx: 0.300, cy: 0.145, r: 0.022 },
+      { name: "o", label: "O", cx: 0.372, cy: 0.145, r: 0.022 },
+      { name: "m", label: "M", cx: 0.444, cy: 0.145, r: 0.022 },
+      { name: "e", label: "E", cx: 0.516, cy: 0.145, r: 0.022 },
+      { name: "t", label: "T", cx: 0.588, cy: 0.145, r: 0.022 },
+      { name: "l", label: "L", cx: 0.660, cy: 0.145, r: 0.022 },
+      { name: "p", label: "P", cx: 0.732, cy: 0.145, r: 0.022 },
+      { name: "joystick", label: "", cx: 0.135, cy: 0.700, r: 0.100, type: "joystick" }
+    ];
+
+    let globalScale = 1.0;
+    let globalOpacity = 0.7;
+    let selectedIndex = -1;
+    const screen = document.getElementById("screen");
+
+    function renderControls() {
+      // Clear previous buttons
+      const existing = screen.querySelectorAll(".touch-btn, .joystick-base");
+      existing.forEach(e => e.remove());
+
+      const sw = screen.clientWidth;
+      const sh = screen.clientHeight;
+
+      controls.forEach((ctrl, idx) => {
+        if (ctrl.type === "joystick") {
+          const stick = document.createElement("div");
+          stick.className = "joystick-base" + (selectedIndex === idx ? " selected" : "");
+          const size = ctrl.r * 2 * sh * globalScale;
+          stick.style.width = size + "px";
+          stick.style.height = size + "px";
+          stick.style.left = (ctrl.cx * 100) + "%";
+          stick.style.top = (ctrl.cy * 100) + "%";
+          stick.style.opacity = globalOpacity;
+
+          const knob = document.createElement("div");
+          knob.className = "joystick-knob";
+          stick.appendChild(knob);
+
+          setupDrag(stick, idx);
+          screen.appendChild(stick);
+          return;
+        }
+
+        const btn = document.createElement("div");
+        btn.className = "touch-btn" + (selectedIndex === idx ? " selected" : "");
+        const d = ctrl.r * 2 * sw * globalScale;
+        btn.style.width = d + "px";
+        btn.style.height = d + "px";
+        btn.style.left = (ctrl.cx * 100) + "%";
+        btn.style.top = (ctrl.cy * 100) + "%";
+        btn.style.opacity = globalOpacity;
+        btn.innerText = ctrl.label;
+
+        if (ctrl.name === "radial_menu") {
+          btn.style.background = "rgba(88, 166, 255, 0.35)";
+          btn.style.borderColor = "var(--accent)";
+          btn.title = "Flecha menú Drastic";
+        }
+
+        setupDrag(btn, idx);
+        screen.appendChild(btn);
+      });
+
+      updateCodeExport();
+    }
+
+    function setupDrag(elem, index) {
+      elem.onmousedown = function(e) {
+        e.preventDefault();
+        selectButton(index);
+        const rect = screen.getBoundingClientRect();
+
+        function onMouseMove(moveEvent) {
+          const nx = (moveEvent.clientX - rect.left) / rect.width;
+          const ny = (moveEvent.clientY - rect.top) / rect.height;
+
+          controls[index].cx = Math.max(0.02, Math.min(0.98, nx));
+          controls[index].cy = Math.max(0.04, Math.min(0.98, ny));
+
+          elem.style.left = (controls[index].cx * 100) + "%";
+          elem.style.top = (controls[index].cy * 100) + "%";
+
+          updateInspector();
+          updateCodeExport();
+        }
+
+        function onMouseUp() {
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        }
+
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+      };
+    }
+
+    function selectButton(idx) {
+      selectedIndex = idx;
+      updateInspector();
+      renderControls();
+    }
+
+    function updateInspector() {
+      if (selectedIndex < 0) return;
+      const ctrl = controls[selectedIndex];
+      document.getElementById("inspName").innerText = "Botón: " + ctrl.name.toUpperCase();
+      document.getElementById("inspCoords").innerText = `Posición: cx: ${ctrl.cx.toFixed(3)}, cy: ${ctrl.cy.toFixed(3)} | r: ${ctrl.r.toFixed(3)}`;
+      const rng = document.getElementById("rngRadius");
+      rng.disabled = false;
+      rng.value = Math.round(ctrl.r * 1000);
+      document.getElementById("valRadius").innerText = ctrl.r.toFixed(3);
+    }
+
+    function updateSelectedRadius(val) {
+      if (selectedIndex < 0) return;
+      controls[selectedIndex].r = parseFloat(val) / 1000.0;
+      document.getElementById("valRadius").innerText = controls[selectedIndex].r.toFixed(3);
+      renderControls();
+    }
+
+    function updateGlobalScale(val) {
+      globalScale = parseInt(val) / 100.0;
+      document.getElementById("valScale").innerText = val + "%";
+      renderControls();
+    }
+
+    function updateGlobalOpacity(val) {
+      globalOpacity = parseInt(val) / 100.0;
+      document.getElementById("valOpacity").innerText = val + "%";
+      renderControls();
+    }
+
+    function setAspect(mode) {
+      const bezel = document.getElementById("deviceBezel");
+      document.getElementById("btnAspect209").classList.toggle("active", mode === "20-9");
+      document.getElementById("btnAspect169").classList.toggle("active", mode === "16-9");
+      bezel.className = "device-bezel aspect-" + mode;
+      setTimeout(renderControls, 100);
+    }
+
+    function toggleWheel() {
+      const wheel = document.getElementById("wheelOverlay");
+      const btn = document.getElementById("btnToggleWheel");
+      const open = wheel.classList.toggle("open");
+      btn.classList.toggle("active", open);
+      btn.innerText = open ? "🎡 Rueda Drastic: ON" : "🎡 Rueda Drastic: OFF";
+    }
+
+    function triggerToast(msg) {
+      const toast = document.getElementById("hudToast");
+      toast.innerText = msg;
+      toast.style.display = "block";
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => { toast.style.display = "none"; }, 2000);
+    }
+
+    function updateCodeExport() {
+      let rust = "";
+      controls.forEach(c => {
+        if (c.type === "joystick") return;
+        rust += `Control { name: "${c.name}", key: ..., shape: Shape::Circle { cx: ${c.cx.toFixed(3)}, cy: ${c.cy.toFixed(3)}, r: ${c.r.toFixed(3)} } },\n`;
+      });
+      document.getElementById("codeBox").innerText = rust;
+    }
+
+    function copyRustCode() {
+      navigator.clipboard.writeText(document.getElementById("codeBox").innerText);
+      triggerToast("¡CÓDIGO RUST COPIADO!");
+    }
+
+    function copyLayoutConf() {
+      let conf = "# layout.conf personalizado generado por Studio Visual Reloaded\n";
+      controls.forEach(c => {
+        conf += `${c.name}=${c.cx.toFixed(4)},${c.cy.toFixed(4)}\n`;
+      });
+      navigator.clipboard.writeText(conf);
+      triggerToast("¡LAYOUT.CONF COPIADO!");
+    }
+
+    window.onload = () => {
+      renderControls();
+    };
+    window.onresize = () => {
+      renderControls();
+    };
+  </script>
+</body>
+</html>

@@ -4,6 +4,7 @@ use crate::{
     gml,
     input::MouseButton,
     instance::Instance,
+    math::Real,
     types::ID,
 };
 
@@ -594,6 +595,30 @@ impl Game {
 
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
+        let cull_bounds = if self.room.views_enabled {
+            let mut min_x = i32::MAX;
+            let mut max_x = i32::MIN;
+            let mut min_y = i32::MAX;
+            let mut max_y = i32::MIN;
+            let mut any_visible = false;
+            for view in &self.room.views {
+                if view.visible {
+                    any_visible = true;
+                    min_x = min_x.min(view.source_x - 300);
+                    max_x = max_x.max(view.source_x + view.source_w + 300);
+                    min_y = min_y.min(view.source_y - 300);
+                    max_y = max_y.max(view.source_y + view.source_h + 300);
+                }
+            }
+            if any_visible {
+                Some((Real::from(min_x), Real::from(max_x), Real::from(min_y), Real::from(max_y)))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =
@@ -607,6 +632,32 @@ impl Game {
                     // And iter every instance of the target object
                     let mut iter2 = self.room.instance_list.iter_by_object(target_obj);
                     while let Some(target) = iter2.next(&self.room.instance_list) {
+                        if instance == target {
+                            continue;
+                        }
+                        let inst1 = self.room.instance_list.get(instance);
+                        let inst2 = self.room.instance_list.get(target);
+
+                        // Coarse proximity culling: instances more than 256px apart cannot collide
+                        if (inst1.x.get() - inst2.x.get()).abs() > Real::from(256.0)
+                            || (inst1.y.get() - inst2.y.get()).abs() > Real::from(256.0)
+                        {
+                            continue;
+                        }
+
+                        // Off-screen culling: skip if both instances are outside active camera views + margin
+                        if let Some((cx1, cx2, cy1, cy2)) = cull_bounds {
+                            let x1 = inst1.x.get();
+                            let y1 = inst1.y.get();
+                            let x2 = inst2.x.get();
+                            let y2 = inst2.y.get();
+                            if (x1 < cx1 || x1 > cx2 || y1 < cy1 || y1 > cy2)
+                                && (x2 < cx1 || x2 > cx2 || y2 < cy1 || y2 > cy2)
+                            {
+                                continue;
+                            }
+                        }
+
                         // And finally, check if the two instances collide
                         if self.check_collision(instance, target) {
                             // If either instance is solid, move both back to their previous positions

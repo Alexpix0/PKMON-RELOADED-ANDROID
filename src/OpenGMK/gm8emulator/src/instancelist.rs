@@ -326,18 +326,13 @@ impl InstanceList {
     }
 
     pub fn refresh_maps(&mut self) {
-        self.object_id_map.clear();
-        self.object_id_map_inherit.clear();
-
-        let mut iter = self.iter_by_drawing();
-        while let Some(handle) = iter.next(self) {
-            let instance = self.get(handle);
-            let object_id = instance.object_index.get();
-            let parents = instance.parents.clone();
-            self.object_id_map.entry(object_id).or_default().push(handle);
-            for &parent in parents.borrow().iter() {
-                self.object_id_map_inherit.entry(parent).or_insert(Vec::new()).push(handle);
-            }
+        // High-performance entity recycling: retain valid alive instances in place,
+        // eliminating costly full hash map deallocations and re-insertions on every deleted entity in combat.
+        for handles in self.object_id_map.values_mut() {
+            handles.retain(|&h| self.chunks.get(h).is_some());
+        }
+        for handles in self.object_id_map_inherit.values_mut() {
+            handles.retain(|&h| self.chunks.get(h).is_some());
         }
     }
 
