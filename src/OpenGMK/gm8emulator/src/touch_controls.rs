@@ -132,35 +132,68 @@ pub fn control_offset(name: &str) -> (f32, f32) {
     (0.0, 0.0)
 }
 
+static HIDDEN_BUTTONS: Mutex<Option<std::collections::HashSet<String>>> = Mutex::new(None);
+
+pub fn is_button_hidden(name: &str) -> bool {
+    HIDDEN_BUTTONS
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|set| set.contains(name))
+        .unwrap_or(false)
+}
+
+pub fn set_button_hidden(name: &str, hidden: bool) {
+    let mut lock = HIDDEN_BUTTONS.lock().unwrap();
+    let set = lock.get_or_insert_with(std::collections::HashSet::new);
+    if hidden {
+        set.insert(name.to_string());
+    } else {
+        set.remove(name);
+    }
+}
+
 pub fn load_layout_file(path: &Path) {
     if let Ok(text) = std::fs::read_to_string(path) {
         let mut map = HashMap::new();
+        let mut hidden_set = std::collections::HashSet::new();
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            if let Some((name, coords)) = line.split_once('=') {
-                if let Some((xs, ys)) = coords.split_once(',') {
+            if let Some((name, val)) = line.split_once('=') {
+                let name = name.trim();
+                let val = val.trim();
+                if val.eq_ignore_ascii_case("hidden") || val.eq_ignore_ascii_case("oculto") || val == "false" || val == "0" {
+                    hidden_set.insert(name.to_string());
+                } else if let Some((xs, ys)) = val.split_once(',') {
                     if let (Ok(x), Ok(y)) = (xs.trim().parse::<f32>(), ys.trim().parse::<f32>()) {
-                        map.insert(name.trim().to_string(), (x, y));
+                        map.insert(name.to_string(), (x, y));
                     }
                 }
             }
         }
         *CUSTOM_OFFSETS.lock().unwrap() = Some(map);
+        *HIDDEN_BUTTONS.lock().unwrap() = Some(hidden_set);
     }
 }
 
 pub fn save_layout_file(path: &Path) {
     let lock = CUSTOM_OFFSETS.lock().unwrap();
+    let hidden_lock = HIDDEN_BUTTONS.lock().unwrap();
+    let mut text = String::from("# Layout personalizado de controles Pokémon Reloaded Android\n");
+    if let Some(hidden) = hidden_lock.as_ref() {
+        for name in hidden {
+            text.push_str(&format!("{}=hidden\n", name));
+        }
+    }
     if let Some(map) = lock.as_ref() {
-        let mut text = String::from("# Layout personalizado de controles Pokémon Reloaded Android\n");
         for (name, (x, y)) in map {
             text.push_str(&format!("{}={:.4},{:.4}\n", name, x, y));
         }
-        let _ = std::fs::write(path, text);
     }
+    let _ = std::fs::write(path, text);
 }
 
 static FAST_FORWARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -392,6 +425,12 @@ static ROOM: AtomicI32 = AtomicI32::new(-1);
 
 /// Called by the emulator every frame with the current room id.
 pub fn set_room(room: i32) {
+    let old = ROOM.load(Ordering::Relaxed);
+    if old != room {
+        // Room changed: immediately clear dialogue state and debounce
+        DIALOGUE.store(false, Ordering::Relaxed);
+        DIALOGUE_DEBOUNCE_FRAMES.store(0, Ordering::Relaxed);
+    }
     ROOM.store(room, Ordering::Relaxed);
     log_state_change(room);
 }
@@ -399,11 +438,27 @@ pub fn set_room(room: i32) {
 /// Whether the game has one of its dialogue boxes open. Reported every frame by the engine, which
 /// reads it from the game's own modal state; the overlay then leaves a single button.
 static DIALOGUE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DIALOGUE_DEBOUNCE_FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+const DIALOGUE_DEBOUNCE_HOLD: u32 = 8; // ~130ms at 60 FPS, prevents controls flicker between dialogue pages
 
 pub fn set_dialogue(open: bool) {
-    let was = DIALOGUE.swap(open, Ordering::Relaxed);
-    if was != open {
-        eprintln!("[overlay] dialogo {}", if open { "abierto: solo el boton de avanzar" } else { "cerrado" });
+    if open {
+        DIALOGUE_DEBOUNCE_FRAMES.store(DIALOGUE_DEBOUNCE_HOLD, Ordering::Relaxed);
+        let was = DIALOGUE.swap(true, Ordering::Relaxed);
+        if !was {
+            eprintln!("[overlay] dialogo abierto: solo el boton de avanzar");
+        }
+    } else {
+        let remaining = DIALOGUE_DEBOUNCE_FRAMES.load(Ordering::Relaxed);
+        if remaining > 0 {
+            DIALOGUE_DEBOUNCE_FRAMES.store(remaining - 1, Ordering::Relaxed);
+        } else {
+            let was = DIALOGUE.swap(false, Ordering::Relaxed);
+            if was {
+                eprintln!("[overlay] dialogo cerrado");
+            }
+        }
     }
 }
 
@@ -509,6 +564,9 @@ pub fn is_active(index: usize) -> bool {
         return false;
     }
     let c = &CONTROLS[index];
+    if is_button_hidden(c.name) {
+        return false;
+    }
     if !show_num_keys() && (c.name.starts_with("alpha") || c.name == "space" || c.name == "o" || c.name == "m" || c.name == "e" || c.name == "t" || c.name == "l" || c.name == "p") {
         return false;
     }

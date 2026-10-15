@@ -626,4 +626,23 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 3. **Declaración Explícita de Precisión en GLES 3.0:**
    Se añadió `precision highp int;` al preludio de GLSL ES 3.0 para evitar imprecisiones de enteros en drivers antiguos de tablets.
 
+---
 
+## 15. Corrección de Pantalla Negra al Minimizar en Modales/Códigos, Antirrebote en Diálogos y Ocultación Individual de Botones
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 14`, `versionName = "0.4.0 EX"`.
+* **Archivos afectados:**
+  - [`src/OpenGMK/gm8emulator/src/gml/kernel.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/kernel.rs)
+  - [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+
+### Problemas Solucionados y Nuevas Capacidades
+1. **Pantalla Negra al Volver tras Minimizar con Menús/Campos de Texto/Códigos Abiertos:**
+   * **Causa:** Cuando el jugador abre un cuadro modal de texto, introducción de códigos (Regalo Misterioso / Códigos de entrenador) o diálogo de opciones, el juego de Game Maker entra en un bucle cerrado que invoca directamente `screen_redraw()` o `screen_refresh()`, sin retornar al bucle principal `game.frame()`. Al minimizar la aplicación, Android destruye la superficie EGL (`detach_surface()`); al reanudar, se crea una nueva superficie EGL, pero `screen_redraw()` carecía de la sincronización `bind_surface()`, `has_surface()` y del guardián de hilo `frame_guard()`. Como consecuencia, seguía dibujando sobre la superficie destruida o no vinculada, dejando la pantalla en negro hasta que el jugador salía del menú.
+   * **Solución:** Se integraron `frame_guard()`, la verificación `has_surface()` y el enlace activo `bind_surface()` directamente dentro de `screen_redraw()` y `screen_refresh()`. Al minimizar y volver, la nueva superficie EGL se vincula de inmediato en el hilo de renderizado, restaurando la imagen al instante.
+2. **Eliminación del Parpadeo de Controles al Avanzar Diálogos NPC:**
+   * **Causa:** Entre cada página de diálogo de un NPC, el motor tarda entre 1 y 3 fotogramas en cargar el siguiente texto. Durante esos fotogramas intermedios, la variable `global.drawModalSystem` no reportaba temporalmente el id modal, haciendo que `dialogue_open()` pasara a `false` por una fracción de segundo y mostrando todos los controles en pantalla antes de volver a ocultarlos.
+   * **Solución:** Se implementó un contador de histéresis/antirrebote (`DIALOGUE_DEBOUNCE_FRAMES` de 8 fotogramas / ~130ms). Si el diálogo se cierra temporalmente por el avance de texto, los controles se mantienen ocultos. Al cambiar de sala o terminar de hablar definitivamente, los controles vuelven de forma suave sin ningún parpadeo visual.
+3. **Soporte para Ocultación Individual de Botones (`layout.conf`):**
+   * Se añadió el mapa global `HIDDEN_BUTTONS` y la función `is_button_hidden()`.
+   * En `layout.conf` (y editable individualmente), cualquier botón configurado con `=hidden` u `=oculto` (por ejemplo `t=hidden`, `l=hidden`, `p=hidden`, `e=hidden`, `alpha1=hidden`) se oculta de forma individual e independiente, permitiendo a cada usuario conservar únicamente los controles que necesita en pantalla.

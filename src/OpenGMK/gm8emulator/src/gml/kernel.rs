@@ -557,6 +557,17 @@ impl Game {
 
     pub fn screen_redraw(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
+        #[cfg(target_os = "android")]
+        let _frame = crate::render::opengl::egl::frame_guard();
+
+        #[cfg(target_os = "android")]
+        {
+            if !crate::render::opengl::egl::has_surface() {
+                return Ok(Default::default())
+            }
+            unsafe { crate::render::opengl::egl::bind_surface() };
+        }
+
         // A dialogue redraws from inside its own wait, so the controls' state is refreshed here as
         // well as once per frame; otherwise the frame loop never comes round during a dialogue.
         #[cfg(target_os = "android")]
@@ -571,6 +582,17 @@ impl Game {
 
     pub fn screen_refresh(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
+        #[cfg(target_os = "android")]
+        let _frame = crate::render::opengl::egl::frame_guard();
+
+        #[cfg(target_os = "android")]
+        {
+            if !crate::render::opengl::egl::has_surface() {
+                return Ok(Default::default())
+            }
+            unsafe { crate::render::opengl::egl::bind_surface() };
+        }
+
         #[cfg(target_os = "android")]
         self.sync_overlay();
         let (width, height) = self.window_inner_size;
