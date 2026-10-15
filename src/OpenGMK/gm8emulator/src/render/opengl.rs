@@ -1923,7 +1923,7 @@ impl RendererImpl {
             let prev_program = self.program;
             let prev_vao = self.vao;
             let prev_vbo = self.commands_vbo;
-            let prev_fbo = self.current_target;
+            let prev_fbo = self.framebuffer.fbo;
 
             // `present` restores whatever framebuffer was bound while the game drew. The overlay
             // must go to the screen (framebuffer 0), not back into the game's offscreen target.
