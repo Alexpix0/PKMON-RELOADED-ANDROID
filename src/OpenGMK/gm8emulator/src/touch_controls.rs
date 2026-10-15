@@ -878,32 +878,38 @@ pub struct EditToolbarLayout {
 }
 
 pub fn edit_toolbar_layout(ww: f32, wh: f32) -> EditToolbarLayout {
-    let _ = wh;
     let bar_x1 = (ww * 0.02).max(12.0);
     let bar_x2 = (ww * 0.98).min(ww - 12.0);
-    let bar_y1 = 8.0;
-    let bar_y2 = 56.0;
+    // Dynamic height scaled with screen resolution: comfortable thumb target on 1080p+ screens
+    let bar_h = (wh * 0.11).clamp(64.0, 92.0);
+    let bar_y1 = 10.0;
+    let bar_y2 = bar_y1 + bar_h;
 
+    // Generous button widths (130px - 220px)
+    let btn_w = (ww * 0.16).clamp(130.0, 220.0);
     let save_x1 = bar_x1 + 8.0;
-    let save_x2 = save_x1 + 115.0;
+    let save_x2 = save_x1 + btn_w;
 
     let cancel_x2 = bar_x2 - 8.0;
-    let cancel_x1 = cancel_x2 - 105.0;
+    let cancel_x1 = cancel_x2 - btn_w;
 
     let mid_start = save_x2 + 16.0;
     let mid_end = cancel_x1 - 16.0;
-    let mid_width = (mid_end - mid_start).max(280.0);
-    let slider_width = (mid_width * 0.40).clamp(110.0, 190.0);
+    let mid_width = (mid_end - mid_start).max(220.0);
+    let half_mid = mid_width * 0.5;
+    let slider_width = (half_mid - 70.0).clamp(70.0, 180.0);
 
-    let scale_track_x1 = mid_start + 26.0;
-    let scale_track_x2 = scale_track_x1 + slider_width;
-    let scale_minus = (scale_track_x1 - 24.0, scale_track_x1 - 4.0);
-    let scale_plus = (scale_track_x2 + 4.0, scale_track_x2 + 24.0);
+    let scale_center = mid_start + half_mid * 0.45;
+    let scale_track_x1 = scale_center - slider_width * 0.5;
+    let scale_track_x2 = scale_center + slider_width * 0.5;
+    let scale_minus = (scale_track_x1 - 28.0, scale_track_x1 - 4.0);
+    let scale_plus = (scale_track_x2 + 4.0, scale_track_x2 + 28.0);
 
-    let opac_track_x1 = scale_plus.1 + 42.0;
-    let opac_track_x2 = opac_track_x1 + slider_width;
-    let opac_minus = (opac_track_x1 - 24.0, opac_track_x1 - 4.0);
-    let opac_plus = (opac_track_x2 + 4.0, opac_track_x2 + 24.0);
+    let opac_center = mid_start + half_mid * 1.45;
+    let opac_track_x1 = opac_center - slider_width * 0.5;
+    let opac_track_x2 = opac_center + slider_width * 0.5;
+    let opac_minus = (opac_track_x1 - 28.0, opac_track_x1 - 4.0);
+    let opac_plus = (opac_track_x2 + 4.0, opac_track_x2 + 28.0);
 
     EditToolbarLayout {
         bar_x1, bar_y1, bar_x2, bar_y2,
@@ -920,39 +926,49 @@ pub fn edit_toolbar_layout(ww: f32, wh: f32) -> EditToolbarLayout {
 
 pub fn edit_toolbar_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> EditToolbarAction {
     let l = edit_toolbar_layout(ww, wh);
-    if ty < l.bar_y1 - 6.0 || ty > l.bar_y2 + 8.0 || tx < l.bar_x1 || tx > l.bar_x2 {
+    // Ultra-forgiving vertical detection: from top of screen (0.0) up to 35px below toolbar
+    let max_y = l.bar_y2 + 35.0;
+    if ty < 0.0 || ty > max_y {
         return EditToolbarAction::None;
     }
 
-    if tx >= l.save_x1 && tx <= l.save_x2 {
+    // ACEPTAR (GUARDAR): Ultra-forgiving hit box on the left edge
+    // Any touch anywhere from screen left edge (0.0) up to save_x2 + 30.0
+    if tx >= 0.0 && tx <= l.save_x2 + 30.0 {
         return EditToolbarAction::Save;
     }
-    if tx >= l.cancel_x1 && tx <= l.cancel_x2 {
+
+    // CANCELAR (SALIR): Ultra-forgiving hit box on the right edge
+    // Any touch anywhere from cancel_x1 - 30.0 up to screen right edge (ww)
+    if tx >= l.cancel_x1 - 30.0 && tx <= ww {
         return EditToolbarAction::Cancel;
     }
 
-    if tx >= l.scale_btn_minus.0 && tx <= l.scale_btn_minus.1 {
-        return EditToolbarAction::ScaleDec;
-    }
-    if tx >= l.scale_btn_plus.0 && tx <= l.scale_btn_plus.1 {
-        return EditToolbarAction::ScaleInc;
-    }
-    if tx >= l.scale_track.0 && tx <= l.scale_track.1 {
-        let ratio = ((tx - l.scale_track.0) / (l.scale_track.1 - l.scale_track.0)).clamp(0.0, 1.0);
-        let pct = (60.0 + ratio * 90.0).round() as u32; // 60%..150%
-        return EditToolbarAction::ScaleSet(pct);
-    }
+    // Middle area: Sliders and +/- increment buttons
+    if ty >= l.bar_y1 - 6.0 && ty <= l.bar_y2 + 15.0 {
+        if tx >= l.scale_btn_minus.0 - 10.0 && tx <= l.scale_btn_minus.1 + 4.0 {
+            return EditToolbarAction::ScaleDec;
+        }
+        if tx >= l.scale_btn_plus.0 - 4.0 && tx <= l.scale_btn_plus.1 + 10.0 {
+            return EditToolbarAction::ScaleInc;
+        }
+        if tx >= l.scale_track.0 && tx <= l.scale_track.1 {
+            let ratio = ((tx - l.scale_track.0) / (l.scale_track.1 - l.scale_track.0)).clamp(0.0, 1.0);
+            let pct = (60.0 + ratio * 90.0).round() as u32; // 60%..150%
+            return EditToolbarAction::ScaleSet(pct);
+        }
 
-    if tx >= l.opac_btn_minus.0 && tx <= l.opac_btn_minus.1 {
-        return EditToolbarAction::OpacityDec;
-    }
-    if tx >= l.opac_btn_plus.0 && tx <= l.opac_btn_plus.1 {
-        return EditToolbarAction::OpacityInc;
-    }
-    if tx >= l.opac_track.0 && tx <= l.opac_track.1 {
-        let ratio = ((tx - l.opac_track.0) / (l.opac_track.1 - l.opac_track.0)).clamp(0.0, 1.0);
-        let pct = (20.0 + ratio * 80.0).round() as u32; // 20%..100%
-        return EditToolbarAction::OpacitySet(pct);
+        if tx >= l.opac_btn_minus.0 - 10.0 && tx <= l.opac_btn_minus.1 + 4.0 {
+            return EditToolbarAction::OpacityDec;
+        }
+        if tx >= l.opac_btn_plus.0 - 4.0 && tx <= l.opac_btn_plus.1 + 10.0 {
+            return EditToolbarAction::OpacityInc;
+        }
+        if tx >= l.opac_track.0 && tx <= l.opac_track.1 {
+            let ratio = ((tx - l.opac_track.0) / (l.opac_track.1 - l.opac_track.0)).clamp(0.0, 1.0);
+            let pct = (20.0 + ratio * 80.0).round() as u32; // 20%..100%
+            return EditToolbarAction::OpacitySet(pct);
+        }
     }
 
     EditToolbarAction::None

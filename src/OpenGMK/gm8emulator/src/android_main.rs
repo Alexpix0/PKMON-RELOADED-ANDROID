@@ -524,7 +524,15 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             },
             crate::touch_controls::RadialAction::Edit => {
                 crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_edit_mode();
+                let edit = crate::touch_controls::toggle_edit_mode();
+                if edit {
+                    for i in 0..crate::touch_controls::CONTROLS.len() {
+                        control_key_up(i);
+                    }
+                    joystick_release();
+                    *DRAGGED_ITEM.lock().unwrap() = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                }
                 jni_vibrate(30);
             },
             crate::touch_controls::RadialAction::Close | crate::touch_controls::RadialAction::Outside => {
@@ -545,14 +553,28 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                     let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
                     crate::touch_controls::save_layout_file(&layout_path);
                     crate::touch_controls::save_controls_config(PACKAGE_DIR);
+                    *DRAGGED_ITEM.lock().unwrap() = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                    SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
                     crate::touch_controls::set_edit_mode(false);
+                    for i in 0..crate::touch_controls::CONTROLS.len() {
+                        control_key_up(i);
+                    }
+                    joystick_release();
                     crate::touch_controls::show_toast("¡CONTROLES GUARDADOS!");
                     jni_vibrate(28);
                     return;
                 },
                 crate::touch_controls::EditToolbarAction::Cancel => {
                     crate::touch_controls::restore_layout_snapshot();
+                    *DRAGGED_ITEM.lock().unwrap() = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                    SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
                     crate::touch_controls::set_edit_mode(false);
+                    for i in 0..crate::touch_controls::CONTROLS.len() {
+                        control_key_up(i);
+                    }
+                    joystick_release();
                     crate::touch_controls::show_toast("EDICION CANCELADA");
                     jni_vibrate(18);
                     return;
@@ -655,6 +677,14 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 jni_vibrate(if muted { 25 } else { 12 });
             } else if name == crate::touch_controls::EDIT_NAME {
                 let edit = crate::touch_controls::toggle_edit_mode();
+                if edit {
+                    for i in 0..crate::touch_controls::CONTROLS.len() {
+                        control_key_up(i);
+                    }
+                    joystick_release();
+                    *DRAGGED_ITEM.lock().unwrap() = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                }
                 jni_vibrate(if edit { 30 } else { 15 });
             } else if name == crate::touch_controls::GUIDE_NAME {
                 let open = crate::touch_controls::toggle_guide_modal();

@@ -755,5 +755,45 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 5. **Hito de Compilación y Publicación v0.6.0:**
    * Actualizado `versionCode = 17`, `versionName = "0.6.0"` y artefacto de build CI `pokemon-reloaded-0.6.0-release`.
 
+---
+
+## 19. Hito Versión 0.6.1: Corrección de Bloqueo / Congelamiento al Aceptar y Cancelar en el Editor de Botones Táctiles
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 18`, `versionName = "0.6.1"`.
+* **Archivos afectados:**
+  - [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  - [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  - [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+  - [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+
+### Diagnóstico del Problema y Causa Raíz
+1. **Hitboxes fijos y diminutos (48px de alto):**
+   * En versiones anteriores, la barra de edición tenía una altura fija de solo 48 píxeles (`bar_y1 = 8.0`, `bar_y2 = 56.0`), ignorando por completo la resolución de pantalla del dispositivo.
+   * En pantallas modernas de 1080p y 1440p (modo horizontal), la zona táctil superior de los dedos aterriza habitualmente entre `y = 65` y `y = 110`.
+   * La función `edit_toolbar_hit` descartaba de inmediato cualquier toque por debajo de `y = 64` (`if ty > l.bar_y2 + 8.0 { return None; }`), por lo que pulsar "GUARDAR" o "SALIR" no registraba ninguna acción. Al estar en modo edición, los toques normales quedaban interceptados por un `return;` silencioso, dando la sensación de que la pantalla y el juego se quedaban congelados o trabados.
+2. **Filtrado de eventos fantasma (`pointer_up`) y limpieza de estado:**
+   * Al pulsar Aceptar o Cancelar, el modo edición se desactivaba en `pointer_down`, pero el posterior `pointer_up` al levantar el dedo no era absorbido en `SWALLOWED_INPUTS`, transmitiendo un evento no deseado de ratón al motor GameMaker en las coordenadas superiores.
+   * Si había teclas virtuales presionadas antes de activar el editor, estas se quedaban atascadas en estado "KeyDown".
+
+### Solución Implementada en v0.6.1
+1. **Barra Superior Dinámica y Proporcional a la Pantalla:**
+   * En `touch_controls.rs`, la altura de la barra ahora se calcula dinámicamente con `let bar_h = (wh * 0.11).clamp(64.0, 92.0);`, garantizando un objetivo táctil de 80–90 píxeles adaptado a pantallas táctiles modernas.
+   * Botones anchos (`btn_w` de 130px a 220px) para máxima comodidad del pulgar.
+2. **Detección Táctil Ultra-Permisiva (Hitbox Infalible):**
+   * El botón **ACEPTAR** ahora detecta cualquier toque desde el borde izquierdo extremo (`tx: 0.0 ..= l.save_x2 + 30.0`) y desde la parte superior absoluta de la pantalla (`ty: 0.0 ..= l.bar_y2 + 35.0`).
+   * El botón **CANCELAR** detecta cualquier toque desde `l.cancel_x1 - 30.0 ..= ww` y `ty: 0.0 ..= l.bar_y2 + 35.0`.
+   * Resulta físicamente imposible "fallar" la pulsación o que el toque sea ignorado por muescas (notches), cámaras frontales o biseles.
+3. **Nombres Claros de Botones en Pantalla:**
+   * En `opengl.rs`, los botones se etiquetaron nítidamente como **`ACEPTAR`** (verde esmeralda brillante) y **`CANCELAR`** (rojo carmesí) con tipografía vectorial escalada y bordes de contraste.
+4. **Liberación Total de Teclas y Limpieza de Punteros en `android_main.rs`:**
+   * Al pulsar tanto Aceptar como Cancelar, o al entrar/salir del modo edición:
+     - Se limpian los punteros de arrastre (`DRAGGED_ITEM` y `EDIT_SLIDER_DRAG`).
+     - Se añade el identificador del puntero a `SWALLOWED_INPUTS` para absorber el `pointer_up` sin efectos secundarios.
+     - Se liberan todas las teclas virtuales (`control_key_up`) y el joystick (`joystick_release`).
+5. **Hito de Versión 0.6.1:**
+   * Actualizado a `versionCode = 18`, `versionName = "0.6.1"` y empaquetado en el artefacto `pokemon-reloaded-0.6.1-release`.
+
+
 
 

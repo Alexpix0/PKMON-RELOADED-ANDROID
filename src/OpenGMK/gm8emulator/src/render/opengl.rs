@@ -1666,7 +1666,7 @@ impl RendererImpl {
             }
         }
 
-        // Edit mode interactive HUD toolbar with Save, Cancel, Size slider, and Opacity slider
+        // Edit mode interactive HUD toolbar with Aceptar, Cancelar, Size slider, and Opacity slider
         if touch_controls::is_edit_mode() {
             let l = touch_controls::edit_toolbar_layout(ww, wh);
 
@@ -1677,25 +1677,25 @@ impl RendererImpl {
             push_quad(&mut verts, ww, wh, l.bar_x1, l.bar_y1, l.bar_x1 + 1.5, l.bar_y2, [0.20, 0.80, 1.0, 0.95]);
             push_quad(&mut verts, ww, wh, l.bar_x2 - 1.5, l.bar_y1, l.bar_x2, l.bar_y2, [0.20, 0.80, 1.0, 0.95]);
 
-            // 1. [ ✔ GUARDAR ] Button (Emerald Green)
+            // 1. [ ✔ ACEPTAR ] Button (Emerald Green)
             let gy1 = l.bar_y1 + 6.0;
             let gy2 = l.bar_y2 - 6.0;
             push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x2, gy2, [0.15, 0.75, 0.35, 0.95]);
-            let gt = 1.2;
+            let gt = 1.5;
             push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x2, gy1 + gt, [0.45, 0.95, 0.60, 1.0]);
             push_quad(&mut verts, ww, wh, l.save_x1, gy2 - gt, l.save_x2, gy2, [0.45, 0.95, 0.60, 1.0]);
             push_quad(&mut verts, ww, wh, l.save_x1, gy1, l.save_x1 + gt, gy2, [0.45, 0.95, 0.60, 1.0]);
             push_quad(&mut verts, ww, wh, l.save_x2 - gt, gy1, l.save_x2, gy2, [0.45, 0.95, 0.60, 1.0]);
-            push_text(&mut verts, ww, wh, "GUARDAR", (l.save_x1 + l.save_x2) / 2.0, (gy1 + gy2) / 2.0, 1.9, [1.0, 1.0, 1.0, 1.0]);
+            push_text(&mut verts, ww, wh, "ACEPTAR", (l.save_x1 + l.save_x2) / 2.0, (gy1 + gy2) / 2.0, 2.0, [1.0, 1.0, 1.0, 1.0]);
 
             // 2. Slider 1: TAMAÑO / ESCALA (60% .. 150%)
             let scale_pct = touch_controls::scale_pct();
             let scale_ratio = ((scale_pct as f32 - 60.0) / 90.0).clamp(0.0, 1.0);
-            let sy = (l.bar_y1 + l.bar_y2) / 2.0;
+            let sy = (l.bar_y1 + l.bar_y2) / 2.0 + 4.0;
 
             // Minus button [-]
             push_quad(&mut verts, ww, wh, l.scale_btn_minus.0, gy1 + 3.0, l.scale_btn_minus.1, gy2 - 3.0, [0.12, 0.18, 0.28, 0.95]);
-            push_text(&mut verts, ww, wh, "-", (l.scale_btn_minus.0 + l.scale_btn_minus.1) / 2.0, sy, 2.0, [0.40, 0.85, 1.0, 1.0]);
+            push_text(&mut verts, ww, wh, "-", (l.scale_btn_minus.0 + l.scale_btn_minus.1) / 2.0, sy, 2.2, [0.40, 0.85, 1.0, 1.0]);
 
             // Track
             let (st1, st2) = l.scale_track;
@@ -1703,15 +1703,15 @@ impl RendererImpl {
             let sknob_x = st1 + scale_ratio * (st2 - st1);
             push_quad(&mut verts, ww, wh, st1, sy - 3.0, sknob_x, sy + 3.0, [0.20, 0.80, 1.0, 1.0]);
             // Knob indicator
-            push_circle(&mut verts, ww, wh, sknob_x, sy, 7.5, [1.0, 1.0, 1.0, 1.0]);
-            push_ring(&mut verts, ww, wh, sknob_x, sy, 7.5, 2.0, [0.20, 0.80, 1.0, 1.0]);
+            push_circle(&mut verts, ww, wh, sknob_x, sy, 8.0, [1.0, 1.0, 1.0, 1.0]);
+            push_ring(&mut verts, ww, wh, sknob_x, sy, 8.0, 2.0, [0.20, 0.80, 1.0, 1.0]);
 
             // Plus button [+]
             push_quad(&mut verts, ww, wh, l.scale_btn_plus.0, gy1 + 3.0, l.scale_btn_plus.1, gy2 - 3.0, [0.12, 0.18, 0.28, 0.95]);
-            push_text(&mut verts, ww, wh, "+", (l.scale_btn_plus.0 + l.scale_btn_plus.1) / 2.0, sy, 2.0, [0.40, 0.85, 1.0, 1.0]);
+            push_text(&mut verts, ww, wh, "+", (l.scale_btn_plus.0 + l.scale_btn_plus.1) / 2.0, sy, 2.2, [0.40, 0.85, 1.0, 1.0]);
 
             let scale_label = format!("TAM: {}%", scale_pct);
-            push_text(&mut verts, ww, wh, &scale_label, (st1 + st2) / 2.0, l.bar_y1 + 10.0, 1.4, [0.35, 0.85, 1.0, 0.95]);
+            push_text(&mut verts, ww, wh, &scale_label, (st1 + st2) / 2.0, l.bar_y1 + 12.0, 1.4, [0.35, 0.85, 1.0, 0.95]);
 
             // 3. Slider 2: OPACIDAD (20% .. 100%)
             let opac_pct = touch_controls::opacity_pct();
@@ -1719,7 +1719,7 @@ impl RendererImpl {
 
             // Minus button [-]
             push_quad(&mut verts, ww, wh, l.opac_btn_minus.0, gy1 + 3.0, l.opac_btn_minus.1, gy2 - 3.0, [0.18, 0.16, 0.10, 0.95]);
-            push_text(&mut verts, ww, wh, "-", (l.opac_btn_minus.0 + l.opac_btn_minus.1) / 2.0, sy, 2.0, [1.0, 0.85, 0.30, 1.0]);
+            push_text(&mut verts, ww, wh, "-", (l.opac_btn_minus.0 + l.opac_btn_minus.1) / 2.0, sy, 2.2, [1.0, 0.85, 0.30, 1.0]);
 
             // Track
             let (ot1, ot2) = l.opac_track;
@@ -1727,24 +1727,24 @@ impl RendererImpl {
             let oknob_x = ot1 + opac_ratio * (ot2 - ot1);
             push_quad(&mut verts, ww, wh, ot1, sy - 3.0, oknob_x, sy + 3.0, [1.0, 0.75, 0.15, 1.0]);
             // Knob indicator
-            push_circle(&mut verts, ww, wh, oknob_x, sy, 7.5, [1.0, 1.0, 1.0, 1.0]);
-            push_ring(&mut verts, ww, wh, oknob_x, sy, 7.5, 2.0, [1.0, 0.80, 0.20, 1.0]);
+            push_circle(&mut verts, ww, wh, oknob_x, sy, 8.0, [1.0, 1.0, 1.0, 1.0]);
+            push_ring(&mut verts, ww, wh, oknob_x, sy, 8.0, 2.0, [1.0, 0.80, 0.20, 1.0]);
 
             // Plus button [+]
             push_quad(&mut verts, ww, wh, l.opac_btn_plus.0, gy1 + 3.0, l.opac_btn_plus.1, gy2 - 3.0, [0.18, 0.16, 0.10, 0.95]);
-            push_text(&mut verts, ww, wh, "+", (l.opac_btn_plus.0 + l.opac_btn_plus.1) / 2.0, sy, 2.0, [1.0, 0.85, 0.30, 1.0]);
+            push_text(&mut verts, ww, wh, "+", (l.opac_btn_plus.0 + l.opac_btn_plus.1) / 2.0, sy, 2.2, [1.0, 0.85, 0.30, 1.0]);
 
             let opac_label = format!("OPAC: {}%", opac_pct);
-            push_text(&mut verts, ww, wh, &opac_label, (ot1 + ot2) / 2.0, l.bar_y1 + 10.0, 1.4, [1.0, 0.85, 0.30, 0.95]);
+            push_text(&mut verts, ww, wh, &opac_label, (ot1 + ot2) / 2.0, l.bar_y1 + 12.0, 1.4, [1.0, 0.85, 0.30, 0.95]);
 
-            // 4. [ ✖ SALIR ] Button (Crimson Red)
+            // 4. [ ✖ CANCELAR ] Button (Crimson Red)
             push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x2, gy2, [0.85, 0.20, 0.20, 0.95]);
-            let ct = 1.2;
+            let ct = 1.5;
             push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x2, gy1 + ct, [1.0, 0.50, 0.50, 1.0]);
             push_quad(&mut verts, ww, wh, l.cancel_x1, gy2 - ct, l.cancel_x2, gy2, [1.0, 0.50, 0.50, 1.0]);
             push_quad(&mut verts, ww, wh, l.cancel_x1, gy1, l.cancel_x1 + ct, gy2, [1.0, 0.50, 0.50, 1.0]);
             push_quad(&mut verts, ww, wh, l.cancel_x2 - ct, gy1, l.cancel_x2, gy2, [1.0, 0.50, 0.50, 1.0]);
-            push_text(&mut verts, ww, wh, "SALIR", (l.cancel_x1 + l.cancel_x2) / 2.0, (gy1 + gy2) / 2.0, 1.9, [1.0, 1.0, 1.0, 1.0]);
+            push_text(&mut verts, ww, wh, "CANCELAR", (l.cancel_x1 + l.cancel_x2) / 2.0, (gy1 + gy2) / 2.0, 2.0, [1.0, 1.0, 1.0, 1.0]);
         }
 
         // Real-time FPS counter overlay
