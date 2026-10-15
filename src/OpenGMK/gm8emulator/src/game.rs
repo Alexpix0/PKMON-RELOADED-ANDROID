@@ -2176,13 +2176,53 @@ impl Game {
             return Ok(());
         }
 
-        self.particles.auto_update_systems(&mut self.rand);
+        #[cfg(target_os = "android")]
+        let skip_visual_frame = {
+            static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
+            match mode.as_str() {
+                "1" => {
+                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    (c % 2) == 1
+                },
+                "2" => {
+                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    (c % 3) != 0
+                },
+                "auto" => {
+                    if crate::touch_controls::fast_forward_active() {
+                        let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        (c % 2) == 1
+                    } else {
+                        false
+                    }
+                },
+                _ => false,
+            }
+        };
+        #[cfg(not(target_os = "android"))]
+        let skip_visual_frame = false;
+
+        #[cfg(target_os = "android")]
+        let weather_opt = std::env::var("OPENGMK_WEATHER_OPT").unwrap_or_default();
+        #[cfg(not(target_os = "android"))]
+        let weather_opt = String::new();
+
+        if weather_opt == "minimal" {
+            static PARTICLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let c = PARTICLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if (c % 3) == 0 {
+                self.particles.auto_update_systems(&mut self.rand);
+            }
+        } else {
+            self.particles.auto_update_systems(&mut self.rand);
+        }
 
         // Clear out any deleted instances
         self.room.instance_list.remove_with(|instance| instance.state.get() == InstanceState::Deleted);
 
         // Draw everything, including running draw events
-        if self.auto_draw {
+        if self.auto_draw && !skip_visual_frame {
             self.draw()?;
         }
 
@@ -2212,7 +2252,7 @@ impl Game {
         self.cursor_sprite_frame += 1;
 
         // Tell renderer to finish the frame
-        if self.auto_draw && self.scene_change.is_none() && self.play_type != PlayType::Record {
+        if self.auto_draw && !skip_visual_frame && self.scene_change.is_none() && self.play_type != PlayType::Record {
             self.renderer.present(self.window_inner_size.0, self.window_inner_size.1, self.scaling);
         }
 

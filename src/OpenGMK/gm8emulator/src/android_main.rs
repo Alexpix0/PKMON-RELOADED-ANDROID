@@ -143,6 +143,23 @@ fn load_video() {
             } else if name == "bezel" {
                 eprintln!("[video] marco bezel: {}", value);
                 std::env::set_var("OPENGMK_BEZEL", value);
+            } else if name == "turbo_speed" {
+                if let Ok(spd) = value.parse::<f32>() {
+                    eprintln!("[video] turbo_speed: {}", spd);
+                    crate::touch_controls::set_fast_forward_speed((spd * 10.0).round() as u32);
+                }
+            } else if name == "frame_skip" {
+                eprintln!("[video] frame_skip: {}", value);
+                std::env::set_var("OPENGMK_FRAME_SKIP", value);
+            } else if name == "render_scale" {
+                eprintln!("[video] render_scale: {}", value);
+                std::env::set_var("OPENGMK_RENDER_SCALE", value);
+            } else if name == "filter" {
+                eprintln!("[video] filter: {}", value);
+                std::env::set_var("OPENGMK_FILTER", value);
+            } else if name == "weather_opt" {
+                eprintln!("[video] weather_opt: {}", value);
+                std::env::set_var("OPENGMK_WEATHER_OPT", value);
             }
         }
     }
@@ -431,7 +448,12 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         match action {
             crate::touch_controls::RadialAction::Turbo => {
                 let on = crate::touch_controls::toggle_fast_forward();
-                crate::touch_controls::show_toast(if on { "TURBO: ACTIVADO" } else { "TURBO: DESACTIVADO" });
+                let mult = crate::touch_controls::fast_forward_multiplier();
+                if on {
+                    crate::touch_controls::show_toast(Box::leak(format!("TURBO: {:.1}x ACTIVADO", mult).into_boxed_str()));
+                } else {
+                    crate::touch_controls::show_toast("TURBO: DESACTIVADO");
+                }
                 jni_vibrate(if on { 25 } else { 12 });
             },
             crate::touch_controls::RadialAction::Mute => {
@@ -573,6 +595,12 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 jni_vibrate(if open { 25 } else { 15 });
             } else if name == crate::touch_controls::TURBO_NAME {
                 let on = crate::touch_controls::toggle_fast_forward();
+                let mult = crate::touch_controls::fast_forward_multiplier();
+                if on {
+                    crate::touch_controls::show_toast(Box::leak(format!("TURBO: {:.1}x ACTIVADO", mult).into_boxed_str()));
+                } else {
+                    crate::touch_controls::show_toast("TURBO: DESACTIVADO");
+                }
                 jni_vibrate(if on { 25 } else { 12 });
             } else if name == crate::touch_controls::MUTE_NAME {
                 let muted = crate::touch_controls::toggle_audio_mute();

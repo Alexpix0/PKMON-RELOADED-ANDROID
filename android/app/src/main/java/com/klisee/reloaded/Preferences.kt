@@ -132,11 +132,47 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("persistentShield", value).apply()
         }
 
-    /** Fast-forward speed multiplier in tenths: 15 for 1.5x, 20 for 2.0x */
+    /** Fast-forward speed multiplier (e.g. 1.5f, 2.0f, 4.0f, 6.0f, 8.0f) */
+    var turboMultiplier: Float
+        get() = prefs.getFloat("turboMultiplier", 2.0f)
+        set(value) {
+            prefs.edit().putFloat("turboMultiplier", value).apply()
+        }
+
+    /** Frame skip mode: "0" (off), "1", "2", "auto" */
+    var frameSkip: String
+        get() = prefs.getString("frameSkip", "0") ?: "0"
+        set(value) {
+            prefs.edit().putString("frameSkip", value).apply()
+        }
+
+    /** Render scale: "0.75", "1.0", "1.25", "1.5" */
+    var renderScale: String
+        get() = prefs.getString("renderScale", "1.0") ?: "1.0"
+        set(value) {
+            prefs.edit().putString("renderScale", value).apply()
+        }
+
+    /** Video filter / shader: "sharp", "nearest", "crt", "fxaa" */
+    var videoFilter: String
+        get() = prefs.getString("videoFilter", "sharp") ?: "sharp"
+        set(value) {
+            prefs.edit().putString("videoFilter", value).apply()
+        }
+
+    /** Weather & Particle optimization: "normal", "optimized", "minimal" */
+    var weatherOpt: String
+        get() = prefs.getString("weatherOpt", "normal") ?: "normal"
+        set(value) {
+            prefs.edit().putString("weatherOpt", value).apply()
+        }
+
+    /** Fast-forward speed multiplier in tenths: 15 for 1.5x, 20 for 2.0x (legacy compatibility) */
     var fastForwardSpeed: Int
-        get() = prefs.getInt("fastForwardSpeed", 15)
+        get() = prefs.getInt("fastForwardSpeed", (turboMultiplier * 10).toInt())
         set(value) {
             prefs.edit().putInt("fastForwardSpeed", value).apply()
+            turboMultiplier = value / 10.0f
         }
 
     /** Video scaling mode: "aspect", "full", or "pixel_perfect". */
@@ -155,5 +191,15 @@ class Preferences(context: Context) {
         }
 
     /** Mirrors the video mode into the file the emulator reads at startup. */
-    fun writeVideo(filesDir: File) = writeVideoFile(filesDir, videoScaling, showFps, videoBezel)
+    fun writeVideo(filesDir: File) = writeVideoFile(
+        filesDir = filesDir,
+        scaling = videoScaling,
+        showFps = showFps,
+        bezel = videoBezel,
+        turboSpeed = turboMultiplier,
+        frameSkip = frameSkip,
+        renderScale = renderScale,
+        filter = videoFilter,
+        weatherOpt = weatherOpt
+    )
 }

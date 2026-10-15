@@ -218,7 +218,7 @@ pub fn fast_forward_multiplier() -> f32 {
 }
 
 pub fn set_fast_forward_speed(tenths: u32) {
-    FAST_FORWARD_SPEED.store(tenths.clamp(12, 30), Ordering::Relaxed);
+    FAST_FORWARD_SPEED.store(tenths.clamp(10, 100), Ordering::Relaxed);
 }
 
 static AUDIO_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

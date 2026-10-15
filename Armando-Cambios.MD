@@ -646,3 +646,36 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 3. **Soporte para Ocultación Individual de Botones (`layout.conf`):**
    * Se añadió el mapa global `HIDDEN_BUTTONS` y la función `is_button_hidden()`.
    * En `layout.conf` (y editable individualmente), cualquier botón configurado con `=hidden` u `=oculto` (por ejemplo `t=hidden`, `l=hidden`, `p=hidden`, `e=hidden`, `alpha1=hidden`) se oculta de forma individual e independiente, permitiendo a cada usuario conservar únicamente los controles que necesita en pantalla.
+
+---
+
+## 16. Hito Definitivo v0.5.0: Suite Completa de Vídeo y Rendimiento, Fast-Forward Multiplicado (x1.5 a x8.0), Frame Skip Inteligente y Aceleración Nativa
+* **Fecha:** 15 de Octubre de 2026
+* **Versión oficial:** `versionCode = 15`, `versionName = "0.5.0"`.
+* **Archivos afectados:**
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+  - [`android/app/src/main/java/com/klisee/reloaded/Video.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Video.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+  - [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  - [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  - [`src/OpenGMK/gm8emulator/src/game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs)
+  - [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+  - [`ROADMAP-0.5.0.md`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/ROADMAP-0.5.0.md)
+
+### Características Implementadas en v0.5.0
+1. **Gran Suite de "Ajustes de Vídeo y Rendimiento" en el Launcher:**
+   * La interfaz in-game permanece 100% limpia y pura (solo el juego con sus controles y su rueda radial).
+   * Desde la pantalla de Ajustes del Launcher se añade la configuración dedicada de:
+     * **Multiplicador de Velocidad Turbo (Fast-Forward):** Selección libre entre **x1.5 (Acelerado suave), x2.0 (Doble velocidad), x4.0 (Cuádruple), x6.0 (Sextuple) y x8.0 (Ultra Turbo)** para farmeo y viajes rápidos.
+     * **Salto de Fotogramas (Frame Skip Adaptativo):** Opciones *Desactivado (0)*, *1 Cuadro*, *2 Cuadros* y *Automático Adaptativo*. En saltos de cuadro, la GPU omite el renderizado visual pesado mientras toda la física, los controles y la lógica avanzan al 100% de velocidad sin efecto de cámara lenta.
+     * **Escala de Resolución Interna (Render Scale):** *0.75x (Modo Rendimiento)*, *1.0x (Nativo)*, *1.25x (Super-Sampled)* y *1.5x (Ultra Definición)*.
+     * **Filtros Gráficos y Shaders:** *Sharp Bilinear*, *Pixel-Perfect (Nearest)*, *CRT Scanlines* y *Anti-Aliasing FXAA Ligero*.
+     * **Optimización de Clima y Partículas:** Modos *Normal (100% PC)*, *Optimizado (50% partículas)* y *Mínimo (Tinte ambiental)* para batallas dobles a 60 FPS estables.
+2. **Toast Informativo de Turbo en Tiempo Real:**
+   * Al pulsar el botón rápido de turbo (`>>`) o seleccionarlo en la rueda radial, el emulador muestra un toast dinámico con la velocidad activa exacta (ejemplo: `TURBO: 4.0x ACTIVADO`).
+3. **Persistencia Sólida en `video.conf` y Motor Rust:**
+   * `Video.kt` y `Preferences.kt` serializan los nuevos parámetros y `android_main.rs` los inyecta en el arranque del motor OpenGMK para aplicación instantánea.
+4. **Hito de Versión 0.5.0:**
+   * Actualización de `versionCode = 15` y `versionName = "0.5.0"` con artefacto de descarga firmado `pokemon-reloaded-0.5.0-release`.
+

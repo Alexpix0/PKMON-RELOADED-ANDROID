@@ -103,6 +103,11 @@ fun SettingsScreen(
     var videoScaling by remember { mutableStateOf(prefs.videoScaling) }
     var videoBezel by remember { mutableStateOf(prefs.videoBezel) }
     var showFps by remember { mutableStateOf(prefs.showFps) }
+    var turboMultiplier by remember { mutableStateOf(prefs.turboMultiplier) }
+    var frameSkip by remember { mutableStateOf(prefs.frameSkip) }
+    var renderScale by remember { mutableStateOf(prefs.renderScale) }
+    var videoFilter by remember { mutableStateOf(prefs.videoFilter) }
+    var weatherOpt by remember { mutableStateOf(prefs.weatherOpt) }
     var batterySaver by remember { mutableStateOf(prefs.batterySaver) }
     var currentTheme by remember { mutableStateOf(prefs.themeMode) }
     var persistentShield by remember { mutableStateOf(prefs.persistentShield) }
@@ -579,6 +584,281 @@ fun SettingsScreen(
                     onCheckedChange = {
                         keepScreenOn = it
                         prefs.keepScreenOn = it
+                    },
+                )
+            }
+
+            SettingsGroup("Velocidad Turbo / Fast-Forward (Botón >>)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Velocidad 1.5x (Acelerado suave)",
+                    subtitle = "Combates dinámicos y fluidos con precisión de movimiento",
+                    selected = turboMultiplier == 1.5f,
+                    items = 5,
+                    index = 0,
+                    onSelect = {
+                        turboMultiplier = 1.5f
+                        prefs.turboMultiplier = 1.5f
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Velocidad 2.0x (Doble velocidad)",
+                    subtitle = "Recomendado para exploración y rutas normales",
+                    selected = turboMultiplier == 2.0f,
+                    items = 5,
+                    index = 1,
+                    onSelect = {
+                        turboMultiplier = 2.0f
+                        prefs.turboMultiplier = 2.0f
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Velocidad 4.0x (Cuádruple velocidad)",
+                    subtitle = "Farmeo intensivo de niveles y eclosión rápida de huevos",
+                    selected = turboMultiplier == 4.0f,
+                    items = 5,
+                    index = 2,
+                    onSelect = {
+                        turboMultiplier = 4.0f
+                        prefs.turboMultiplier = 4.0f
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Velocidad 6.0x (Sextuple velocidad)",
+                    subtitle = "Avance acelerado para jugadores veteranos",
+                    selected = turboMultiplier == 6.0f,
+                    items = 5,
+                    index = 3,
+                    onSelect = {
+                        turboMultiplier = 6.0f
+                        prefs.turboMultiplier = 6.0f
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Velocidad 8.0x (Ultra Turbo)",
+                    subtitle = "Máxima velocidad para saltar diálogos y trayectos largos",
+                    selected = turboMultiplier == 8.0f,
+                    items = 5,
+                    index = 4,
+                    onSelect = {
+                        turboMultiplier = 8.0f
+                        prefs.turboMultiplier = 8.0f
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Salto de Fotogramas (Frame Skip)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Desactivado (0 - Fluidez máxima)",
+                    subtitle = "Dibuja todos los fotogramas (60 FPS puros)",
+                    selected = frameSkip == "0",
+                    items = 4,
+                    index = 0,
+                    onSelect = {
+                        frameSkip = "0"
+                        prefs.frameSkip = "0"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Automático Adaptativo",
+                    subtitle = "Salta cuadros únicamente cuando la GPU experimente caídas",
+                    selected = frameSkip == "auto",
+                    items = 4,
+                    index = 1,
+                    onSelect = {
+                        frameSkip = "auto"
+                        prefs.frameSkip = "auto"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "1 Fotograma",
+                    subtitle = "Salta 1 de cada 2 cuadros en pantalla (ideal para chips modestos)",
+                    selected = frameSkip == "1",
+                    items = 4,
+                    index = 2,
+                    onSelect = {
+                        frameSkip = "1"
+                        prefs.frameSkip = "1"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
+                    title = "2 Fotogramas",
+                    subtitle = "Máximo ahorro de GPU para dispositivos de gama de entrada",
+                    selected = frameSkip == "2",
+                    items = 4,
+                    index = 3,
+                    onSelect = {
+                        frameSkip = "2"
+                        prefs.frameSkip = "2"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Escala de Resolución Interna (Render Scale)") {
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "0.75x (Modo Rendimiento / GPUs antiguas)",
+                    subtitle = "Alivia la tasa de relleno y gana entre 5 y 15 FPS en GPUs PowerVR/Mali",
+                    selected = renderScale == "0.75",
+                    items = 4,
+                    index = 0,
+                    onSelect = {
+                        renderScale = "0.75"
+                        prefs.renderScale = "0.75"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "1.0x (Nativo Pixel-Perfect)",
+                    subtitle = "Resolución original del juego con nitidez estándar",
+                    selected = renderScale == "1.0",
+                    items = 4,
+                    index = 1,
+                    onSelect = {
+                        renderScale = "1.0"
+                        prefs.renderScale = "1.0"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "1.25x (Super-Sampled)",
+                    subtitle = "Mayor suavidad de bordes para pantallas FHD/OLED",
+                    selected = renderScale == "1.25",
+                    items = 4,
+                    index = 2,
+                    onSelect = {
+                        renderScale = "1.25"
+                        prefs.renderScale = "1.25"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AspectRatio,
+                    title = "1.5x (Ultra Definición)",
+                    subtitle = "Máxima calidad visual para terminales de gama alta",
+                    selected = renderScale == "1.5",
+                    items = 4,
+                    index = 3,
+                    onSelect = {
+                        renderScale = "1.5"
+                        prefs.renderScale = "1.5"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Filtros y Shaders Gráficos") {
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Sharp Bilinear (Recomendado)",
+                    subtitle = "Suavizado limpio que evita deformaciones de píxeles en pantallas panorámicas",
+                    selected = videoFilter == "sharp",
+                    items = 4,
+                    index = 0,
+                    onSelect = {
+                        videoFilter = "sharp"
+                        prefs.videoFilter = "sharp"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Pixel-Perfect (Nearest Neighbor)",
+                    subtitle = "Píxeles retro 100% nítidos sin filtrado",
+                    selected = videoFilter == "nearest",
+                    items = 4,
+                    index = 1,
+                    onSelect = {
+                        videoFilter = "nearest"
+                        prefs.videoFilter = "nearest"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "CRT Retro Scanlines",
+                    subtitle = "Líneas de barrido nostálgicas de monitor clásico",
+                    selected = videoFilter == "crt",
+                    items = 4,
+                    index = 2,
+                    onSelect = {
+                        videoFilter = "crt"
+                        prefs.videoFilter = "crt"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Anti-Aliasing FXAA Ligero",
+                    subtitle = "Suaviza bordes irregulares con impacto mínimo en GPU",
+                    selected = videoFilter == "fxaa",
+                    items = 4,
+                    index = 3,
+                    onSelect = {
+                        videoFilter = "fxaa"
+                        prefs.videoFilter = "fxaa"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Optimización de Clima y Partículas") {
+                ChoiceRow(
+                    icon = Icons.Filled.HealthAndSafety,
+                    title = "Normal (100% Efectos PC)",
+                    subtitle = "Todas las partículas de lluvia, nieve, niebla y arena activadas",
+                    selected = weatherOpt == "normal",
+                    items = 3,
+                    index = 0,
+                    onSelect = {
+                        weatherOpt = "normal"
+                        prefs.weatherOpt = "normal"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.HealthAndSafety,
+                    title = "Optimizado (50% Partículas)",
+                    subtitle = "Mantiene la ambientación visual reduciendo a la mitad los quads de renderizado",
+                    selected = weatherOpt == "optimized",
+                    items = 3,
+                    index = 1,
+                    onSelect = {
+                        weatherOpt = "optimized"
+                        prefs.weatherOpt = "optimized"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.HealthAndSafety,
+                    title = "Mínimo (Tinte Ambiental)",
+                    subtitle = "Sustituye las partículas por un filtro de color para máximos FPS en combates dobles",
+                    selected = weatherOpt == "minimal",
+                    items = 3,
+                    index = 2,
+                    onSelect = {
+                        weatherOpt = "minimal"
+                        prefs.weatherOpt = "minimal"
+                        prefs.writeVideo(context.filesDir)
                     },
                 )
             }
