@@ -748,6 +748,10 @@ pub fn set_room(room: i32) {
         COMBO_USED.store(false, Ordering::Relaxed);
         DIALOGUE.store(false, Ordering::Relaxed);
         DIALOGUE_DEBOUNCE_FRAMES.store(0, Ordering::Relaxed);
+        if shiny_beacon_enabled() && matches!(room, 47 | 191 | 709) {
+            #[cfg(target_os = "android")]
+            crate::android_main::jni_vibrate(40);
+        }
     }
     ROOM.store(room, Ordering::Relaxed);
     log_state_change(room);
@@ -1413,6 +1417,10 @@ pub enum RadialAction {
     Bezel,     // Sector 5 (Bottom-Left)
     Guide,     // Sector 6 (Left)
     Edit,      // Sector 7 (Top-Left)
+    Bike,      // Key items: Bici (C)
+    Rod,       // Key items: Caña (V)
+    Bag,       // Key items: Mochila (O)
+    Pause,     // Tactical Pause
     Outside,   // Touched outside the wheel -> dismiss
 }
 
@@ -1451,16 +1459,30 @@ pub fn radial_menu_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> RadialAction {
     let rel_angle = (angle + std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU) % std::f32::consts::TAU;
     let sector = (((rel_angle + std::f32::consts::FRAC_PI_8) / std::f32::consts::FRAC_PI_4) as usize) % RADIAL_SECTORS_COUNT;
 
-    match sector {
-        0 => RadialAction::Mute,
-        1 => RadialAction::Log,
-        2 => RadialAction::Snapshot,
-        3 => RadialAction::Fps,
-        4 => RadialAction::Close,
-        5 => RadialAction::Bezel,
-        6 => RadialAction::Guide,
-        7 => RadialAction::Edit,
-        _ => RadialAction::None,
+    if key_items_radial_enabled() {
+        match sector {
+            0 => RadialAction::Bike,
+            1 => RadialAction::Rod,
+            2 => RadialAction::Snapshot,
+            3 => RadialAction::Bag,
+            4 => RadialAction::Close,
+            5 => RadialAction::Pause,
+            6 => RadialAction::Turbo,
+            7 => RadialAction::Edit,
+            _ => RadialAction::None,
+        }
+    } else {
+        match sector {
+            0 => RadialAction::Mute,
+            1 => RadialAction::Log,
+            2 => RadialAction::Snapshot,
+            3 => RadialAction::Fps,
+            4 => RadialAction::Close,
+            5 => RadialAction::Bezel,
+            6 => RadialAction::Guide,
+            7 => RadialAction::Edit,
+            _ => RadialAction::None,
+        }
     }
 }
 
@@ -1582,6 +1604,68 @@ pub fn tick_save_reminder() {
                 *lock = Some(now);
                 show_toast("RECORDATORIO: ¡No olvides guardar tu partida!");
             }
+        }
+    }
+}
+
+static PUZZLE_PAUSED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_puzzle_paused() -> bool {
+    PUZZLE_PAUSED.load(Ordering::Relaxed)
+}
+
+pub fn toggle_puzzle_pause() -> bool {
+    let was = is_puzzle_paused();
+    PUZZLE_PAUSED.store(!was, Ordering::Relaxed);
+    if !was {
+        show_toast("⏸️ JUEGO PAUSADO (Toca para reanudar)");
+    } else {
+        show_toast("▶️ JUEGO REANUDADO");
+    }
+    !was
+}
+
+pub fn set_puzzle_paused(paused: bool) {
+    PUZZLE_PAUSED.store(paused, Ordering::Relaxed);
+}
+
+static RENDER_SCALE: AtomicU32 = AtomicU32::new(100);
+
+pub fn get_render_scale() -> f32 {
+    let s = RENDER_SCALE.load(Ordering::Relaxed);
+    if s == 0 { 1.0 } else { s as f32 / 100.0 }
+}
+
+pub fn set_render_scale(scale: f32) {
+    let clamped = (scale * 100.0).round().clamp(50.0, 200.0) as u32;
+    RENDER_SCALE.store(clamped, Ordering::Relaxed);
+}
+
+static REPEL_STEPS: AtomicU32 = AtomicU32::new(0);
+static EGG_STEPS: AtomicU32 = AtomicU32::new(0);
+
+pub fn tick_movement_step(is_moving: bool) {
+    if !is_moving {
+        return;
+    }
+    if repel_reminder_enabled() && current_context() == WORLD {
+        let count = REPEL_STEPS.fetch_add(1, Ordering::Relaxed);
+        // ~1500 frames of movement ≈ 250 steps in overworld
+        if count >= 1500 {
+            REPEL_STEPS.store(0, Ordering::Relaxed);
+            show_toast("REPELENTE: Revisa si el efecto se ha agotado");
+            #[cfg(target_os = "android")]
+            crate::android_main::jni_vibrate(25);
+        }
+    }
+    if egg_hatch_timer_enabled() && current_context() == WORLD {
+        let count = EGG_STEPS.fetch_add(1, Ordering::Relaxed);
+        // ~3000 movement frames ≈ 500 steps (standard egg hatch cycle)
+        if count >= 3000 {
+            EGG_STEPS.store(0, Ordering::Relaxed);
+            show_toast("HUEVO: Ciclo de eclosión alcanzado (~500 pasos)");
+            #[cfg(target_os = "android")]
+            crate::android_main::jni_vibrate(35);
         }
     }
 }

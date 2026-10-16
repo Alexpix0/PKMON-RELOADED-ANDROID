@@ -723,21 +723,33 @@ impl RendererImpl {
             // Configure gl::ReadPixels() to align to 1 byte
             gl.PixelStorei(gl::PACK_ALIGNMENT, 1);
 
+            let r_scale = crate::touch_controls::get_render_scale();
+            let fb_init_w = if (r_scale - 1.0).abs() > 0.01 {
+                ((options.size.0 as f32) * r_scale).round().max(240.0) as u32
+            } else {
+                options.size.0
+            };
+            let fb_init_h = if (r_scale - 1.0).abs() > 0.01 {
+                ((options.size.1 as f32) * r_scale).round().max(180.0) as u32
+            } else {
+                options.size.1
+            };
+
             // Create framebuffer
             let (mut framebuffer_texture, mut framebuffer_zbuf, mut framebuffer_fbo) = (0, 0, 0);
             gl.GenTextures(1, &mut framebuffer_texture);
             gl.BindTexture(gl::TEXTURE_2D, framebuffer_texture);
             gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
             gl.TexImage2D(
-                gl::TEXTURE_2D,      // target
-                0,                   // level
-                gl::RGBA as _,       // internalformat
-                options.size.0 as _, // width
-                options.size.1 as _, // height
-                0,                   // border ("must be 0")
-                gl::RGBA,            // format
-                gl::UNSIGNED_BYTE,   // type
-                ptr::null(),         // data
+                gl::TEXTURE_2D,     // target
+                0,                  // level
+                gl::RGBA as _,      // internalformat
+                fb_init_w as _,     // width
+                fb_init_h as _,     // height
+                0,                  // border ("must be 0")
+                gl::RGBA,           // format
+                gl::UNSIGNED_BYTE,  // type
+                ptr::null(),        // data
             );
             gl.GenTextures(1, &mut framebuffer_zbuf);
             gl.BindTexture(gl::TEXTURE_2D, framebuffer_zbuf);
@@ -745,8 +757,8 @@ impl RendererImpl {
                 gl::TEXTURE_2D,      // target
                 0,                   // level
                 zbuf_format,         // internalformat
-                options.size.0 as _, // width
-                options.size.1 as _, // height
+                fb_init_w as _,      // width
+                fb_init_h as _,      // height
                 0,                   // border ("must be 0")
                 gl::DEPTH_COMPONENT, // format
                 zbuf_type,           // type
@@ -793,8 +805,8 @@ impl RendererImpl {
                     texture: framebuffer_texture,
                     zbuf: framebuffer_zbuf,
                     fbo: framebuffer_fbo,
-                    width: options.size.0,
-                    height: options.size.1,
+                    width: fb_init_w,
+                    height: fb_init_h,
                 },
                 stored_framebuffer: None,
                 zbuf_format,
@@ -2671,13 +2683,22 @@ impl RendererTrait for RendererImpl {
 
     fn resize_framebuffer(&mut self, width: u32, height: u32, store: bool) {
         self.flush_queue();
+        let r_scale = crate::touch_controls::get_render_scale();
+        let (eff_w, eff_h) = if (r_scale - 1.0).abs() > 0.01 {
+            (
+                ((width as f32) * r_scale).round().max(240.0) as u32,
+                ((height as f32) * r_scale).round().max(180.0) as u32,
+            )
+        } else {
+            (width, height)
+        };
         unsafe {
             // get old size
             let old_tex = self.framebuffer.texture;
             let old_width = self.framebuffer.width as i32;
             let old_height = self.framebuffer.height as i32;
-            self.framebuffer.width = width;
-            self.framebuffer.height = height;
+            self.framebuffer.width = eff_w;
+            self.framebuffer.height = eff_h;
             // set up new texture
             self.gl.GenTextures(1, &mut self.framebuffer.texture);
             self.gl.BindTexture(gl::TEXTURE_2D, self.framebuffer.texture);
@@ -2686,8 +2707,8 @@ impl RendererTrait for RendererImpl {
                 gl::TEXTURE_2D,    // target
                 0,                 // level
                 gl::RGBA as _,     // internalformat
-                width as _,        // width
-                height as _,       // height
+                eff_w as _,        // width
+                eff_h as _,        // height
                 0,                 // border ("must be 0")
                 gl::RGBA,          // format
                 gl::UNSIGNED_BYTE, // type
@@ -2702,8 +2723,8 @@ impl RendererTrait for RendererImpl {
                 gl::TEXTURE_2D,      // target
                 0,                   // level
                 self.zbuf_format,    // internalformat
-                width as _,          // width
-                height as _,         // height
+                eff_w as _,          // width
+                eff_h as _,          // height
                 0,                   // border ("must be 0")
                 gl::DEPTH_COMPONENT, // format
                 self.zbuf_type,        // type
@@ -3617,9 +3638,20 @@ impl RendererTrait for RendererImpl {
         if fb_current == self.framebuffer.fbo as _ {
             // Set viewport (gl::Viewport, gl::Scissor)
             if port_x >= 0 && port_y >= 0 && port_w >= 0 && port_h >= 0 {
+                let r_scale = crate::touch_controls::get_render_scale();
+                let (vx, vy, vw, vh) = if (r_scale - 1.0).abs() > 0.01 {
+                    (
+                        ((port_x as f32) * r_scale).round() as i32,
+                        ((port_y as f32) * r_scale).round() as i32,
+                        ((port_w as f32) * r_scale).round() as i32,
+                        ((port_h as f32) * r_scale).round() as i32,
+                    )
+                } else {
+                    (port_x, port_y, port_w, port_h)
+                };
                 unsafe {
-                    self.gl.Viewport(port_x, port_y, port_w, port_h);
-                    self.gl.Scissor(port_x, port_y, port_w, port_h);
+                    self.gl.Viewport(vx, vy, vw, vh);
+                    self.gl.Scissor(vx, vy, vw, vh);
                     debug_assert_eq!(self.gl.GetError(), 0);
                 }
             }

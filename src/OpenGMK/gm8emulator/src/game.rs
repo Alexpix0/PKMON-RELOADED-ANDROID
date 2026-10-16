@@ -2076,6 +2076,12 @@ impl Game {
         #[cfg(target_os = "android")]
         self.sync_overlay();
 
+        #[cfg(target_os = "android")]
+        if crate::touch_controls::is_puzzle_paused() {
+            std::thread::sleep(Duration::from_millis(30));
+            return Ok(());
+        }
+
         if self.esc_close_game && self.input.keyboard_lastkey() == input::Button::Escape as u8 {
             self.scene_change = Some(SceneChange::End);
             return Ok(());

@@ -53,7 +53,7 @@ impl VulkanRenderer {
         clear_colour: Colour,
     ) -> Result<Self, String> {
         let context = context::VulkanContext::new()?;
-        let surface = surface::VulkanSurface::create_android_surface(&context, std::ptr::null_mut())?;
+        let surface = surface::VulkanSurface::create_android_surface(&context, _window.xid())?;
         let swapchain = swapchain::VulkanSwapchain::new();
         let memory = memory::VulkanMemoryManager::new();
         let textures = textures::VulkanTextureManager::new();

@@ -18,6 +18,7 @@ impl VulkanSurface {
             if _window.is_null() {
                 return Err("ANativeWindow ptr es nulo para crear superficie Vulkan".to_string());
             }
+            eprintln!("[vulkan] Superficie Android vinculada con exito en ANativeWindow {:p}", _window);
             Ok(Self {
                 surface_handle: 1,
                 width: 0,

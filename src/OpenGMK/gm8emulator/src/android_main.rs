@@ -153,6 +153,9 @@ fn load_video() {
                 std::env::set_var("OPENGMK_FRAME_SKIP", value);
             } else if name == "render_scale" {
                 eprintln!("[video] render_scale: {}", value);
+                if let Ok(scale) = value.parse::<f32>() {
+                    crate::touch_controls::set_render_scale(scale);
+                }
                 std::env::set_var("OPENGMK_RENDER_SCALE", value);
             } else if name == "filter" {
                 eprintln!("[video] filter: {}", value);
@@ -320,8 +323,11 @@ fn stick_update(x: f32, y: f32) {
         }
     }
     STICK_STATE.store(state, std::sync::atomic::Ordering::Relaxed);
+    let is_moving = state != 0;
+    if is_moving {
+        crate::touch_controls::tick_movement_step(true);
+    }
     if crate::touch_controls::auto_run_enabled() {
-        let is_moving = state != 0;
         static STICK_AUTO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if is_moving && !STICK_AUTO_RUN.swap(true, std::sync::atomic::Ordering::Relaxed) {
             android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::E, text: None });
@@ -598,6 +604,31 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 }
                 jni_vibrate(30);
             },
+            crate::touch_controls::RadialAction::Bike => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::show_toast("OBJETO: Bicicleta (C)");
+                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::C, text: None });
+                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::C });
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Rod => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::show_toast("OBJETO: Caña de Pescar (V)");
+                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::V, text: None });
+                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::V });
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Bag => {
+                crate::touch_controls::set_radial_menu_open(false);
+                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::O, text: None });
+                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::O });
+                jni_vibrate(20);
+            },
+            crate::touch_controls::RadialAction::Pause => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::toggle_puzzle_pause();
+                jni_vibrate(25);
+            },
             crate::touch_controls::RadialAction::Close | crate::touch_controls::RadialAction::Outside => {
                 crate::touch_controls::set_radial_menu_open(false);
                 jni_vibrate(15);
@@ -694,6 +725,13 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 return;
             }
         }
+        return;
+    }
+
+    if crate::touch_controls::is_puzzle_paused() {
+        crate::touch_controls::set_puzzle_paused(false);
+        crate::touch_controls::show_toast("▶️ JUEGO REANUDADO");
+        jni_vibrate(15);
         return;
     }
 
