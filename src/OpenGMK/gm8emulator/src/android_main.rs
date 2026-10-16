@@ -1857,7 +1857,8 @@ fn ensure_game_extracted() -> Result<PathBuf, String> {
     fs::rename(&staging, &game_dir)
         .map_err(|e| format!("no pude mover lo extraido a {}: {}", game_dir.display(), e))?;
 
-    let exe = game_dir.join(exe.file_name().unwrap());
+    let exe_name = exe.file_name().ok_or_else(|| "nombre de archivo .exe invalido".to_string())?;
+    let exe = game_dir.join(exe_name);
     logf(&format!("listo: {}", exe.display()));
     Ok(exe)
 }

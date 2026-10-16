@@ -88,7 +88,7 @@ fun Onboarding(
                         "algún bug, mínimo o grave, por favor guarda un log y repórtalo.\n\n" +
                         "Manda reportes de bugs, crasheos o congelamientos a ",
                 )
-                withLink(LinkAnnotation.Url("https://github.com/Klisee/pokemon-reloaded-android")) {
+                withLink(LinkAnnotation.Url("https://github.com/Alexpix0/PKMON-RELOADED-ANDROID")) {
                     append("GitHub")
                 }
                 append(".")

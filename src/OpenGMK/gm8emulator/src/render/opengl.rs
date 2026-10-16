@@ -543,23 +543,43 @@ impl RendererImpl {
             let gl = gl::Gl::load_with(native_gl::PlatformImpl::get_function_loader()?);
             native_gl::PlatformImpl::clean_function_loader();
 
-            // debug print
-            let ver_str = CStr::from_ptr(gl.GetString(gl::VERSION).cast()).to_str().unwrap();
-            let vendor_str = CStr::from_ptr(gl.GetString(gl::VENDOR).cast()).to_str().unwrap();
+            // debug print con verificación defensiva de punteros nulos
+            let ver_ptr = gl.GetString(gl::VERSION);
+            let ver_str = if !ver_ptr.is_null() {
+                CStr::from_ptr(ver_ptr.cast()).to_str().unwrap_or("desconocido")
+            } else {
+                "desconocido"
+            };
+            let vendor_ptr = gl.GetString(gl::VENDOR);
+            let vendor_str = if !vendor_ptr.is_null() {
+                CStr::from_ptr(vendor_ptr.cast()).to_str().unwrap_or("desconocido")
+            } else {
+                "desconocido"
+            };
             eprintln!("creating graphics context\n  > GL_VERSION: \"{}\"\n  > GL_VENDOR: \"{}\"", ver_str, vendor_str);
 
             let mut v_maj: GLint = 0;
             let mut v_min: GLint = 0;
             gl.GetIntegerv(gl::MAJOR_VERSION, &mut v_maj);
             gl.GetIntegerv(gl::MINOR_VERSION, &mut v_min);
-            assert!(
-                (v_maj == OPENGL_VERSION.0 && v_min >= OPENGL_VERSION.1) || v_maj > OPENGL_VERSION.0,
-                "OpenGL version {}.{} or later is required, but found version {}.{}",
-                OPENGL_VERSION.0,
-                OPENGL_VERSION.1,
-                v_maj,
-                v_min
-            );
+            if v_maj == 0 {
+                let parts: Vec<&str> = ver_str.split(|c: char| !c.is_ascii_digit()).filter(|s| !s.is_empty()).collect();
+                if let Some(maj) = parts.get(0).and_then(|s| s.parse().ok()) {
+                    v_maj = maj;
+                }
+                if let Some(min) = parts.get(1).and_then(|s| s.parse().ok()) {
+                    v_min = min;
+                }
+            }
+            if !((v_maj == OPENGL_VERSION.0 && v_min >= OPENGL_VERSION.1) || v_maj > OPENGL_VERSION.0) {
+                eprintln!(
+                    "Aviso de compatibilidad: OpenGL version {}.{} o posterior esperada, detectada {}.{}. Continuando con ejecución...",
+                    OPENGL_VERSION.0,
+                    OPENGL_VERSION.1,
+                    v_maj,
+                    v_min
+                );
+            }
 
             imp.set_swap_interval(if options.vsync { 1 } else { 0 });
             // Desktop GL accepts DEPTH_COMPONENT* with a FLOAT type; GLES requires an integer

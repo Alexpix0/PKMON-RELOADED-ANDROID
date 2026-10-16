@@ -12,7 +12,7 @@ import java.net.URL
  * published, so there is no server to keep running and nothing to keep in step.
  */
 object Update {
-    private const val REPO = "Klisee/pokemon-reloaded-android"
+    private const val REPO = "Alexpix0/PKMON-RELOADED-ANDROID"
     private const val LATEST = "https://api.github.com/repos/$REPO/releases/latest"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
 

@@ -325,6 +325,9 @@ impl Sprite {
 impl Collider {
     // collision_point but it checks the collider's precise hitbox only, no AABB
     pub fn check_collision_point_precise(&self, x: i32, y: i32, inst_x: i32, inst_y: i32, origin_x: i32, origin_y: i32, xscale: Real, yscale: Real, angle_sin: f64, angle_cos: f64) -> bool {
+        if xscale == Real::from(0.0) || yscale == Real::from(0.0) {
+            return false;
+        }
         let mut x = Real::from(x - inst_x);
         let mut y = Real::from(y - inst_y);
         util::rotate_around_center(x.as_mut_ref(), y.as_mut_ref(), angle_sin, angle_cos);
@@ -343,6 +346,9 @@ impl Collider {
         if self.is_empty_mask {
             true
         } else {
+            if x < 0 || y < 0 {
+                return false;
+            }
             self.data.get((y as usize * self.width as usize) + x as usize).copied().unwrap_or(false)
         }
     }

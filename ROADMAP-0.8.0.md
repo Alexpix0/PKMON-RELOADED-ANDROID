@@ -490,3 +490,28 @@ Auditoría detallada de los archivos del motor en `src/OpenGMK/gm8emulator/src/`
   - Rama de ejecución rápida (*fast-path*) directa cuando `dir_wiggle == 0 && speed_wiggle == 0`, saltando 2 divisiones modulares, 4 sumas/restas y llamadas trigonométricas superfluas.
   - Aceleración en `update_graphics` para partículas con opacidad homogénea (`alpha1 == alpha2 == alpha3`), evitando interpolaciones lerp innecesarias.
 
+---
+
+## 13. 🛡️ Bitácora de Corrección de Errores y Estabilidad (v0.8.2 EX)
+
+### 13.1 Protección Defensiva de Punteros y Versión GLES (`render/opengl.rs`)
+- **Problema:** Si el driver OpenGL ES de ciertos procesadores (Mali / Adreno antiguos) retornaba un puntero nulo o cadena no UTF-8 en `gl.GetString(gl::VERSION)`, el emulador sufría un **cierre forzado inmediato (panic por unwrap)** antes de renderizar la primera pantalla. Asimismo, la aserción estricta de versión fallaba en implementaciones GLES donde `MAJOR_VERSION` retornaba 0 por `GetIntegerv`.
+- **Solución:** Se implementó verificación defensiva de punteros nulos (`is_null()`), extracción segura con fallback `"desconocido"` y análisis sintáctico textual de versión con aviso de compatibilidad sin detener la ejecución.
+
+### 13.2 Blindaje contra Bloqueos Térmicos y ROMs Modificadas (`GameActivity.kt`)
+- **Problema:** La invocación directa de `window.setSustainedPerformanceMode(true)` en Android 7+ causaba excepciones no capturadas (`UnsupportedOperationException` o `SecurityException`) en capas de personalización de fabricantes como MIUI, HyperOS, Transsion o EMUI.
+- **Solución:** Se encapsuló la llamada dentro de un bloque `try-catch (e: Throwable)` defensivo con logging de advertencia, permitiendo que el juego arranque con total normalidad aunque la ROM no permita fijar el reloj de la CPU.
+
+### 13.3 Protección de Índice en Colisiones Matemáticas (`asset/sprite.rs`)
+- **Problema:** Sprites de instancias con escala cero (`xscale == 0` o `yscale == 0`) producían divisiones por cero que generaban `NaN` o valores infinitos, pudiendo resultar en índices negativos y desbordamiento de búfer.
+- **Solución:** Comprobación temprana de factor de escala no nulo y guardado explícito contra índices negativos (`x < 0 || y < 0`), retornando `false` de forma segura.
+
+### 13.4 Eliminación de Panic en Descompresión de Ejecutables (`android_main.rs`)
+- **Problema:** La llamada a `.unwrap()` sobre `exe.file_name()` en la fase final de instalación del juego podía generar un panic en caso de rutas anómalas.
+- **Solución:** Reemplazado por `.ok_or_else()` con mensaje descriptivo y propagación limpia de errores.
+
+### 13.5 Corrección del Comprobador de Actualizaciones Interno (`Update.kt` & `OnboardingFlow.kt`)
+- **Problema:** El módulo de actualizaciones automáticas apuntaba al repositorio upstream `Klisee/pokemon-reloaded-android` en lugar del repositorio oficial activo `Alexpix0/PKMON-RELOADED-ANDROID`, impidiendo que los jugadores recibieran las notificaciones de las versiones 0.7.x y 0.8.x.
+- **Solución:** Se reconfiguró la constante `REPO` y el enlace de bienvenida al repositorio oficial `Alexpix0/PKMON-RELOADED-ANDROID`.
+
+
