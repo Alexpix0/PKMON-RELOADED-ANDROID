@@ -400,7 +400,7 @@ fn tap_key(key: ramen::input::Key) {
     android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
 }
 
-fn jni_vibrate(duration_ms: i64) {
+pub fn jni_vibrate(duration_ms: i64) {
     if !haptics_enabled() {
         return;
     }
