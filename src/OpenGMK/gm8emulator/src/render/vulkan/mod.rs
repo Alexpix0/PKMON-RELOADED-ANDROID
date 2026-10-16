@@ -17,6 +17,8 @@ use crate::render::{
 };
 use ramen::{connection::Connection, window::Window};
 
+const DEFAULT_LIGHT: Light = Light::Directional { direction: [0.0, 0.0, 1.0], colour: 0 };
+
 pub struct VulkanRenderer {
     pub context: context::VulkanContext,
     pub surface: surface::VulkanSurface,
@@ -39,7 +41,8 @@ pub struct VulkanRenderer {
     lighting_enabled: bool,
     ambient_colour: i32,
     lights: [(bool, Light); 8],
-    options: RendererOptions,
+    primitive_2d: PrimitiveBuilder,
+    primitive_3d: PrimitiveBuilder,
 }
 
 impl VulkanRenderer {
@@ -79,8 +82,9 @@ impl VulkanRenderer {
             gouraud: true,
             lighting_enabled: false,
             ambient_colour: 0,
-            lights: [(false, Light::default()); 8],
-            options: options.clone(),
+            lights: [(false, DEFAULT_LIGHT); 8],
+            primitive_2d: PrimitiveBuilder::new(AtlasRect::default(), PrimitiveType::PointList, false),
+            primitive_3d: PrimitiveBuilder::new(AtlasRect::default(), PrimitiveType::PointList, false),
         })
     }
 }
@@ -108,13 +112,13 @@ impl RendererTrait for VulkanRenderer {
     ) -> Result<AtlasRef, String> {
         let id = self.textures.textures.len() as i32 + 1;
         self.textures.textures.insert(id, AtlasRect {
-            tex: id as u32,
+            atlas_id: id as u32,
             x: 0,
             y: 0,
             w: width,
             h: height,
-            orig_x: 0,
-            orig_y: 0,
+            origin_x: 0.0,
+            origin_y: 0.0,
         });
         Ok(AtlasRef(id))
     }
@@ -151,8 +155,8 @@ impl RendererTrait for VulkanRenderer {
 
     fn set_sprite_origin(&mut self, id: AtlasRef, origin_x: f32, origin_y: f32) {
         if let Some(rect) = self.textures.textures.get_mut(&id.0) {
-            rect.orig_x = origin_x as i32;
-            rect.orig_y = origin_y as i32;
+            rect.origin_x = origin_x;
+            rect.origin_y = origin_y;
         }
     }
 
@@ -270,13 +274,13 @@ impl RendererTrait for VulkanRenderer {
     fn reset_primitive_2d(&mut self, _ptype: PrimitiveType, _atlas_ref: Option<AtlasRef>) {}
     fn vertex_2d(&mut self, _x: f64, _y: f64, _xtex: f64, _ytex: f64, _col: i32, _alpha: f64) {}
     fn draw_primitive_2d(&mut self) {}
-    fn get_primitive_2d(&self) -> PrimitiveBuilder { PrimitiveBuilder::default() }
-    fn set_primitive_2d(&mut self, _prim: PrimitiveBuilder) {}
+    fn get_primitive_2d(&self) -> PrimitiveBuilder { self.primitive_2d.clone() }
+    fn set_primitive_2d(&mut self, prim: PrimitiveBuilder) { self.primitive_2d = prim; }
     fn reset_primitive_3d(&mut self, _ptype: PrimitiveType, _atlas_ref: Option<AtlasRef>) {}
     fn vertex_3d(&mut self, _x: f64, _y: f64, _z: f64, _nx: f64, _ny: f64, _nz: f64, _xtex: f64, _ytex: f64, _col: i32, _alpha: f64) {}
     fn draw_primitive_3d(&mut self) {}
-    fn get_primitive_3d(&self) -> PrimitiveBuilder { PrimitiveBuilder::default() }
-    fn set_primitive_3d(&mut self, _prim: PrimitiveBuilder) {}
+    fn get_primitive_3d(&self) -> PrimitiveBuilder { self.primitive_3d.clone() }
+    fn set_primitive_3d(&mut self, prim: PrimitiveBuilder) { self.primitive_3d = prim; }
     fn extend_buffers(&self, _buf: &mut VertexBuffer) {}
     fn draw_buffers(&mut self, _atlas_ref: Option<AtlasRef>, _buf: &VertexBuffer) {}
     fn clear_view(&mut self, _colour: Colour, _alpha: f64) {}
@@ -295,7 +299,7 @@ impl RendererTrait for VulkanRenderer {
     fn set_culling(&mut self, culling: bool) { self.culling = culling; }
     fn get_perspective(&self) -> bool { self.perspective }
     fn set_perspective(&mut self, perspective: bool) { self.perspective = perspective; }
-    fn get_fog(&self) -> Option<Fog> { self.fog }
+    fn get_fog(&self) -> Option<Fog> { self.fog.clone() }
     fn set_fog(&mut self, fog: Option<Fog>) { self.fog = fog; }
     fn get_gouraud(&self) -> bool { self.gouraud }
     fn set_gouraud(&mut self, gouraud: bool) { self.gouraud = gouraud; }
