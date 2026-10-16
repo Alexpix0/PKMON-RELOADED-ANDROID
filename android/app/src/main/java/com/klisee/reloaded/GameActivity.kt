@@ -40,6 +40,13 @@ class GameActivity : NativeActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            if (pm?.isSustainedPerformanceModeSupported == true) {
+                window.setSustainedPerformanceMode(true)
+                Log.i(TAG, "Sustained performance mode activado para sesiones prolongadas")
+            }
+        }
         installImeAnchor()
         watchImeHeight()
         hideSystemBars()

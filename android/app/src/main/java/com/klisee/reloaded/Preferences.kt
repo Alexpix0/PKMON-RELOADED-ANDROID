@@ -341,4 +341,42 @@ class Preferences(context: Context) {
         quickSave = quickSave,
         saveReminder = saveReminder
     )
+
+    /**
+     * Aplica un perfil de rendimiento rápido de 1 toque:
+     * - "eco": Límite a 30 FPS, escala 0.75x, clima mínimo, ahorro de batería.
+     * - "balanced": 60 FPS fijos, escala 1.0x, filtro nítido, clima optimizado.
+     * - "extreme": 60 FPS, Vulkan activo, turbo a 3.0x, escala 1.0x nativa.
+     */
+    fun applyPerformanceProfile(profile: String) {
+        when (profile.lowercase()) {
+            "eco", "ahorro" -> {
+                frameSkip = "1"
+                renderScale = "0.75"
+                weatherOpt = "minimal"
+                force60Fps = false
+                turboMultiplier = 1.5f
+                batterySaver = true
+            }
+            "balanced", "equilibrado" -> {
+                frameSkip = "auto"
+                renderScale = "1.0"
+                weatherOpt = "optimized"
+                videoFilter = "sharp"
+                force60Fps = false
+                turboMultiplier = 2.0f
+                batterySaver = false
+            }
+            "extreme", "extremo" -> {
+                frameSkip = "0"
+                renderScale = "1.0"
+                weatherOpt = "normal"
+                videoFilter = "sharp"
+                graphicsBackend = "vulkan"
+                force60Fps = true
+                turboMultiplier = 3.0f
+                batterySaver = false
+            }
+        }
+    }
 }
