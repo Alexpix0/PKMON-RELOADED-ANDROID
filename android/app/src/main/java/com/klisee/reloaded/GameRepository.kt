@@ -409,7 +409,7 @@ class GameRepository(private val context: Context) {
                     .put("slot", slot)
                     .put("label", label)
                     .put("timestamp", timestamp)
-                    .put("version", "${com.klisee.reloaded.BuildConfig.VERSION_NAME}-EX")
+                    .put("version", "${com.klisee.reloaded.AppInfo.VERSION_NAME}-EX")
                     .toString()
                 zip.write(metaJson.toByteArray())
                 zip.closeEntry()
