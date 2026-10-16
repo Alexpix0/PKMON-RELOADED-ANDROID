@@ -913,14 +913,18 @@ impl Game {
                         colliders: b
                             .colliders
                             .into_iter()
-                            .map(|c| Collider {
-                                width: c.width,
-                                height: c.height,
-                                bbox_left: c.bbox_left,
-                                bbox_right: c.bbox_right,
-                                bbox_top: c.bbox_top,
-                                bbox_bottom: c.bbox_bottom,
-                                data: c.data,
+                            .map(|c| {
+                                let is_empty_mask = !c.data.iter().any(|&px| px);
+                                Collider {
+                                    width: c.width,
+                                    height: c.height,
+                                    bbox_left: c.bbox_left,
+                                    bbox_right: c.bbox_right,
+                                    bbox_top: c.bbox_top,
+                                    bbox_bottom: c.bbox_bottom,
+                                    is_empty_mask,
+                                    data: c.data,
+                                }
                             })
                             .collect(),
                         width: w,
@@ -2973,12 +2977,12 @@ impl Game {
             let y1 = inst1.y.get().round();
             let x2 = inst2.x.get().round();
             let y2 = inst2.y.get().round();
-            let angle1 = inst1.image_angle.get().to_radians();
-            let sin1 = angle1.sin().into_inner();
-            let cos1 = angle1.cos().into_inner();
-            let angle2 = inst2.image_angle.get().to_radians();
-            let sin2 = angle2.sin().into_inner();
-            let cos2 = angle2.cos().into_inner();
+            let (sin1, cos1) = inst1.image_angle.get().to_radians().sin_cos();
+            let sin1 = sin1.into_inner();
+            let cos1 = cos1.into_inner();
+            let (sin2, cos2) = inst2.image_angle.get().to_radians().sin_cos();
+            let sin2 = sin2.into_inner();
+            let cos2 = cos2.into_inner();
 
             // Get intersect rectangle
             let intersect_top = inst1.bbox_top.get().max(inst2.bbox_top.get());

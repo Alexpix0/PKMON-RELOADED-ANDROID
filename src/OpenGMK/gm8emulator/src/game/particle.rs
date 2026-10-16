@@ -1328,11 +1328,13 @@ impl Particle {
             // gravity and attractors
             if ptype.grav_amount != Real::from(0.0) || !attractors.is_empty() {
                 // make the speed cartesian for a bit
-                let mut hspeed = self.direction.to_radians().cos() * self.speed;
-                let mut vspeed = -self.direction.to_radians().sin() * self.speed;
+                let (sin_dir, cos_dir) = self.direction.to_radians().sin_cos();
+                let mut hspeed = cos_dir * self.speed;
+                let mut vspeed = -sin_dir * self.speed;
                 // gravity
-                hspeed += ptype.grav_dir.to_radians().cos() * ptype.grav_amount;
-                vspeed -= ptype.grav_dir.to_radians().sin() * ptype.grav_amount;
+                let (sin_grav, cos_grav) = ptype.grav_dir.to_radians().sin_cos();
+                hspeed += cos_grav * ptype.grav_amount;
+                vspeed -= sin_grav * ptype.grav_amount;
                 // attractors
                 for attractor in attractors.iter().filter_map(|x| x.as_ref()) {
                     if attractor.force != Real::from(0.0) && attractor.dist != Real::from(0.0) {
@@ -1366,22 +1368,30 @@ impl Particle {
                 self.direction = -vspeed.arctan2(hspeed).to_degrees();
             }
 
-            let mut dir_wiggle_factor = Real::from((self.timer + self.random_start * 3) % 24) / Real::from(6.0);
-            if Real::from(2.0) < dir_wiggle_factor {
-                dir_wiggle_factor = Real::from(4.0) - dir_wiggle_factor;
-            }
-            dir_wiggle_factor -= Real::from(1.0);
-            let direction = self.direction + ptype.dir_wiggle * dir_wiggle_factor;
+            let (dx, dy) = if ptype.dir_wiggle != Real::from(0.0) || ptype.speed_wiggle != Real::from(0.0) {
+                let mut dir_wiggle_factor = Real::from((self.timer + self.random_start * 3) % 24) / Real::from(6.0);
+                if Real::from(2.0) < dir_wiggle_factor {
+                    dir_wiggle_factor = Real::from(4.0) - dir_wiggle_factor;
+                }
+                dir_wiggle_factor -= Real::from(1.0);
+                let direction = self.direction + ptype.dir_wiggle * dir_wiggle_factor;
 
-            let mut speed_wiggle_factor = Real::from((self.timer + self.random_start * 4) % 20) / Real::from(5.0);
-            if Real::from(2.0) < speed_wiggle_factor {
-                speed_wiggle_factor = Real::from(4.0) - speed_wiggle_factor;
-            }
-            speed_wiggle_factor -= Real::from(1.0);
-            let speed = self.speed + ptype.speed_wiggle * speed_wiggle_factor;
+                let mut speed_wiggle_factor = Real::from((self.timer + self.random_start * 4) % 20) / Real::from(5.0);
+                if Real::from(2.0) < speed_wiggle_factor {
+                    speed_wiggle_factor = Real::from(4.0) - speed_wiggle_factor;
+                }
+                speed_wiggle_factor -= Real::from(1.0);
+                let speed = self.speed + ptype.speed_wiggle * speed_wiggle_factor;
 
-            self.x += direction.to_radians().cos() * speed;
-            self.y -= direction.to_radians().sin() * speed;
+                let (s, c) = direction.to_radians().sin_cos();
+                (c * speed, -s * speed)
+            } else {
+                let (s, c) = self.direction.to_radians().sin_cos();
+                (c * self.speed, -s * self.speed)
+            };
+
+            self.x += dx;
+            self.y += dy;
         }
     }
 
@@ -1404,7 +1414,9 @@ impl Particle {
                 },
                 _ => self.colour,
             };
-            if halflife_elapsed >= Real::from(1.0) {
+            if ptype.alpha1 == ptype.alpha2 && ptype.alpha2 == ptype.alpha3 {
+                self.alpha = ptype.alpha1;
+            } else if halflife_elapsed >= Real::from(1.0) {
                 self.alpha = (halflife_elapsed - Real::from(1.0)) * ptype.alpha3
                     + (Real::from(2.0) - halflife_elapsed) * ptype.alpha2;
             } else {

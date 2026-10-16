@@ -146,14 +146,18 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
     let colliders = parsed
         .colliders
         .iter()
-        .map(|c| crate::asset::sprite::Collider {
-            width: c.width,
-            height: c.height,
-            bbox_left: c.bbox_left,
-            bbox_right: c.bbox_right,
-            bbox_top: c.bbox_top,
-            bbox_bottom: c.bbox_bottom,
-            data: c.data.clone(),
+        .map(|c| {
+            let is_empty_mask = !c.data.iter().any(|&px| px);
+            crate::asset::sprite::Collider {
+                width: c.width,
+                height: c.height,
+                bbox_left: c.bbox_left,
+                bbox_right: c.bbox_right,
+                bbox_top: c.bbox_top,
+                bbox_bottom: c.bbox_bottom,
+                is_empty_mask,
+                data: c.data.clone(),
+            }
         })
         .collect::<Vec<_>>();
 

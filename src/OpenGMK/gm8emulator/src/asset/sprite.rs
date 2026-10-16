@@ -42,6 +42,8 @@ pub struct Collider {
     pub bbox_top: u32,
     pub bbox_bottom: u32,
     pub data: Box<[bool]>,
+    #[serde(default)]
+    pub is_empty_mask: bool,
 }
 
 pub enum ColliderShape {
@@ -156,6 +158,7 @@ fn make_bbox(coll: impl Fn(u32, u32) -> bool, frame_width: u32, frame_height: u3
 /// Creates a collider from the given collision data and dimensions, giving it an appropriate bounding box.
 fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
     let bbox = make_bbox(|x, y| data[(y * width + x) as usize], width, height);
+    let is_empty_mask = !data.iter().any(|&px| px);
     Collider {
         width,
         height,
@@ -163,6 +166,7 @@ fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
         bbox_right: bbox.right,
         bbox_top: bbox.top,
         bbox_bottom: bbox.bottom,
+        is_empty_mask,
         data,
     }
 }
@@ -264,6 +268,7 @@ pub fn make_colliders_shaped(
                     }
                 },
             }
+            let is_empty_mask = !data.iter().any(|&px| px);
             Collider {
                 width,
                 height,
@@ -271,6 +276,7 @@ pub fn make_colliders_shaped(
                 bbox_right: bbox.right,
                 bbox_top: bbox.top,
                 bbox_bottom: bbox.bottom,
+                is_empty_mask,
                 data,
             }
         })
@@ -332,12 +338,9 @@ impl Collider {
             return false;
         }
         // A collision map with no set pixel means the sprite has no precise mask (GM8 then does
-        // a plain bounding-box collision). This is the case for the game's own `.gmspr` battle
-        // sprites, which store a bbox but no pixel mask: treating them as "never collides" is what
-        // made the "Vuelo" effect never land on the Pokémon. The map is not always literally empty:
-        // when the file carries the placeholder 1x1 mask it comes back as a single `false`, so the
-        // "missing mask" test has to look at the pixels, not just at the length.
-        if self.data.iter().all(|&px| !px) {
+        // a plain bounding-box collision). We use the precomputed O(1) is_empty_mask flag instead of
+        // scanning thousands of booleans on every pixel check!
+        if self.is_empty_mask {
             true
         } else {
             self.data.get((y as usize * self.width as usize) + x as usize).copied().unwrap_or(false)

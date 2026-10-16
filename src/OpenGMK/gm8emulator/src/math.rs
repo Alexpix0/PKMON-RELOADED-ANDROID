@@ -35,6 +35,12 @@ impl Real {
     }
 
     #[inline(always)]
+    pub fn sin_cos(self) -> (Self, Self) {
+        let (s, c) = self.0.sin_cos();
+        (Self(s), Self(c))
+    }
+
+    #[inline(always)]
     pub fn tan(self) -> Self {
         Self(self.0.tan())
     }
