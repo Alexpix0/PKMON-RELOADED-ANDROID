@@ -726,11 +726,11 @@ impl Game {
                 let target = self.get_target(context, &accessor.owner, false)?;
                 let array_index = self.get_array_index(&accessor.array, context)?;
                 match target {
-                    Target::Single(None) if self.uninit_fields_are_zero => Ok(Default::default()),
-                    Target::Single(None) => Err(Error::UninitializedVariable(
-                        String::from(mappings::INSTANCE_VARIABLES.iter().find(|(_, x)| x == &accessor.var).unwrap().0),
-                        array_index,
-                    )),
+                    // Leer una variable built-in (x, y, image_index...) sobre algo que no existe
+                    // devuelve 0 en GM8, igual que un campo de usuario: devolver el error terminaba la
+                    // partida (p. ej. "uninitialized variable x" en la sala 191 al desobedecer un
+                    // Pokemon). Los casos Global/Local siguen avisando si el ajuste del juego lo pide.
+                    Target::Single(None) => Ok(Default::default()),
                     Target::Single(Some(instance)) => {
                         self.get_instance_var(instance, &accessor.var, array_index, context)
                     },
@@ -740,20 +740,7 @@ impl Game {
                         {
                             self.get_instance_var(instance, &accessor.var, array_index, context)
                         } else {
-                            if self.uninit_fields_are_zero {
-                                Ok(Default::default())
-                            } else {
-                                Err(Error::UninitializedVariable(
-                                    String::from(
-                                        mappings::INSTANCE_VARIABLES
-                                            .iter()
-                                            .find(|(_, x)| x == &accessor.var)
-                                            .unwrap()
-                                            .0,
-                                    ),
-                                    array_index,
-                                ))
-                            }
+                            Ok(Default::default())
                         }
                     },
                     Target::All => {
@@ -761,20 +748,7 @@ impl Game {
                         {
                             self.get_instance_var(instance, &accessor.var, array_index, context)
                         } else {
-                            if self.uninit_fields_are_zero {
-                                Ok(Default::default())
-                            } else {
-                                Err(Error::UninitializedVariable(
-                                    String::from(
-                                        mappings::INSTANCE_VARIABLES
-                                            .iter()
-                                            .find(|(_, x)| x == &accessor.var)
-                                            .unwrap()
-                                            .0,
-                                    ),
-                                    array_index,
-                                ))
-                            }
+                            Ok(Default::default())
                         }
                     },
                     Target::Global => match self.globals.vars.get(&accessor.var).and_then(|x| x.get(array_index)) {

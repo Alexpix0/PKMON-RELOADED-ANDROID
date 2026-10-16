@@ -25,12 +25,46 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+struct Sticky {
+    flag: AtomicBool,
+    seen: Mutex<Option<Instant>>,
+}
+
+impl Sticky {
+    const fn new() -> Self {
+        Self { flag: AtomicBool::new(false), seen: Mutex::new(None) }
+    }
+
+    fn report(&self, on: bool) -> bool {
+        const GRACE: Duration = Duration::from_millis(150);
+        if on {
+            *self.seen.lock().unwrap() = Some(Instant::now());
+            return !self.flag.swap(true, Ordering::Relaxed)
+        }
+        let recent = self.seen.lock().unwrap().map(|at| at.elapsed()).is_some_and(|ago| ago < GRACE);
+        if recent {
+            return false
+        }
+        self.flag.swap(false, Ordering::Relaxed)
+    }
+
+    fn get(&self) -> bool {
+        self.flag.load(Ordering::Relaxed)
+    }
+}
+
 /// Which game states a control is shown in.
 pub const MENU: u8 = 1;
 pub const WORLD: u8 = 2;
 pub const BATTLE: u8 = 4;
 /// A dialogue box is open: only the button that advances it is shown, so nothing covers the text.
 pub const DIALOG: u8 = 8;
+/// A new game asking you to pick your character.
+pub const CHARACTER: u8 = 16;
+/// A modal asking you to pick from a list of options (preferences, difficulty).
+pub const CHOICE: u8 = 32;
+/// The Safari Zone's catching room.
+pub const SAFARI: u8 = 64;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Shape {
@@ -60,7 +94,7 @@ pub struct Control {
     pub key: Key,
     pub shape: Shape,
     pub label: Label,
-    /// Bitmask of [MENU] / [WORLD] / [BATTLE] states this control belongs to.
+    /// Bitmask of [MENU] / [WORLD] / [BATTLE] / [DIALOG] / [CHARACTER] / [CHOICE] / [SAFARI] states.
     pub contexts: u8,
 }
 
@@ -73,45 +107,64 @@ pub const EDIT_NAME: &str = "edit";
 pub const GUIDE_NAME: &str = "guide";
 pub const LOG_NAME: &str = "log";
 
+pub const COMBO_BUTTON_NAME: &str = "truco_ctrl_p";
+static COMBO_USED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_combo_used() {
+    COMBO_USED.store(true, Ordering::Relaxed);
+}
+
+const CHARACTER_ROOM: i32 = 3;
+const PREFERENCES_MODAL: i32 = 7744;
+const DIFFICULTY_MODAL: i32 = 7836;
+const PICKER_MAX_CHARACTERS: usize = 3;
+
+pub const LEFT_ARROW_NAME: &str = "flechaizquierda";
+pub const RIGHT_ARROW_NAME: &str = "flechaderecha";
+pub const LEFT_ARROW_CX: f32 = 0.095;
+pub const RIGHT_ARROW_CX: f32 = 0.430;
+pub const ARROW_CY: f32 = 0.340;
+pub const ARROW_R: f32 = 0.030;
+pub const ARROW_MARGIN: f32 = 0.045;
+
 pub const CONTROLS: &[Control] = &[
     // Trigger button for the Drastic-style Radial Quick-Menu (at the bottom center)
     Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.958, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
-    // Number keys (first row along the top). They are for the base game only: in battle those keys
-    // pick a party Pokémon, and that is what the SEL wheel below is for, so showing them there would
-    // only get in the way.
-    Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: WORLD },
-    Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: WORLD },
-    Control { name: "alpha3", key: Key::Alpha3, shape: Shape::Circle { cx: 0.444, cy: 0.055, r: 0.020 }, label: Label::Text("3"), contexts: WORLD },
+    // Number keys (first row along the top).
+    Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: WORLD | SAFARI },
+    Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: WORLD | SAFARI },
+    Control { name: "alpha3", key: Key::Alpha3, shape: Shape::Circle { cx: 0.444, cy: 0.055, r: 0.020 }, label: Label::Text("3"), contexts: WORLD | SAFARI },
     // Menu / misc keys (second row along the top).
-    Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE },
-    Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE },
-    Control { name: "m", key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE },
-    Control { name: "e", key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE },
-    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE },
-    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE },
-    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE },
-    // Main actions, in the diamond a gamepad's face buttons use: the main one at the bottom, cancel
-    // to the right, and the other two on the left and on top. The cluster is about the size of the
-    // movement joystick and sits at the same height, so the two thumbs fall in the same place.
-    Control { name: "z", key: Key::Z, shape: Shape::Circle { cx: 0.865, cy: 0.851, r: 0.033 }, label: Label::Text("Z"), contexts: WORLD | BATTLE },
-    Control { name: "x", key: Key::X, shape: Shape::Circle { cx: 0.933, cy: 0.700, r: 0.033 }, label: Label::Text("X"), contexts: WORLD | BATTLE },
+    Control { name: "space", key: Key::Space, shape: Shape::Circle { cx: 0.300, cy: 0.145, r: 0.022 }, label: Label::Text("PKM"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "m", key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "e", key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE | SAFARI },
+    // Main actions, in the diamond a gamepad's face buttons use.
+    Control { name: "z", key: Key::Z, shape: Shape::Circle { cx: 0.865, cy: 0.851, r: 0.033 }, label: Label::Text("Z"), contexts: WORLD | BATTLE | CHOICE },
+    Control { name: "x", key: Key::X, shape: Shape::Circle { cx: 0.933, cy: 0.700, r: 0.033 }, label: Label::Text("X"), contexts: WORLD | BATTLE | CHOICE },
     Control { name: "c", key: Key::C, shape: Shape::Circle { cx: 0.797, cy: 0.700, r: 0.033 }, label: Label::Text("C"), contexts: WORLD | BATTLE },
     Control { name: "v", key: Key::V, shape: Shape::Circle { cx: 0.865, cy: 0.549, r: 0.033 }, label: Label::Text("V"), contexts: WORLD | BATTLE },
     // Secondary.
-    Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE },
+    Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE | SAFARI },
     Control { name: "s", key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
     // Holding this opens the party wheel (see below): each slot is one Pokémon of the team.
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
-    Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD },
-    Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD },
+    Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | SAFARI },
+    Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD | SAFARI },
     // Menu keys (START & SELECT flanking the center quick menu arrow).
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.405, cy: 0.940, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE },
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.595, cy: 0.940, r: 0.026 }, label: Label::Text("OK"), contexts: WORLD | BATTLE },
-    // While a dialogue box is open the overlay steps aside and leaves only this, so the text and the
-    // portrait are not buried under buttons. Its position is measured from the game image (not the
-    // window), so it sits on the box whatever the screen's shape is. It sends the key the game
-    // advances dialogues with.
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.405, cy: 0.940, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.595, cy: 0.940, r: 0.026 }, label: Label::Text("OK"), contexts: WORLD | BATTLE | SAFARI },
+    // Dialogue advance button
     Control { name: "dialogo", key: Key::Z, shape: Shape::Circle { cx: 0.940, cy: 0.880, r: 0.024 }, label: Label::Text("OK"), contexts: DIALOG },
+    // Character picker
+    Control { name: LEFT_ARROW_NAME, key: Key::LeftArrow, shape: Shape::Circle { cx: LEFT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Left), contexts: CHARACTER },
+    Control { name: RIGHT_ARROW_NAME, key: Key::RightArrow, shape: Shape::Circle { cx: RIGHT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Right), contexts: CHARACTER },
+    Control { name: "eleccion_ok", key: Key::Return, shape: Shape::Circle { cx: 0.932, cy: 0.600, r: 0.036 }, label: Label::Text("OK"), contexts: CHARACTER },
+    Control { name: "eleccion_atras", key: Key::X, shape: Shape::Circle { cx: 0.972, cy: 0.420, r: 0.028 }, label: Label::Text("X"), contexts: CHARACTER },
+    Control { name: COMBO_BUTTON_NAME, key: Key::LeftControl, shape: Shape::Circle { cx: 0.500, cy: 0.060, r: 0.018 }, label: Label::Text("C+P"), contexts: CHARACTER },
 ];
 
 static CUSTOM_OFFSETS: Mutex<Option<HashMap<String, (f32, f32)>>> = Mutex::new(None);
@@ -455,12 +508,127 @@ pub fn set_show_num_keys(show: bool) {
     SHOW_NUM_KEYS.store(show, Ordering::Relaxed);
 }
 
+thread_local! {
+    static CHARACTER_SPRITES: std::cell::RefCell<Vec<(f64, f64, f64, f64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+pub fn note_sprite(x1: f64, y1: f64, x2: f64, y2: f64) {
+    CHARACTER_SPRITES.with(|cell| {
+        let mut seen = cell.borrow_mut();
+        let overlaps = seen.iter().any(|other: &(f64, f64, f64, f64)| {
+            x1 < other.2 && other.0 < x2 && y1 < other.3 && other.1 < y2
+        });
+        if !overlaps {
+            seen.push((x1, y1, x2, y2));
+        }
+    });
+}
+
+pub fn reset_character_sprites() {
+    CHARACTER_SPRITES.with(|cell| cell.borrow_mut().clear());
+}
+
+pub fn character_sprites() -> Vec<(f64, f64, f64, f64)> {
+    CHARACTER_SPRITES.with(|cell| {
+        let mut boxes = cell.borrow().clone();
+        boxes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        boxes
+    })
+}
+
+static PICKER_BOXES: Mutex<Vec<(f32, f32, f32, f32)>> = Mutex::new(Vec::new());
+
+pub fn set_picker_boxes(boxes: Vec<(f32, f32, f32, f32)>) {
+    if boxes.is_empty() && !picker_boxes().is_empty() {
+        return
+    }
+    *PICKER_BOXES.lock().unwrap() = boxes;
+}
+
+pub fn picker_boxes() -> Vec<(f32, f32, f32, f32)> {
+    PICKER_BOXES.lock().unwrap().clone()
+}
+
+static MODAL_OPEN: Sticky = Sticky::new();
+
+pub fn set_modal_open(open: bool) {
+    MODAL_OPEN.report(open);
+}
+
+pub fn modal_open() -> bool {
+    MODAL_OPEN.get()
+}
+
+static MODAL_ID: AtomicI32 = AtomicI32::new(-1);
+
+pub fn set_modal_id(id: i32) {
+    if MODAL_ID.swap(id, Ordering::Relaxed) != id {
+        eprintln!("[overlay] modal {id}");
+    }
+}
+
+pub fn modal_id() -> i32 {
+    MODAL_ID.load(Ordering::Relaxed)
+}
+
+static PICKER_TARGET: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn picker_step(delta: isize) {
+    let next = PICKER_TARGET.load(Ordering::Relaxed) as isize + delta;
+    PICKER_TARGET.store(next.max(0) as usize, Ordering::Relaxed);
+}
+
+pub fn picker_reset() {
+    PICKER_TARGET.store(0, Ordering::Relaxed);
+}
+
+static TEXT_ENTRY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_text_entry(open: bool) {
+    let was = TEXT_ENTRY.swap(open, Ordering::Relaxed);
+    if was != open {
+        eprintln!("[ime] entrada de texto {}", if open { "abierta" } else { "cerrada" });
+    }
+}
+
+pub fn text_entry_open() -> bool {
+    TEXT_ENTRY.load(Ordering::Relaxed)
+}
+
+static IME_INSET: AtomicU32 = AtomicU32::new(0);
+
+pub fn set_ime_inset(pixels: u32) {
+    IME_INSET.store(pixels, Ordering::Relaxed);
+}
+
+pub fn ime_inset() -> u32 {
+    IME_INSET.load(Ordering::Relaxed)
+}
+
+pub fn text_entry_inset() -> u32 {
+    if text_entry_open() {
+        ime_inset()
+    } else {
+        0
+    }
+}
+
 pub fn show_num_keys() -> bool {
     SHOW_NUM_KEYS.load(Ordering::Relaxed)
 }
 
 pub fn effective_shape(index: usize) -> Shape {
     let c = &CONTROLS[index];
+    if c.name == LEFT_ARROW_NAME || c.name == RIGHT_ARROW_NAME {
+        let boxes = picker_boxes();
+        let target = PICKER_TARGET.load(Ordering::Relaxed).min(boxes.len().saturating_sub(1));
+        if let Some(&(x1, y1, x2, y2)) = boxes.get(target) {
+            let cx = if c.name == LEFT_ARROW_NAME { x1 - ARROW_MARGIN } else { x2 + ARROW_MARGIN };
+            let inside = |v: f32| v.clamp(ARROW_R, 1.0 - ARROW_R);
+            return Shape::Circle { cx: inside(cx), cy: inside((y1 + y2) / 2.0), r: ARROW_R };
+        }
+    }
     if c.contexts & DIALOG != 0 || c.name == RADIAL_MENU_NAME {
         return c.shape;
     }
@@ -535,6 +703,30 @@ pub fn index_of(name: &str) -> Option<usize> {
     CONTROLS.iter().position(|control| control.name == name)
 }
 
+static ART_ASPECTS: Mutex<Vec<(&'static str, f32)>> = Mutex::new(Vec::new());
+
+pub fn set_art_aspect(name: &'static str, aspect: f32) {
+    let mut aspects = ART_ASPECTS.lock().unwrap();
+    aspects.retain(|(known, _)| *known != name);
+    aspects.push((name, aspect));
+}
+
+fn art_aspect(name: &str) -> Option<f32> {
+    ART_ASPECTS.lock().unwrap().iter().find(|(known, _)| *known == name).map(|(_, aspect)| *aspect)
+}
+
+fn control_contains(index: usize, name: &str, nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
+    let shape = window_shape(index);
+    if let Some(aspect) = art_aspect(name) {
+        let (cx, cy, half) = match shape {
+            Shape::Circle { cx, cy, r } => (cx, cy, r * ww),
+            Shape::Rect { cx, cy, w, h } => (cx, cy, (w * ww + h * wh) / 4.0),
+        };
+        return (nx - cx).abs() * ww <= half * aspect && (ny - cy).abs() * wh <= half;
+    }
+    contains(shape, nx, ny, ww, wh)
+}
+
 /// The room the emulator reported, or -1 before the first frame.
 static ROOM: AtomicI32 = AtomicI32::new(-1);
 
@@ -542,7 +734,8 @@ static ROOM: AtomicI32 = AtomicI32::new(-1);
 pub fn set_room(room: i32) {
     let old = ROOM.load(Ordering::Relaxed);
     if old != room {
-        // Room changed: immediately clear dialogue state and debounce
+        picker_reset();
+        COMBO_USED.store(false, Ordering::Relaxed);
         DIALOGUE.store(false, Ordering::Relaxed);
         DIALOGUE_DEBOUNCE_FRAMES.store(0, Ordering::Relaxed);
     }
@@ -581,9 +774,7 @@ pub fn dialogue_open() -> bool {
     DIALOGUE.load(Ordering::Relaxed)
 }
 
-/// Whether the game's own Pokémon box (the PC storage) is open. Its screen is driven entirely with
-/// the game's own click boxes, so nothing of the overlay is wanted there; the engine reports it from
-/// the game's `ENCAJA` global.
+/// Whether the game's own Pokémon box (the PC storage) is open.
 static BOX_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn set_box_open(open: bool) {
@@ -611,7 +802,7 @@ fn log_state_change(room: i32) {
     let active = (0..CONTROLS.len()).filter(|index| is_active(*index)).count();
     eprintln!("[overlay] sala {} -> grupo {} | ventana {}x{} | {} de {} activos", room, group, window_w, window_h, active, CONTROLS.len());
     for (index, control) in CONTROLS.iter().enumerate() {
-        let (at, size) = match control.shape {
+        let (at, size) = match effective_shape(index) {
             Shape::Circle { cx, cy, r } => (format!("{:.3},{:.3}", cx, cy), format!("r={:.3}", r)),
             Shape::Rect { cx, cy, w, h } => (format!("{:.3},{:.3}", cx, cy), format!("{:.3}x{:.3}", w, h)),
         };
@@ -637,33 +828,34 @@ fn log_state_change(_room: i32) {}
 
 /// Which group of controls the current game state needs.
 pub fn current_context() -> u8 {
-    // A dialogue box takes over the overlay: only the button that advances it is shown, so the text
-    // and the portrait stay readable.
     if dialogue_open() {
         return DIALOG
     }
-    // The Pokémon box is entirely point-and-click, so nothing is needed next to it: no controls at
-    // all. MENU is the context no control belongs to, which is exactly that.
     if box_open() {
         return MENU
     }
+    if text_entry_inset() > 0 {
+        return MENU
+    }
     match ROOM.load(Ordering::Relaxed) {
-        // IntroROOM, InicioROOM, CargarPartida, MultijugadorMenu, CreditosInicioScreen, OptionsROOM:
-        // these screens are fully clickable (once the game's own click boxes are fixed, see
-        // `crate::patches`), so they need no on-screen controls at all.
-        22 | 30 | 43 | 461 | 465 | 466 => MENU,
-        // BattleROOM, BattleROOMAqua, BattleROOMLava.
+        22 | 30 | 43 | 461 | 465 | 466 | 527 | 528 => MENU,
+        CHARACTER_ROOM => {
+            if text_entry_open() {
+                MENU
+            } else if matches!(modal_id(), PREFERENCES_MODAL | DIFFICULTY_MODAL) {
+                CHOICE
+            } else {
+                CHARACTER
+            }
+        },
         47 | 191 | 709 => BATTLE,
-        // Before the first frame we don't know the room yet; show nothing rather than flashing the
-        // whole overlay for one frame.
+        715 => SAFARI,
         -1 => MENU,
         _ => WORLD,
     }
 }
 
-/// True while the player is on a pad. The on-screen controls then step aside, because somebody
-/// holding a controller does not want buttons under their thumbs; the first touch on the screen
-/// brings them back.
+/// True while the player is on a pad.
 static PAD_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn set_pad_active(active: bool) {
@@ -685,22 +877,32 @@ pub fn is_active(index: usize) -> bool {
     if !show_num_keys() && (c.name.starts_with("alpha") || c.name == "space" || c.name == "o" || c.name == "m" || c.name == "e" || c.name == "t" || c.name == "l" || c.name == "p") {
         return false;
     }
+    if c.contexts & CHARACTER != 0 {
+        if modal_open() {
+            return false;
+        }
+        let candidates = picker_boxes().len();
+        if matches!(c.label, Label::Arrow(_)) && !(1..=PICKER_MAX_CHARACTERS).contains(&candidates) {
+            return false;
+        }
+        if c.name == COMBO_BUTTON_NAME && COMBO_USED.load(Ordering::Relaxed) {
+            return false;
+        }
+    }
     c.contexts & current_context() != 0
 }
 
-/// The joystick drives the arrow keys, which is how the game's menus (the ones that still show
-/// controls) and the overworld are navigated.
+/// The joystick drives the arrow keys.
 pub fn joystick_active() -> bool {
-    !pad_active() && !box_open() && joystick_visible() && current_context() & (WORLD | BATTLE) != 0
+    !pad_active() && !box_open() && joystick_visible() && current_context() & (WORLD | BATTLE | CHOICE) != 0
 }
 
-/// Returns the index of the control containing the point, if any. The point is normalised, but the
-/// test is done in pixels so the touchable area matches what is drawn on a screen that is not square.
+/// Returns the index of the control containing the point, if any.
 pub fn hit(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
     CONTROLS
         .iter()
         .enumerate()
-        .position(|(index, _)| is_active(index) && contains(window_shape(index), nx, ny, ww, wh))
+        .position(|(index, control)| is_active(index) && control_contains(index, control.name, nx, ny, ww, wh))
 }
 
 static PRESSED: AtomicU32 = AtomicU32::new(0);
@@ -1299,3 +1501,52 @@ pub fn get_active_toast() -> Option<String> {
     }
     None
 }
+
+// ---------------------------------------------------------------------------------------------
+// Opciones de Ajustes -> Juego (Comodidad Externa y Opcional)
+
+static BERRY_TRACKER: AtomicBool = AtomicBool::new(false);
+static EGG_HATCH_TIMER: AtomicBool = AtomicBool::new(false);
+static KEY_ITEMS_RADIAL: AtomicBool = AtomicBool::new(false);
+static AUTO_RUN: AtomicBool = AtomicBool::new(false);
+static DIALOG_TAP_ADVANCE: AtomicBool = AtomicBool::new(false);
+static REPEL_REMINDER: AtomicBool = AtomicBool::new(false);
+static SHINY_BEACON: AtomicBool = AtomicBool::new(false);
+static PUZZLE_PAUSE: AtomicBool = AtomicBool::new(false);
+static FISHING_HAPTIC: AtomicBool = AtomicBool::new(false);
+static QUICK_SAVE: AtomicBool = AtomicBool::new(false);
+static SAVE_REMINDER: AtomicBool = AtomicBool::new(false);
+
+pub fn berry_tracker_enabled() -> bool { BERRY_TRACKER.load(Ordering::Relaxed) }
+pub fn set_berry_tracker(enabled: bool) { BERRY_TRACKER.store(enabled, Ordering::Relaxed); }
+
+pub fn egg_hatch_timer_enabled() -> bool { EGG_HATCH_TIMER.load(Ordering::Relaxed) }
+pub fn set_egg_hatch_timer(enabled: bool) { EGG_HATCH_TIMER.store(enabled, Ordering::Relaxed); }
+
+pub fn key_items_radial_enabled() -> bool { KEY_ITEMS_RADIAL.load(Ordering::Relaxed) }
+pub fn set_key_items_radial(enabled: bool) { KEY_ITEMS_RADIAL.store(enabled, Ordering::Relaxed); }
+
+pub fn auto_run_enabled() -> bool { AUTO_RUN.load(Ordering::Relaxed) }
+pub fn set_auto_run(enabled: bool) { AUTO_RUN.store(enabled, Ordering::Relaxed); }
+
+pub fn dialog_tap_advance_enabled() -> bool { DIALOG_TAP_ADVANCE.load(Ordering::Relaxed) }
+pub fn set_dialog_tap_advance(enabled: bool) { DIALOG_TAP_ADVANCE.store(enabled, Ordering::Relaxed); }
+
+pub fn repel_reminder_enabled() -> bool { REPEL_REMINDER.load(Ordering::Relaxed) }
+pub fn set_repel_reminder(enabled: bool) { REPEL_REMINDER.store(enabled, Ordering::Relaxed); }
+
+pub fn shiny_beacon_enabled() -> bool { SHINY_BEACON.load(Ordering::Relaxed) }
+pub fn set_shiny_beacon(enabled: bool) { SHINY_BEACON.store(enabled, Ordering::Relaxed); }
+
+pub fn puzzle_pause_enabled() -> bool { PUZZLE_PAUSE.load(Ordering::Relaxed) }
+pub fn set_puzzle_pause(enabled: bool) { PUZZLE_PAUSE.store(enabled, Ordering::Relaxed); }
+
+pub fn fishing_haptic_enabled() -> bool { FISHING_HAPTIC.load(Ordering::Relaxed) }
+pub fn set_fishing_haptic(enabled: bool) { FISHING_HAPTIC.store(enabled, Ordering::Relaxed); }
+
+pub fn quick_save_enabled() -> bool { QUICK_SAVE.load(Ordering::Relaxed) }
+pub fn set_quick_save(enabled: bool) { QUICK_SAVE.store(enabled, Ordering::Relaxed); }
+
+pub fn save_reminder_enabled() -> bool { SAVE_REMINDER.load(Ordering::Relaxed) }
+pub fn set_save_reminder(enabled: bool) { SAVE_REMINDER.store(enabled, Ordering::Relaxed); }
+

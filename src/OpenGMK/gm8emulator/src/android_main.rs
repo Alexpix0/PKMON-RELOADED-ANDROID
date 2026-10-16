@@ -187,6 +187,28 @@ fn load_video() {
                 let dd = value == "1" || value.eq_ignore_ascii_case("true");
                 eprintln!("[video] dynamic_dpad: {}", dd);
                 crate::touch_controls::set_dynamic_dpad_enabled(dd);
+            } else if name == "berry_tracker" {
+                crate::touch_controls::set_berry_tracker(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "egg_hatch_timer" {
+                crate::touch_controls::set_egg_hatch_timer(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "key_items_radial" {
+                crate::touch_controls::set_key_items_radial(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "auto_run" {
+                crate::touch_controls::set_auto_run(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "dialog_tap_advance" {
+                crate::touch_controls::set_dialog_tap_advance(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "repel_reminder" {
+                crate::touch_controls::set_repel_reminder(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "shiny_beacon" {
+                crate::touch_controls::set_shiny_beacon(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "puzzle_pause" {
+                crate::touch_controls::set_puzzle_pause(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "fishing_haptic" {
+                crate::touch_controls::set_fishing_haptic(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "quick_save" {
+                crate::touch_controls::set_quick_save(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "save_reminder" {
+                crate::touch_controls::set_save_reminder(value == "1" || value.eq_ignore_ascii_case("true"));
             }
         }
     }
@@ -399,13 +421,30 @@ fn jni_vibrate(duration_ms: i64) {
 
 fn control_key_down(index: usize) {
     crate::touch_controls::set_pressed(index, true);
+    // The trick combination needs both keys held at once, so it is not one key like the rest.
+    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
+        }
+        // It has done its job: it takes itself away until the next new game.
+        crate::touch_controls::set_combo_used();
+        return
+    }
     let name = crate::touch_controls::CONTROLS[index].name;
     if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
         crate::touch_controls::register_autofire(index);
     }
+    let key = crate::touch_controls::CONTROLS[index].key;
+    // On the character picker the overlay's arrows travel with the game's own selection, so the
+    // buttons stay around the character the player is on rather than around the first one.
+    match key {
+        Key::LeftArrow => crate::touch_controls::picker_step(-1),
+        Key::RightArrow => crate::touch_controls::picker_step(1),
+        _ => {},
+    }
     jni_vibrate(18);
     android::push_input(ramen::platform::android::InputEvent::KeyDown {
-        key: crate::touch_controls::CONTROLS[index].key,
+        key,
         text: None,
     });
 }
@@ -413,6 +452,12 @@ fn control_key_down(index: usize) {
 fn control_key_up(index: usize) {
     crate::touch_controls::set_pressed(index, false);
     crate::touch_controls::unregister_autofire(index);
+    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+        }
+        return
+    }
     android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::CONTROLS[index].key });
 }
 
@@ -697,7 +742,12 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
             }
         },
-        None => mouse_down(id, x, y),
+        None => {
+            if crate::touch_controls::text_entry_open() {
+                ime_set(true);
+            }
+            mouse_down(id, x, y)
+        },
     }
 }
 
@@ -1101,10 +1151,289 @@ extern "C" {
     fn ANativeWindow_acquire(window: *mut std::ffi::c_void) -> i32;
 }
 
+// ---------------------------------------------------------------------------------------------
+// System (soft) keyboard.
+//
+// The game has no Android view of its own to type into, so the activity's `InputConnection` sends
+// what is typed here through the JNI exports below. `ime_pump` then feeds it to ramen the same way
+// a hardware keyboard would, right before each poll, so the game's dialog sees a normal key tap.
+
+/// What the system keyboard committed, waiting for the next poll.
+enum ImeEvent {
+    Text(String),
+    Backspace,
+    Enter,
+}
+
+fn ime_queue() -> &'static Mutex<std::collections::VecDeque<ImeEvent>> {
+    static QUEUE: std::sync::OnceLock<Mutex<std::collections::VecDeque<ImeEvent>>> = std::sync::OnceLock::new();
+    QUEUE.get_or_init(|| Mutex::new(std::collections::VecDeque::new()))
+}
+
+/// Feeds what the system keyboard typed into ramen's queue. Each character goes in as a quick key
+/// tap that carries its text (`KeyDown{text}` + `KeyUp`): the press sets `keyboard_lastkey` and
+/// `vk_anykey`, the text fills `keyboard_string`, and the deferred release keeps the key down for
+/// the poll it arrived in - exactly what `tap_key` does for the on-screen buttons. Backspace and
+/// enter are plain taps of the keys the game already reads for those.
+pub fn ime_pump() {
+    let events: Vec<ImeEvent> = match ime_queue().lock() {
+        Ok(mut queue) => queue.drain(..).collect(),
+        Err(_) => return,
+    };
+    for event in events {
+        match event {
+            ImeEvent::Text(text) => {
+                for c in text.chars() {
+                    let key = ime_char_to_key(c);
+                    android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: Some(c) });
+                    android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+                }
+            },
+            ImeEvent::Backspace => tap_key(Key::Backspace),
+            ImeEvent::Enter => tap_key(Key::Return),
+        }
+    }
+}
+
+/// The key a committed character is reported as. It only decides `keyboard_lastkey`; the character
+/// itself travels in the event's text. Letters and digits become the same keys a hardware keyboard
+/// would send; anything without a Game Maker key (accents, most signs) falls back to space, whose
+/// code no dialog key uses.
+fn ime_char_to_key(c: char) -> Key {
+    if c.is_ascii_alphabetic() {
+        return LETTERS[usize::from(c.to_ascii_uppercase() as u8 - b'A')]
+    }
+    if c.is_ascii_digit() {
+        const DIGITS: [Key; 10] = [
+            Key::Alpha0, Key::Alpha1, Key::Alpha2, Key::Alpha3, Key::Alpha4, Key::Alpha5, Key::Alpha6,
+            Key::Alpha7, Key::Alpha8, Key::Alpha9,
+        ];
+        return DIGITS[usize::from(c as u8 - b'0')]
+    }
+    match c {
+        ' ' => Key::Space,
+        '.' => Key::Period,
+        ',' => Key::Comma,
+        '-' => Key::Minus,
+        '+' => Key::Plus,
+        '=' => Key::Equals,
+        '/' => Key::Slash,
+        '\\' => Key::Backslash,
+        ';' => Key::Semicolon,
+        ':' => Key::Colon,
+        '\'' => Key::Apostrophe,
+        '"' => Key::Quote,
+        '?' => Key::QuestionMark,
+        '_' => Key::Underscore,
+        _ => Key::Space,
+    }
+}
+
+/// Called from the activity's `InputConnection` for every committed string.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'local>(
+    mut env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    text: jni::objects::JString<'local>,
+) {
+    let value: String = env.get_string(&text).map(Into::into).unwrap_or_default();
+    if value.is_empty() {
+        return
+    }
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Text(value));
+    }
+}
+
+/// Called from the activity's `InputConnection` for the delete key.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeBackspace<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+) {
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Backspace);
+    }
+}
+
+/// Called from the activity's `InputConnection` for the enter/done key.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeEnter<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+) {
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Enter);
+    }
+}
+
+/// Called from the activity whenever the system keyboard's height changes, so the renderer can keep
+/// the game above it.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeImeInset<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    height: jni::sys::jint,
+) {
+    // A keyboard taller than the window is not a keyboard: a value like that would push the game off
+    // the top and hide the controls behind nothing, so it is dropped rather than believed.
+    let (_, window_height) = android::window_size();
+    let height = height.max(0) as u32;
+    let height = if window_height > 0 && height >= window_height { 0 } else { height };
+    crate::touch_controls::set_ime_inset(height);
+    // The keyboard can be dropped by the system as well as by us - its own close button, or the back
+    // gesture - so whether it is up is taken from its height. Without this, the next touch on the
+    // game's text would be read as "already up" and would not raise it again.
+    IME_SHOWN.store(height > 0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the system keyboard is up, so it is only raised or dropped on a change.
+static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Raises or drops the system keyboard, but only when that is a change.
+fn ime_set(visible: bool) {
+    if IME_SHOWN.swap(visible, std::sync::atomic::Ordering::Relaxed) != visible {
+        jni_set_ime(visible);
+    }
+}
+
+/// Raises or drops the system keyboard by calling the activity's static `GameActivity.setImeVisible`.
+/// The activity shows it from the UI thread, which Kotlin takes care of; here we only need to reach
+/// the class. `FindClass` would look on the system class path (the context the activity publishes is
+/// the Application), so the class is loaded through its own loader instead.
+fn jni_set_ime(visible: bool) {
+    with_activity(|env, class| {
+        env.call_static_method(class, "setImeVisible", "(Z)V", &[jni::objects::JValue::Bool(visible as u8)])?;
+        Ok(())
+    });
+}
+
+/// Asks the activity to read the keyboard's height again.
+///
+/// The height normally arrives on its own, from the inset callback. This is the belt to that braces:
+/// while the engine believes the keyboard is up it asks again once in a while, so an inset callback
+/// that never came cannot leave the game pushed up top with the controls hidden.
+fn jni_refresh_ime_height() {
+    with_activity(|env, class| {
+        env.call_static_method(class, "refreshImeHeight", "()V", &[])?;
+        Ok(())
+    });
+}
+
+/// The activity's class, held for the life of the process.
+static ACTIVITY_CLASS: std::sync::OnceLock<jni::objects::GlobalRef> = std::sync::OnceLock::new();
+
+/// Attaches this thread and runs `f` with the activity's class.
+fn with_activity(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JClass) -> jni::errors::Result<()>) {
+    let ctx = ndk_context::android_context();
+    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return };
+    // Permanent: the thread stays attached, and attaching on every call would only add work.
+    let Ok(mut env) = vm.attach_current_thread_permanently() else { return };
+    if ACTIVITY_CLASS.get().is_none() {
+        let loaded = (|| -> jni::errors::Result<jni::objects::GlobalRef> {
+            let context = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
+            let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
+            let name = env.new_string("com.klisee.reloaded.GameActivity")?;
+            let class = env
+                .call_method(
+                    &loader,
+                    "loadClass",
+                    "(Ljava/lang/String;)Ljava/lang/Class;",
+                    &[jni::objects::JValue::Object(&name)],
+                )?
+                .l()?;
+            env.new_global_ref(class)
+        })();
+        match loaded {
+            Ok(global) => {
+                let _ = ACTIVITY_CLASS.set(global);
+            },
+            Err(_) => return,
+        }
+    }
+    let Some(global) = ACTIVITY_CLASS.get() else { return };
+    let class = unsafe { jni::objects::JClass::from_raw(global.as_obj().as_raw()) };
+    let _ = f(&mut env, &class);
+}
+
+/// Copies everything the engine prints to logcat.
+fn pipe_std_to_logcat() {
+    let mut fds = [0 as libc::c_int; 2];
+    // SAFETY: `fds` is a valid array of two ints, which is what pipe() fills in.
+    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+        return
+    }
+    // SAFETY: both ends are valid fds. Duplicating the write end onto stdout and stderr is what puts
+    // the engine's prints in the pipe, and the spare write end is not needed after that.
+    unsafe {
+        libc::dup2(fds[1], libc::STDOUT_FILENO);
+        libc::dup2(fds[1], libc::STDERR_FILENO);
+        libc::close(fds[1]);
+    }
+    let read_fd = fds[0];
+    std::thread::spawn(move || {
+        use std::io::Read;
+        use std::os::unix::io::FromRawFd;
+        // SAFETY: read_fd is the pipe's read end and nothing else owns it.
+        let mut pipe = unsafe { std::fs::File::from_raw_fd(read_fd) };
+        let mut chunk = [0u8; 2048];
+        let mut pending: Vec<u8> = Vec::new();
+        let mut last = String::new();
+        let mut repeats = 0u32;
+        loop {
+            let Ok(read) = pipe.read(&mut chunk) else { break };
+            if read == 0 {
+                break
+            }
+            pending.extend_from_slice(&chunk[..read]);
+            while let Some(end) = pending.iter().position(|byte| *byte == b'\n') {
+                let line: Vec<u8> = pending.drain(..=end).collect();
+                let text = String::from_utf8_lossy(&line).trim_end().to_string();
+                if text.is_empty() {
+                    continue
+                }
+                if text == last {
+                    repeats += 1;
+                    continue
+                }
+                if repeats > 0 {
+                    android_log_line(&format!("  (repetido {} veces)", repeats));
+                    repeats = 0;
+                }
+                last = text.clone();
+                android_log_line(&text);
+            }
+        }
+    });
+}
+
+/// One line to logcat, under the tag the launcher's log screen shows.
+fn android_log_line(text: &str) {
+    const ANDROID_LOG_INFO: i32 = 4;
+    let text = format!("{}\0", text);
+    // SAFETY: both arguments are NUL-terminated C strings that outlive the call.
+    unsafe {
+        __android_log_write(
+            ANDROID_LOG_INFO,
+            b"gm8emulator\0".as_ptr() as *const libc::c_char,
+            text.as_ptr() as *const libc::c_char,
+        );
+    }
+}
+
+extern "C" {
+    /// From `liblog`, which this library already depends on.
+    fn __android_log_write(priority: i32, tag: *const libc::c_char, text: *const libc::c_char) -> i32;
+}
+
 /// Runs the emulator. `poll_events` must be driven from the thread `android_main` is called
 /// on, because android-activity asserts it, so the pump cannot live on a worker thread.
 /// The emulator itself runs on a worker thread instead.
 pub fn android_entry(app: AndroidApp) {
+    // First thing, so the opening lines of the session are captured as well.
+    pipe_std_to_logcat();
+    std::env::set_var("RUST_BACKTRACE", "1");
+
     // Install robust crash dump telemetry hook
     std::panic::set_hook(Box::new(|info| {
         let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
@@ -1122,7 +1451,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.4.0-EX\n\
+             Version: 0.7.0\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\
@@ -1180,15 +1509,22 @@ pub fn android_entry(app: AndroidApp) {
         crate::asset::sprite_cache::start_background_asset_streamer(&battle_dir);
 
         logf(&format!("arrancando {}", game_exe.display()));
-        crate::run_game(vec![
-            "gm8emulator".to_string(),
-            game_exe.to_string_lossy().into_owned(),
-        ]);
-        logf("el juego termino");
+        let outcome = std::panic::catch_unwind(|| {
+            crate::run_game(vec![
+                "gm8emulator".to_string(),
+                game_exe.to_string_lossy().into_owned(),
+            ])
+        });
+        match outcome {
+            Ok(code) => logf(&format!("el emulador termino (codigo {}); se cierra la actividad", code)),
+            Err(_) => logf("el emulador se cayo (panic); se cierra la actividad"),
+        }
         game_over_thread.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 
     let mut destroying = false;
+    let mut ime_check = Instant::now();
+    let mut text_entry_was_open = false;
     loop {
         if game_over.load(std::sync::atomic::Ordering::SeqCst) || destroying {
             break
@@ -1199,6 +1535,24 @@ pub fn android_entry(app: AndroidApp) {
             control_key_up(index);
         }
         flush_delayed_mouse();
+
+        // The keyboard follows the game's text dialog: it comes up by itself the moment the game asks
+        // for a name, and goes away when the dialog closes. Only the change is acted on, so closing
+        // it by hand while the dialog is open is respected instead of being undone on the next tick;
+        // touching the text brings it back (see `pointer_down`).
+        let text_entry = crate::touch_controls::text_entry_open();
+        if text_entry != text_entry_was_open {
+            text_entry_was_open = text_entry;
+            ime_set(text_entry);
+        }
+        // Belt and braces: while the keyboard is believed to be up, ask the activity for its height
+        // again about once a second. A callback that never arrived would otherwise leave the game
+        // pushed up top and the controls hidden, with no way for the player to get them back.
+        if crate::touch_controls::ime_inset() > 0 && ime_check.elapsed() >= Duration::from_secs(1) {
+            ime_check = Instant::now();
+            jni_refresh_ime_height();
+        }
+
         game_app.poll_events(Some(Duration::from_millis(8)), |event| match event {
             PollEvent::Main(main_event) => match main_event {
                 // Init/Resume/Start all mean the surface is (re)available, which is also what

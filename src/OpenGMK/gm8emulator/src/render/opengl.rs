@@ -238,12 +238,13 @@ pub struct RendererImpl {
 #[derive(Clone, Copy)]
 struct SkinSlot {
     name: &'static str,
+    aspect: f32,
     uv: [f32; 4],
 }
 
 /// How many control images the overlay can carry. Everything a control needs is one slot.
 #[cfg(target_os = "android")]
-const MAX_SKIN_SLOTS: usize = 32;
+const MAX_SKIN_SLOTS: usize = 64;
 
 /// Side of each party sprite's square cell in the strip the overlay keeps for them.
 #[cfg(target_os = "android")]
@@ -273,6 +274,11 @@ impl Overlay {
     /// Where a control's artwork sits in the packed texture, if it has any.
     fn art(&self, name: &str) -> Option<[f32; 4]> {
         self.slots.iter().flatten().find(|slot| slot.name == name).map(|slot| slot.uv)
+    }
+
+    /// The shape of a control's artwork, so it can be drawn as it was painted.
+    fn art_aspect(&self, name: &str) -> Option<f32> {
+        self.slots.iter().flatten().find(|slot| slot.name == name).map(|slot| slot.aspect)
     }
 }
 
@@ -1042,6 +1048,7 @@ fn load_skin(gl: &gl::Gl) -> (GLuint, [Option<SkinSlot>; MAX_SKIN_SLOTS]) {
         if index < MAX_SKIN_SLOTS {
             slots[index] = Some(SkinSlot {
                 name,
+                aspect: img.width() as f32 / img.height().max(1) as f32,
                 uv: [
                     x as f32 / width as f32,
                     0.0,
@@ -1051,6 +1058,12 @@ fn load_skin(gl: &gl::Gl) -> (GLuint, [Option<SkinSlot>; MAX_SKIN_SLOTS]) {
             });
         }
         x += img.width();
+    }
+    // Tell the overlay the shape each picture was painted in, so its touch area follows the drawn
+    // rectangle instead of the small circle the control's key is defined with: a wide label like the
+    // character picker's is then tappable across its whole width.
+    for slot in slots.iter().flatten() {
+        crate::touch_controls::set_art_aspect(slot.name, slot.aspect);
     }
     unsafe {
         let mut texture = 0;
@@ -1560,13 +1573,18 @@ impl RendererImpl {
                 ink = [1.0, 1.0, 1.0, 1.0];
             }
             if let Some(uv) = overlay.art(c.name) {
-                // A control with its own artwork is drawn as that sprite, sized to the control.
+                // A control with its own artwork is drawn as that sprite, sized by its height: every
+                // button comes out exactly as tall as a square one (the X), whatever shape it was
+                // painted in, and a wide label simply reaches further sideways instead of being
+                // squashed down to fit inside the control.
                 let (cx, cy, half) = match touch_controls::window_shape(i) {
                     touch_controls::Shape::Circle { cx, cy, r } => (cx * ww, cy * wh, r * ww),
                     touch_controls::Shape::Rect { cx, cy, w, h } => (cx * ww, cy * wh, (w * ww + h * wh) / 4.0),
                 };
+                let aspect = overlay.art_aspect(c.name).unwrap_or(1.0);
+                let (half_w, half_h) = (half * aspect, half);
                 let alpha = if pressed { 0.75 * opacity } else { opacity };
-                push_sprite_alpha(&mut sprites, ww, wh, cx - half, cy - half, cx + half, cy + half, uv[0], uv[1], uv[2], uv[3], alpha);
+                push_sprite_alpha(&mut sprites, ww, wh, cx - half_w, cy - half_h, cx + half_w, cy + half_h, uv[0], uv[1], uv[2], uv[3], alpha);
                 continue;
             }
             match touch_controls::window_shape(i) {
@@ -3814,41 +3832,14 @@ impl RendererTrait for RendererImpl {
             let (window_width_u, window_height_u) = (window_width, window_height);
             let (window_width, window_height) = (window_width as i32, window_height as i32);
 
-            // Scaling
-            let (w_x, w_y, w_w, w_h) = match scaling {
-                Scaling::Fixed(scale) => {
-                    let w = (f64::from(fb_width) * scale) as i32;
-                    let h = (f64::from(fb_height) * scale) as i32;
-                    ((window_width - w) / 2, (window_height - h) / 2, w, h)
-                },
-                Scaling::Aspect(_) => {
-                    if fb_width > 0 && fb_height > 0 {
-                        let fixed_width = window_height * fb_width / fb_height;
-                        if fixed_width < window_width {
-                            // window is too wide
-                            ((window_width - fixed_width) / 2, 0, fixed_width, window_height)
-                        } else {
-                            // window is too tall
-                            let fixed_height = window_width * fb_height / fb_width;
-                            (0, (window_height - fixed_height) / 2, window_width, fixed_height)
-                        }
-                    } else {
-                        // can never be too careful
-                        (0, 0, fb_width, fb_height)
-                    }
-                },
-                Scaling::Full => (0, 0, window_width, window_height),
-                Scaling::PixelPerfect => {
-                    if fb_width > 0 && fb_height > 0 {
-                        let scale = ((window_width / fb_width).min(window_height / fb_height)).max(1);
-                        let w = fb_width * scale;
-                        let h = fb_height * scale;
-                        ((window_width - w) / 2, (window_height - h) / 2, w, h)
-                    } else {
-                        (0, 0, fb_width, fb_height)
-                    }
-                },
-            };
+            // Where the game image lands, shared with the input mapping and the touch controls.
+            let (w_x, w_y, w_w, w_h) = crate::render::display_rect(
+                window_width_u,
+                window_height_u,
+                fb_width as u32,
+                fb_height as u32,
+                scaling,
+            );
 
             // Where the game image lands on screen, so the controls that belong over it (the dialogue
             // button) can be placed relative to the game instead of the window.
@@ -3892,15 +3883,20 @@ impl RendererTrait for RendererImpl {
             debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
             debug_assert_eq!(self.gl.GetError(), 0);
+            // `display_rect` gives a rectangle in window coordinates, top-left origin (the same one
+            // the touches use). GL's origin is the bottom-left, so the vertical position is flipped
+            // here. For a full-height or centred rectangle the two agree, so only the keyboard inset
+            // - which anchors the game to the top - actually needs the flip.
+            let blit_y = window_height - w_y - w_h;
             self.gl.BlitFramebuffer(
                 0,
                 fb_height,
                 fb_width,
                 0,
                 w_x,
-                w_y,
+                blit_y,
                 w_x + w_w,
-                w_y + w_h,
+                blit_y + w_h,
                 gl::COLOR_BUFFER_BIT,
                 if cfg!(target_os = "android") {
                     gl::NEAREST

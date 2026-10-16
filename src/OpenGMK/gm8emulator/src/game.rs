@@ -1934,6 +1934,56 @@ impl Game {
         crate::touch_controls::set_dialogue(self.dialogue_open());
         crate::touch_controls::set_box_open(self.inside_box());
         crate::touch_controls::set_party(self.party_species());
+        crate::touch_controls::set_text_entry(self.text_entry_open());
+        crate::touch_controls::set_picker_boxes(self.picker_boxes());
+        crate::touch_controls::set_modal_open(self.modal_system() > 0);
+        crate::touch_controls::set_modal_id(self.modal_system());
+    }
+
+    #[cfg(target_os = "android")]
+    fn text_entry_open(&self) -> bool {
+        self.modal_system() == 7754
+    }
+
+    #[cfg(target_os = "android")]
+    fn represent_if_ime_moved(&mut self) {
+        static LAST_INSET: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let inset = crate::touch_controls::text_entry_inset();
+        if LAST_INSET.swap(inset, std::sync::atomic::Ordering::Relaxed) == inset {
+            return
+        }
+        if self.play_type != PlayType::Record {
+            let (width, height) = self.window_inner_size;
+            self.renderer.present(width, height, self.scaling);
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    fn picker_boxes(&self) -> Vec<(f32, f32, f32, f32)> {
+        let sprites = crate::touch_controls::character_sprites();
+        let (window_w, window_h) = self.window_inner_size;
+        let Some(view) = self.room.views.first() else { return Vec::new() };
+        if window_w == 0 || window_h == 0 {
+            return Vec::new()
+        }
+        let to_window = |x: f64, y: f64| {
+            let game_x = (x - f64::from(view.source_x)).round() as i32;
+            let game_y = (y - f64::from(view.source_y)).round() as i32;
+            let (wx, wy) = self.game_to_window(game_x, game_y);
+            (wx as f32 / window_w as f32, wy as f32 / window_h as f32)
+        };
+        let boxes: Vec<(f32, f32, f32, f32)> = sprites
+            .iter()
+            .map(|&(x1, y1, x2, y2)| {
+                let (left, top) = to_window(x1, y1);
+                let (right, bottom) = to_window(x2, y2);
+                (left, top, right, bottom)
+            })
+            .filter(|&(left, top, right, bottom)| {
+                (right - left) <= 0.8 && (bottom - top) <= 0.8 && (bottom - top) > 0.0
+            })
+            .collect();
+        boxes
     }
 
     /// Each party slot's stored species value (0 = empty) straight from `global.pkmn1[0..5]`.
@@ -2267,6 +2317,14 @@ impl Game {
         crate::touch_controls::tick_autofire();
 
         self.input.mouse_step();
+        // What the system keyboard typed becomes events in the same queue the window is about to
+        // drain, so the game sees it exactly as if it came from a hardware keyboard.
+        #[cfg(target_os = "android")]
+        crate::android_main::ime_pump();
+        // The keyboard coming or going moves the picture, and the game does not redraw on its own
+        // while it waits inside a text dialog, so the frame already drawn is presented again.
+        #[cfg(target_os = "android")]
+        self.represent_if_ime_moved();
         self.window.poll_events();
         // Apply releases a previous poll deferred, then snapshot the held state so a press and
         // its release landing in the SAME poll still leaves the button "held" for this poll
@@ -2279,7 +2337,21 @@ impl Game {
             PlayType::Normal => {
                 for event in self.window.events().into_iter().copied() {
                     match event {
-                        Event::KeyboardDown(key) => self.input.button_press(input::ramen2vk(key), true),
+                        Event::KeyboardDown(key) => {
+                            let vk = input::ramen2vk(key);
+                            self.input.button_press(vk, true);
+                            // Game Maker's `keyboard_string` drops its last character on backspace.
+                            // The game's text dialog relies on that instead of handling the key
+                            // itself, so the edit has to happen here.
+                            if vk == input::Button::Backspace as u8 {
+                                let source = self.keyboard_string.as_ref();
+                                // A character is appended as its UTF-8 bytes, so a multi-byte one
+                                // has to leave in one piece: cut at the last leading byte.
+                                let cut = source.iter().rposition(|b| b & 0xC0 != 0x80).unwrap_or(0);
+                                let shortened = gml::String::from(&source[..cut]);
+                                self.keyboard_string = shortened;
+                            }
+                        },
                         Event::KeyboardUp(key) => {
                             let vk = input::ramen2vk(key);
                             if was_held(vk) {

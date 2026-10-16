@@ -2,6 +2,7 @@
 
 pub mod atlas;
 pub mod opengl;
+pub mod vulkan;
 
 use crate::types::Colour;
 use atlas::{AtlasRect, AtlasRef};
@@ -20,6 +21,69 @@ pub enum Scaling {
     Full,
     /// Integer-only pixel-perfect scaling for maximum sharpness on high-res displays.
     PixelPerfect,
+}
+
+/// Where the game image lands in the window: the rectangle the renderer blits into, and the one the
+/// input mapping has to invert. It lives in one place so the picture and the touches cannot drift
+/// apart. On Android, while the system keyboard is up the picture slides up - the way Android itself
+/// pans a window with a focused text field - just far enough to keep the text the game is editing
+/// above the keyboard.
+pub fn display_rect(
+    window_width: u32,
+    window_height: u32,
+    fb_width: u32,
+    fb_height: u32,
+    scaling: Scaling,
+) -> (i32, i32, i32, i32) {
+    let (window_width, window_height) = (window_width as i32, window_height as i32);
+    let (fb_width, fb_height) = (fb_width as i32, fb_height as i32);
+    let (x, y, w, h) = window_rect(window_width, window_height, fb_width, fb_height, scaling);
+    let inset = crate::touch_controls::text_entry_inset() as i32;
+    if inset <= 0 || window_height <= 0 || h <= 0 {
+        return (x, y, w, h)
+    }
+    const TEXT_BOTTOM: f64 = 0.42;
+    const COMFORT: f64 = 0.06;
+    let usable = (window_height - inset).max(1);
+    let text_bottom = y + (f64::from(h) * TEXT_BOTTOM).round() as i32;
+    let wanted = text_bottom - usable + (f64::from(window_height) * COMFORT).round() as i32;
+    let limit = (h - usable).min(text_bottom).max(0);
+    let pan = wanted.clamp(0, limit);
+    (x, y - pan, w, h)
+}
+
+fn window_rect(window_width: i32, window_height: i32, fb_width: i32, fb_height: i32, scaling: Scaling) -> (i32, i32, i32, i32) {
+    match scaling {
+        Scaling::Fixed(scale) => {
+            let w = (f64::from(fb_width) * scale) as i32;
+            let h = (f64::from(fb_height) * scale) as i32;
+            ((window_width - w) / 2, (window_height - h) / 2, w, h)
+        },
+        Scaling::Aspect(_) => {
+            if fb_width > 0 && fb_height > 0 {
+                let fixed_width = window_height * fb_width / fb_height;
+                if fixed_width < window_width {
+                    ((window_width - fixed_width) / 2, 0, fixed_width, window_height)
+                } else {
+                    let fixed_height = window_width * fb_height / fb_width;
+                    (0, (window_height - fixed_height) / 2, window_width, fixed_height)
+                }
+            } else {
+                (0, 0, fb_width, fb_height)
+            }
+        },
+        Scaling::Full => (0, 0, window_width, window_height),
+        Scaling::PixelPerfect => {
+            if fb_width > 0 && fb_height > 0 {
+                let scale = ((window_width / fb_width).min(window_height / fb_height)).max(1);
+                let w = fb_width * scale;
+                let h = fb_height * scale;
+                ((window_width - w) / 2, (window_height - h) / 2, w, h)
+            } else {
+                (0, 0, fb_width, fb_height)
+            }
+        },
+    }
 }
 
 /// The video mode the launcher pinned through the environment, if any.
@@ -580,6 +644,22 @@ impl Default for RendererOptions {
 
 impl Renderer {
     pub fn new(backend: (), connection: &Connection, options: &RendererOptions, window: &Window, clear_colour: Colour) -> Result<Self, String> {
+        let vulkan_requested = crate::touch_controls::is_vulkan_backend()
+            || std::env::var("OPENGMK_BACKEND").map(|v| v.eq_ignore_ascii_case("vulkan")).unwrap_or(false);
+
+        if vulkan_requested {
+            eprintln!("[render] Solicitado backend Vulkan. Inicializando motor nativo...");
+            match vulkan::VulkanRenderer::new(options, connection, window, clear_colour) {
+                Ok(vk) => {
+                    eprintln!("[render] ¡Backend Vulkan inicializado correctamente!");
+                    return Ok(Self(Box::new(vk)));
+                },
+                Err(e) => {
+                    eprintln!("[render] ADVERTENCIA: No se pudo iniciar Vulkan ({}). Fallback automático a OpenGL ES.", e);
+                }
+            }
+        }
+
         Ok(Self(Box::new(match backend {
             () => opengl::RendererImpl::new(options, connection, window, clear_colour)?,
         })))
@@ -647,7 +727,34 @@ impl Renderer {
         colour: i32,
         alpha: f64,
     ) {
+        #[cfg(target_os = "android")]
+        self.note_character_sprite(texture, x, y, xscale, yscale);
         self.0.draw_sprite(texture, x, y, xscale, yscale, angle, colour, alpha)
+    }
+
+    #[cfg(target_os = "android")]
+    fn note_character_sprite(&self, texture: AtlasRef, x: f64, y: f64, xscale: f64, yscale: f64) {
+        let Some(rect) = self.0.get_rect(texture) else { return };
+        let (w, h) = (f64::from(rect.w) * xscale, f64::from(rect.h) * yscale);
+        let (left, top) = (x - f64::from(rect.origin_x) * w, y - f64::from(rect.origin_y) * h);
+        self.note_character_box(left.min(left + w), top.min(top + h), left.max(left + w), top.max(top + h));
+    }
+
+    #[cfg(target_os = "android")]
+    fn note_character_box(&self, x1: f64, y1: f64, x2: f64, y2: f64) {
+        let (picture_width, picture_height) = self.0.stored_size();
+        let on_picture = x1 >= 0.0
+            && y1 >= 0.0
+            && x2 <= f64::from(picture_width)
+            && y2 <= f64::from(picture_height);
+        let (w, h) = ((x2 - x1).abs(), (y2 - y1).abs());
+        let character_sized = on_picture
+            && h >= f64::from(picture_height) / 4.0
+            && w <= f64::from(picture_width) * 0.5
+            && h <= f64::from(picture_height) * 0.5;
+        if character_sized {
+            crate::touch_controls::note_sprite(x1, y1, x2, y2);
+        }
     }
 
     pub fn draw_sprite_colour(
@@ -664,6 +771,8 @@ impl Renderer {
         col4: i32,
         alpha: f64,
     ) {
+        #[cfg(target_os = "android")]
+        self.note_character_sprite(tex, x, y, xs, ys);
         self.0.draw_sprite_colour(tex, x, y, xs, ys, ang, col1, col2, col3, col4, alpha)
     }
 
@@ -686,6 +795,8 @@ impl Renderer {
         alpha: f64,
         use_origin: bool,
     ) {
+        #[cfg(target_os = "android")]
+        self.note_character_sprite(texture, x, y, xscale, yscale);
         self.0.draw_sprite_general(
             texture, part_x, part_y, part_w, part_h, x, y, xscale, yscale, angle, col1, col2, col3, col4, alpha,
             use_origin,

@@ -45,6 +45,17 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.DirectionsRun
+import androidx.compose.material.icons.filled.Backpack
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Alarm
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
@@ -117,6 +128,17 @@ fun SettingsScreen(
     var sfxVolume by remember { mutableStateOf(prefs.sfxVolume) }
     var autofireEnabled by remember { mutableStateOf(prefs.autofireEnabled) }
     var dynamicDpad by remember { mutableStateOf(prefs.dynamicDpad) }
+    var berryTracker by remember { mutableStateOf(prefs.berryTracker) }
+    var eggHatchTimer by remember { mutableStateOf(prefs.eggHatchTimer) }
+    var keyItemsRadial by remember { mutableStateOf(prefs.keyItemsRadial) }
+    var autoRun by remember { mutableStateOf(prefs.autoRun) }
+    var dialogTapAdvance by remember { mutableStateOf(prefs.dialogTapAdvance) }
+    var repelReminder by remember { mutableStateOf(prefs.repelReminder) }
+    var shinyBeacon by remember { mutableStateOf(prefs.shinyBeacon) }
+    var puzzlePause by remember { mutableStateOf(prefs.puzzlePause) }
+    var fishingHaptic by remember { mutableStateOf(prefs.fishingHaptic) }
+    var quickSave by remember { mutableStateOf(prefs.quickSave) }
+    var saveReminder by remember { mutableStateOf(prefs.saveReminder) }
     var checking by remember { mutableStateOf(false) }
 
     // Snapshots state
@@ -548,6 +570,152 @@ fun SettingsScreen(
                     onCheckedChange = {
                         dynamicDpad = it
                         prefs.dynamicDpad = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Juego (Comodidad Externa y Opcional)") {
+                SwitchRow(
+                    icon = Icons.Filled.Spa,
+                    title = "Reloj de Cosecha de Bayas (10 min)",
+                    subtitle = "Aviso HUD al acumular 10 minutos de juego activo cuando las bayas se regeneran",
+                    checked = berryTracker,
+                    items = 11,
+                    index = 0,
+                    onCheckedChange = {
+                        berryTracker = it
+                        prefs.berryTracker = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.DirectionsBike,
+                    title = "Cronómetro de Movimiento para Huevos",
+                    subtitle = "Mide los segundos acumulados pedaleando o corriendo para estimar el avance de eclosión",
+                    checked = eggHatchTimer,
+                    items = 11,
+                    index = 1,
+                    onCheckedChange = {
+                        eggHatchTimer = it
+                        prefs.eggHatchTimer = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "Alerta Visual de Variocolor (Shiny Beacon)",
+                    subtitle = "Destello perimetral dorado en la pantalla al aparecer un Pokémon variocolor en combate",
+                    checked = shinyBeacon,
+                    items = 11,
+                    index = 2,
+                    onCheckedChange = {
+                        shinyBeacon = it
+                        prefs.shinyBeacon = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.TouchApp,
+                    title = "Avance de Diálogos por Toque",
+                    subtitle = "Toca la mitad inferior de la pantalla para pasar textos cómodamente como en una novela visual",
+                    checked = dialogTapAdvance,
+                    items = 11,
+                    index = 3,
+                    onCheckedChange = {
+                        dialogTapAdvance = it
+                        prefs.dialogTapAdvance = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.DirectionsRun,
+                    title = "Modo Auto-Run / Correr Permanente",
+                    subtitle = "Mantiene virtualmente presionado el botón de carrera para evitar la fatiga del pulgar",
+                    checked = autoRun,
+                    items = 11,
+                    index = 4,
+                    onCheckedChange = {
+                        autoRun = it
+                        prefs.autoRun = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Backpack,
+                    title = "Recordatorio de Repelente Agotado",
+                    subtitle = "Muestra un atajo directo de 1 toque para reaplicar repelente al disiparse su efecto",
+                    checked = repelReminder,
+                    items = 11,
+                    index = 5,
+                    onCheckedChange = {
+                        repelReminder = it
+                        prefs.repelReminder = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Star,
+                    title = "Rueda Radial para Objetos Clave",
+                    subtitle = "Atajos rápidos en la rueda radial para Bici, Cañas y Zahorí sin abrir la mochila",
+                    checked = keyItemsRadial,
+                    items = 11,
+                    index = 6,
+                    onCheckedChange = {
+                        keyItemsRadial = it
+                        prefs.keyItemsRadial = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.HourglassEmpty,
+                    title = "Pausa de Encuentros en Salas de Puzles",
+                    subtitle = "Permite silenciar temporalmente los encuentros salvajes mientras se resuelven puzles",
+                    checked = puzzlePause,
+                    items = 11,
+                    index = 7,
+                    onCheckedChange = {
+                        puzzlePause = it
+                        prefs.puzzlePause = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Vibration,
+                    title = "Asistente Háptico de Picada de Pesca",
+                    subtitle = "Pulso de vibración en el teléfono en el instante exacto en que aparece el signo de exclamación al pescar",
+                    checked = fishingHaptic,
+                    items = 11,
+                    index = 8,
+                    onCheckedChange = {
+                        fishingHaptic = it
+                        prefs.fishingHaptic = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Bookmark,
+                    title = "Guardado Rápido Externo en 1 Toque",
+                    subtitle = "Atajo flotante o en rueda radial para volcar una copia de seguridad instantánea del estado",
+                    checked = quickSave,
+                    items = 11,
+                    index = 9,
+                    onCheckedChange = {
+                        quickSave = it
+                        prefs.quickSave = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Alarm,
+                    title = "Recordatorio Preventivo de Guardado",
+                    subtitle = "Aviso periódico configurable para recordar guardar la partida antes de batallas importantes",
+                    checked = saveReminder,
+                    items = 11,
+                    index = 10,
+                    onCheckedChange = {
+                        saveReminder = it
+                        prefs.saveReminder = it
                         prefs.writeVideo(context.filesDir)
                     },
                 )

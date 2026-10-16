@@ -232,6 +232,86 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("dynamicDpad", value).apply()
         }
 
+    // ------------------------------------------------------------------------------------------
+    // Ajustes -> Juego (Comodidad Externa y Opcional)
+
+    /** Reloj de Cosecha de Bayas: aviso al completar 10 minutos de juego activo */
+    var berryTracker: Boolean
+        get() = prefs.getBoolean("berryTracker", false)
+        set(value) {
+            prefs.edit().putBoolean("berryTracker", value).apply()
+        }
+
+    /** Cronómetro de Movimiento para Huevos: mide segundos pedaleando o corriendo */
+    var eggHatchTimer: Boolean
+        get() = prefs.getBoolean("eggHatchTimer", false)
+        set(value) {
+            prefs.edit().putBoolean("eggHatchTimer", value).apply()
+        }
+
+    /** Rueda radial de 4 ranuras para objetos clave favoritos */
+    var keyItemsRadial: Boolean
+        get() = prefs.getBoolean("keyItemsRadial", false)
+        set(value) {
+            prefs.edit().putBoolean("keyItemsRadial", value).apply()
+        }
+
+    /** Modo Auto-Run / Correr Permanente */
+    var autoRun: Boolean
+        get() = prefs.getBoolean("autoRun", false)
+        set(value) {
+            prefs.edit().putBoolean("autoRun", value).apply()
+        }
+
+    /** Avance de Diálogos por Toque en Pantalla */
+    var dialogTapAdvance: Boolean
+        get() = prefs.getBoolean("dialogTapAdvance", false)
+        set(value) {
+            prefs.edit().putBoolean("dialogTapAdvance", value).apply()
+        }
+
+    /** Auto-Recordatorio de Repelente agotado */
+    var repelReminder: Boolean
+        get() = prefs.getBoolean("repelReminder", false)
+        set(value) {
+            prefs.edit().putBoolean("repelReminder", value).apply()
+        }
+
+    /** Alerta Visual Perimetral de Pokémon Variocolor (Shiny Beacon) */
+    var shinyBeacon: Boolean
+        get() = prefs.getBoolean("shinyBeacon", false)
+        set(value) {
+            prefs.edit().putBoolean("shinyBeacon", value).apply()
+        }
+
+    /** Pausa temporal de encuentros salvajes en salas de puzles */
+    var puzzlePause: Boolean
+        get() = prefs.getBoolean("puzzlePause", false)
+        set(value) {
+            prefs.edit().putBoolean("puzzlePause", value).apply()
+        }
+
+    /** Asistente Háptico de Picada de Pesca (vibración en el teléfono) */
+    var fishingHaptic: Boolean
+        get() = prefs.getBoolean("fishingHaptic", false)
+        set(value) {
+            prefs.edit().putBoolean("fishingHaptic", value).apply()
+        }
+
+    /** Guardado Rápido Externo en 1 Toque (Quick Save / Quick Load) */
+    var quickSave: Boolean
+        get() = prefs.getBoolean("quickSave", false)
+        set(value) {
+            prefs.edit().putBoolean("quickSave", value).apply()
+        }
+
+    /** Recordatorio Periódico de Guardado Preventivo */
+    var saveReminder: Boolean
+        get() = prefs.getBoolean("saveReminder", false)
+        set(value) {
+            prefs.edit().putBoolean("saveReminder", value).apply()
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
     fun writeVideo(filesDir: File) = writeVideoFile(
         filesDir = filesDir,
@@ -248,6 +328,17 @@ class Preferences(context: Context) {
         bgmVolume = bgmVolume,
         sfxVolume = sfxVolume,
         autofire = autofireEnabled,
-        dynamicDpad = dynamicDpad
+        dynamicDpad = dynamicDpad,
+        berryTracker = berryTracker,
+        eggHatchTimer = eggHatchTimer,
+        keyItemsRadial = keyItemsRadial,
+        autoRun = autoRun,
+        dialogTapAdvance = dialogTapAdvance,
+        repelReminder = repelReminder,
+        shinyBeacon = shinyBeacon,
+        puzzlePause = puzzlePause,
+        fishingHaptic = fishingHaptic,
+        quickSave = quickSave,
+        saveReminder = saveReminder
     )
 }

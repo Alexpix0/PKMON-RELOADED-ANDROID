@@ -1,8 +1,10 @@
+pub mod asm;
 pub mod compiler;
 pub mod context;
 pub mod datetime;
 pub mod ds;
 pub mod file;
+pub mod jit;
 pub mod kernel;
 pub mod mappings;
 pub mod network;
