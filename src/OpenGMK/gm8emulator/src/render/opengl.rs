@@ -3899,7 +3899,16 @@ impl RendererTrait for RendererImpl {
                 blit_y + w_h,
                 gl::COLOR_BUFFER_BIT,
                 if cfg!(target_os = "android") {
-                    gl::NEAREST
+                    let filter_mode = std::env::var("OPENGMK_FILTER").unwrap_or_default();
+                    if filter_mode == "sharp" || filter_mode == "linear" || filter_mode == "fxaa" {
+                        gl::LINEAR
+                    } else if filter_mode == "nearest" {
+                        gl::NEAREST
+                    } else if self.next_render_state.interpolate_pixels.into() {
+                        gl::LINEAR
+                    } else {
+                        gl::NEAREST
+                    }
                 } else if self.next_render_state.interpolate_pixels.into() {
                     gl::LINEAR
                 } else {

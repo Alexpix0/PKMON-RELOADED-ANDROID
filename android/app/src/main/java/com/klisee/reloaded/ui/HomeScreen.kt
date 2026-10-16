@@ -135,7 +135,7 @@ fun HomeScreen(
                             shape = MaterialTheme.shapes.small,
                         ) {
                             Text(
-                                text = "0.4.0 EX",
+                                text = "${com.klisee.reloaded.BuildConfig.VERSION_NAME} EX",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),

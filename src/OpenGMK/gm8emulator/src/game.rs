@@ -70,6 +70,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+static FRAME_LAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum GameClock {
     StartupEpoch(#[serde(with = "game_epoch_serde")] Instant),
@@ -2240,7 +2242,7 @@ impl Game {
                     (c % 3) != 0
                 },
                 "auto" => {
-                    if crate::touch_controls::fast_forward_active() {
+                    if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
                         let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         (c % 2) == 1
                     } else {
@@ -2262,6 +2264,12 @@ impl Game {
             static PARTICLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let c = PARTICLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if (c % 3) == 0 {
+                self.particles.auto_update_systems(&mut self.rand);
+            }
+        } else if weather_opt == "optimized" {
+            static OPT_PARTICLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let c = OPT_PARTICLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if (c % 2) == 0 {
                 self.particles.auto_update_systems(&mut self.rand);
             }
         } else {
@@ -2581,9 +2589,11 @@ impl Game {
             self.frame_counter += 1;
 
             if let (Some(time), true) = (duration.checked_sub(diff), self.frame_limiter) {
+                FRAME_LAGGING.store(false, std::sync::atomic::Ordering::Relaxed);
                 gml::datetime::sleep(time);
                 time_now += duration;
             } else {
+                FRAME_LAGGING.store(true, std::sync::atomic::Ordering::Relaxed);
                 time_now = Instant::now();
             }
         }
