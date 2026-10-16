@@ -132,9 +132,14 @@ extern "C" fn data_callback(
     }
     READ_POS.store(r.wrapping_add(to_read), Ordering::Release);
 
-    // On-screen mute button toggle support
-    if crate::touch_controls::is_audio_muted() {
+    // Volume control and on-screen mute button toggle support
+    let vol = crate::touch_controls::bgm_volume();
+    if vol <= 0.0 || crate::touch_controls::is_audio_muted() {
         buffer.fill(0.0);
+    } else if (vol - 1.0).abs() > 0.001 {
+        for s in buffer.iter_mut() {
+            *s *= vol;
+        }
     }
 
     // Cheap after the first time: the check is skipped once something has been heard.

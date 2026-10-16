@@ -320,6 +320,15 @@ fn stick_update(x: f32, y: f32) {
         }
     }
     STICK_STATE.store(state, std::sync::atomic::Ordering::Relaxed);
+    if crate::touch_controls::auto_run_enabled() {
+        let is_moving = state != 0;
+        static STICK_AUTO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if is_moving && !STICK_AUTO_RUN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::E, text: None });
+        } else if !is_moving && STICK_AUTO_RUN.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
+        }
+    }
     if state != before {
         // Only when the direction actually changes, so holding a direction does not flood logcat.
         eprintln!("[pad] ejes x={:.2} y={:.2} -> direcciones {}", x, y, state);
@@ -341,6 +350,9 @@ fn stick_release() {
         if state & (1 << index) != 0 {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key: *key });
         }
+    }
+    if crate::touch_controls::auto_run_enabled() {
+        android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
     }
 }
 
@@ -442,7 +454,11 @@ fn control_key_down(index: usize) {
         Key::RightArrow => crate::touch_controls::picker_step(1),
         _ => {},
     }
-    jni_vibrate(18);
+    if crate::touch_controls::fishing_haptic_enabled() && (name == "v" || name == "c" || name == "z") {
+        jni_vibrate(28);
+    } else {
+        jni_vibrate(18);
+    }
     android::push_input(ramen::platform::android::InputEvent::KeyDown {
         key,
         text: None,
@@ -487,9 +503,11 @@ fn perform_quick_snapshot() {
             let path = entry.path();
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if ext.eq_ignore_ascii_case("sav") || ext.eq_ignore_ascii_case("nfo") {
-                    let dest = snapshot_dir.join(format!("quick_return_{}", path.file_name().unwrap().to_string_lossy()));
-                    if std::fs::copy(&path, &dest).is_ok() {
-                        copied += 1;
+                    if let Some(file_name) = path.file_name() {
+                        let dest = snapshot_dir.join(format!("quick_return_{}", file_name.to_string_lossy()));
+                        if std::fs::copy(&path, &dest).is_ok() {
+                            copied += 1;
+                        }
                     }
                 }
             }
@@ -509,7 +527,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     // game as a click, or reaching for the on-screen buttons would act on whatever is under them.
     if crate::touch_controls::pad_active() {
         crate::touch_controls::set_pad_active(false);
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
+        SWALLOWED_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::collections::HashSet::new).insert(id);
         return
     }
     let (w, h) = android::window_size();
@@ -531,7 +549,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 let on = crate::touch_controls::toggle_fast_forward();
                 let mult = crate::touch_controls::fast_forward_multiplier();
                 if on {
-                    crate::touch_controls::show_toast(Box::leak(format!("TURBO: {:.1}x ACTIVADO", mult).into_boxed_str()));
+                    crate::touch_controls::show_toast(&format!("TURBO: {:.1}x ACTIVADO", mult));
                 } else {
                     crate::touch_controls::show_toast("TURBO: DESACTIVADO");
                 }
@@ -575,8 +593,8 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                         control_key_up(i);
                     }
                     joystick_release();
-                    *DRAGGED_ITEM.lock().unwrap() = None;
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                    *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 }
                 jni_vibrate(30);
             },
@@ -598,9 +616,9 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                     let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
                     crate::touch_controls::save_layout_file(&layout_path);
                     crate::touch_controls::save_controls_config(PACKAGE_DIR);
-                    *DRAGGED_ITEM.lock().unwrap() = None;
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
-                    SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
+                    *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    SWALLOWED_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::collections::HashSet::new).insert(id);
                     crate::touch_controls::set_edit_mode(false);
                     for i in 0..crate::touch_controls::CONTROLS.len() {
                         control_key_up(i);
@@ -612,9 +630,9 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 },
                 crate::touch_controls::EditToolbarAction::Cancel => {
                     crate::touch_controls::restore_layout_snapshot();
-                    *DRAGGED_ITEM.lock().unwrap() = None;
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
-                    SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
+                    *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    SWALLOWED_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::collections::HashSet::new).insert(id);
                     crate::touch_controls::set_edit_mode(false);
                     for i in 0..crate::touch_controls::CONTROLS.len() {
                         control_key_up(i);
@@ -638,7 +656,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 },
                 crate::touch_controls::EditToolbarAction::ScaleSet(pct) => {
                     crate::touch_controls::set_scale(pct);
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = Some((SliderTarget::Scale, id));
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = Some((SliderTarget::Scale, id));
                     jni_vibrate(8);
                     return;
                 },
@@ -656,7 +674,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 },
                 crate::touch_controls::EditToolbarAction::OpacitySet(pct) => {
                     crate::touch_controls::set_opacity(pct);
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = Some((SliderTarget::Opacity, id));
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = Some((SliderTarget::Opacity, id));
                     jni_vibrate(8);
                     return;
                 },
@@ -666,12 +684,12 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             let hit = crate::touch_controls::hit(x / wf, y / hf, wf, hf);
             if let Some(index) = hit {
                 let name = crate::touch_controls::CONTROLS[index].name;
-                *DRAGGED_ITEM.lock().unwrap() = Some((name.to_string(), x / wf, y / hf));
+                *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = Some((name.to_string(), x / wf, y / hf));
                 jni_vibrate(12);
                 return;
             }
             if crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
-                *DRAGGED_ITEM.lock().unwrap() = Some((crate::touch_controls::JOYSTICK_NAME.to_string(), x / wf, y / hf));
+                *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = Some((crate::touch_controls::JOYSTICK_NAME.to_string(), x / wf, y / hf));
                 jni_vibrate(12);
                 return;
             }
@@ -686,13 +704,13 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             let ny = y / hf;
             if nx < 0.45 && ny > 0.20 && ny < 0.95 {
                 crate::touch_controls::set_dynamic_anchor(Some((nx, ny)));
-                *JOYSTICK_PTR.lock().unwrap() = Some(id);
+                *JOYSTICK_PTR.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
                 joystick_update(x, y);
                 jni_vibrate(12);
                 return;
             }
         } else if crate::touch_controls::joystick_hit(x / wf, y / hf, wf, hf) {
-            *JOYSTICK_PTR.lock().unwrap() = Some(id);
+            *JOYSTICK_PTR.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
             joystick_update(x, y);
             return;
         }
@@ -703,7 +721,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             if name == crate::touch_controls::PARTY_NAME {
                 // Holding it opens the party wheel instead of pressing a key of its own.
                 crate::touch_controls::set_wheel_open(true);
-                *WHEEL_PTR.lock().unwrap() = Some(id);
+                *WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
                 jni_vibrate(18);
             } else if name == crate::touch_controls::RADIAL_MENU_NAME {
                 let open = crate::touch_controls::toggle_radial_menu();
@@ -712,7 +730,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 let on = crate::touch_controls::toggle_fast_forward();
                 let mult = crate::touch_controls::fast_forward_multiplier();
                 if on {
-                    crate::touch_controls::show_toast(Box::leak(format!("TURBO: {:.1}x ACTIVADO", mult).into_boxed_str()));
+                    crate::touch_controls::show_toast(&format!("TURBO: {:.1}x ACTIVADO", mult));
                 } else {
                     crate::touch_controls::show_toast("TURBO: DESACTIVADO");
                 }
@@ -727,8 +745,8 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                         control_key_up(i);
                     }
                     joystick_release();
-                    *DRAGGED_ITEM.lock().unwrap() = None;
-                    *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                    *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 }
                 jni_vibrate(if edit { 30 } else { 15 });
             } else if name == crate::touch_controls::GUIDE_NAME {
@@ -739,12 +757,20 @@ fn pointer_down(id: i32, x: f32, y: f32) {
                 jni_vibrate(if open { 25 } else { 12 });
             } else {
                 control_key_down(index);
-                POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, index);
+                POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, index);
             }
         },
         None => {
             if crate::touch_controls::text_entry_open() {
                 ime_set(true);
+            }
+            if crate::touch_controls::dialog_tap_advance_enabled()
+                && (crate::touch_controls::current_context() & crate::touch_controls::DIALOG != 0
+                    || crate::touch_controls::dialogue_open())
+            {
+                jni_vibrate(12);
+                tap_key(Key::Z);
+                return;
             }
             mouse_down(id, x, y)
         },
@@ -753,19 +779,19 @@ fn pointer_down(id: i32, x: f32, y: f32) {
 
 fn pointer_up(id: i32, x: f32, y: f32) {
     if crate::touch_controls::is_edit_mode() {
-        if let Some((_, drag_id)) = *EDIT_SLIDER_DRAG.lock().unwrap() {
+        if let Some((_, drag_id)) = *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) {
             if drag_id == id {
-                *EDIT_SLIDER_DRAG.lock().unwrap() = None;
+                *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
             }
         }
-        if DRAGGED_ITEM.lock().unwrap().take().is_some() {
+        if DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()).take().is_some() {
             let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
             crate::touch_controls::save_layout_file(&layout_path);
             jni_vibrate(15);
         }
         return;
     }
-    if WHEEL_PTR.lock().unwrap().take() == Some(id) {
+    if WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner()).take() == Some(id) {
         // The key only goes out now, on the release, and only if a slot was picked. Letting go over
         // the middle of the wheel, or letting go without moving at all, sends nothing.
         let selected = crate::touch_controls::wheel_selected();
@@ -776,14 +802,14 @@ fn pointer_up(id: i32, x: f32, y: f32) {
         crate::touch_controls::set_wheel_open(false);
         return
     }
-    if SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).remove(&id) {
+    if SWALLOWED_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::collections::HashSet::new).remove(&id) {
         return
     }
     if is_joystick_pointer(id) {
         joystick_release();
         return
     }
-    let index = POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).remove(&id);
+    let index = POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).remove(&id);
     match index {
         Some(index) => control_key_up(index),
         None => mouse_up(id, x, y),
@@ -807,25 +833,25 @@ static DELAYED_DOWNS: Mutex<Vec<(Instant, f32, f32)>> = Mutex::new(Vec::new());
 
 fn mouse_down(id: i32, x: f32, y: f32) {
     let deliver_at = Instant::now() + HOVER_DELAY;
-    let mut downs = MOUSE_DOWN_AT.lock().unwrap();
+    let mut downs = MOUSE_DOWN_AT.lock().unwrap_or_else(|e| e.into_inner());
     downs.retain(|(pointer, _)| *pointer != id);
     downs.push((id, deliver_at));
     drop(downs);
     // The move goes out now; the press follows on a later poll so the hover is in place first.
     android::push_input(ramen::platform::android::InputEvent::PointerMoved { x, y });
-    DELAYED_DOWNS.lock().unwrap().push((deliver_at, x, y));
+    DELAYED_DOWNS.lock().unwrap_or_else(|e| e.into_inner()).push((deliver_at, x, y));
 }
 
 fn mouse_up(id: i32, x: f32, y: f32) {
     let pressed_at = {
-        let mut downs = MOUSE_DOWN_AT.lock().unwrap();
+        let mut downs = MOUSE_DOWN_AT.lock().unwrap_or_else(|e| e.into_inner());
         let at = downs.iter().find(|(pointer, _)| *pointer == id).map(|(_, at)| *at);
         downs.retain(|(pointer, _)| *pointer != id);
         at
     };
     let deadline = pressed_at.map(|at| at + MIN_TAP).unwrap_or_else(Instant::now);
     if deadline > Instant::now() {
-        DELAYED_UPS.lock().unwrap().push((deadline, x, y));
+        DELAYED_UPS.lock().unwrap_or_else(|e| e.into_inner()).push((deadline, x, y));
     } else {
         android::push_input(ramen::platform::android::InputEvent::PointerUp { x, y, button: 0 });
     }
@@ -835,7 +861,7 @@ fn mouse_up(id: i32, x: f32, y: f32) {
 fn flush_delayed_mouse() {
     let now = Instant::now();
     let mut downs: Vec<(f32, f32)> = Vec::new();
-    DELAYED_DOWNS.lock().unwrap().retain(|(at, x, y)| {
+    DELAYED_DOWNS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(at, x, y)| {
         if *at <= now {
             downs.push((*x, *y));
             false
@@ -848,7 +874,7 @@ fn flush_delayed_mouse() {
     }
 
     let mut ups: Vec<(f32, f32)> = Vec::new();
-    DELAYED_UPS.lock().unwrap().retain(|(at, x, y)| {
+    DELAYED_UPS.lock().unwrap_or_else(|e| e.into_inner()).retain(|(at, x, y)| {
         if *at <= now {
             ups.push((*x, *y));
             false
@@ -862,7 +888,7 @@ fn flush_delayed_mouse() {
 }
 
 fn pointer_is_control(id: i32) -> bool {
-    POINTER_CONTROLS.lock().unwrap().as_ref().map(|m| m.contains_key(&id)).unwrap_or(false)
+    POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|m| m.contains_key(&id)).unwrap_or(false)
 }
 
 // --- Movement joystick -------------------------------------------------------------------
@@ -875,7 +901,7 @@ static JOYSTICK_STATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU
 const JOYSTICK_KEYS: [Key; 4] = [Key::UpArrow, Key::DownArrow, Key::LeftArrow, Key::RightArrow];
 
 fn is_joystick_pointer(id: i32) -> bool {
-    *JOYSTICK_PTR.lock().unwrap() == Some(id)
+    *JOYSTICK_PTR.lock().unwrap_or_else(|e| e.into_inner()) == Some(id)
 }
 
 /// Presses/releases the arrow keys so they match where the stick is being pushed.
@@ -901,6 +927,15 @@ fn joystick_update(x: f32, y: f32) {
         }
     }
     JOYSTICK_STATE.store(state, Ordering::Relaxed);
+    if crate::touch_controls::auto_run_enabled() {
+        let is_moving = state != 0;
+        static JOY_AUTO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if is_moving && !JOY_AUTO_RUN.swap(true, Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::E, text: None });
+        } else if !is_moving && JOY_AUTO_RUN.swap(false, Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
+        }
+    }
 
     // Clamp the drawn knob to the ring.
     let (jcx, jcy) = crate::touch_controls::joystick_center();
@@ -923,9 +958,12 @@ fn joystick_release() {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key: JOYSTICK_KEYS[i] });
         }
     }
+    if crate::touch_controls::auto_run_enabled() {
+        android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
+    }
     crate::touch_controls::set_joystick_offset(0.0, 0.0);
     crate::touch_controls::set_dynamic_anchor(None);
-    *JOYSTICK_PTR.lock().unwrap() = None;
+    *JOYSTICK_PTR.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
 /// The pointer the current action refers to, if it is valid.
@@ -1004,7 +1042,7 @@ fn translate(event: &InputEvent) {
                         let (w, h) = android::window_size();
                         let (wf, hf) = (w as f32, h as f32);
                         if wf > 0.0 && hf > 0.0 {
-                            let slider_drag = *EDIT_SLIDER_DRAG.lock().unwrap();
+                            let slider_drag = *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some((target, drag_id)) = slider_drag {
                                 for p in motion.pointers() {
                                     if p.pointer_id() == drag_id {
@@ -1029,7 +1067,7 @@ fn translate(event: &InputEvent) {
                                 return;
                             }
 
-                            let mut item_lock = DRAGGED_ITEM.lock().unwrap();
+                            let mut item_lock = DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some((name, last_x, last_y)) = item_lock.clone() {
                                 for p in motion.pointers() {
                                     let cur_x = p.x() / wf;
@@ -1045,7 +1083,7 @@ fn translate(event: &InputEvent) {
                         }
                         return;
                     }
-                    let wheel_ptr = *WHEEL_PTR.lock().unwrap();
+                    let wheel_ptr = *WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner());
                     for p in motion.pointers() {
                         if wheel_ptr == Some(p.pointer_id()) {
                             let (w, h) = android::window_size();
@@ -1070,14 +1108,14 @@ fn translate(event: &InputEvent) {
                     }
                 },
                 MotionAction::Cancel => {
-                    if WHEEL_PTR.lock().unwrap().take().is_some() {
+                    if WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner()).take().is_some() {
                         crate::touch_controls::set_wheel_open(false);
                     }
                     joystick_release();
                     let ids: Vec<i32> =
-                        POINTER_CONTROLS.lock().unwrap().as_ref().map(|m| m.keys().copied().collect()).unwrap_or_default();
+                        POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|m| m.keys().copied().collect()).unwrap_or_default();
                     for id in ids {
-                        if let Some(index) = POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).remove(&id) {
+                        if let Some(index) = POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).remove(&id) {
                             control_key_up(index);
                         }
                     }

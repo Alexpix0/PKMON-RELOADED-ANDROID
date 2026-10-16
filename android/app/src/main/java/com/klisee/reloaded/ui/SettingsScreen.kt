@@ -737,8 +737,8 @@ fun SettingsScreen(
                 )
                 ChoiceRow(
                     icon = Icons.Filled.Speed,
-                    title = "Vulkan (Experimental - Pipeline Optimizado)",
-                    subtitle = "Texture Atlasing agresivo y llamadas de dibujo por lotes directas para máxima tasa de cuadros (FPS)",
+                    title = "Vulkan (Experimental / Auto-fallback a OpenGL ES)",
+                    subtitle = "Pipeline de bajo nivel en desarrollo; conmuta de forma segura e instantánea a OpenGL ES si el dispositivo lo requiere",
                     selected = graphicsBackend == "vulkan",
                     items = 2,
                     index = 1,

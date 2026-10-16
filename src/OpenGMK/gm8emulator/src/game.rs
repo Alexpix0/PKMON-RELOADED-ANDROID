@@ -2315,6 +2315,8 @@ impl Game {
     pub fn process_window_events(&mut self) {
         #[cfg(target_os = "android")]
         crate::touch_controls::tick_autofire();
+        #[cfg(target_os = "android")]
+        crate::touch_controls::tick_save_reminder();
 
         self.input.mouse_step();
         // What the system keyboard typed becomes events in the same queue the window is about to

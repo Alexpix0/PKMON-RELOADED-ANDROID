@@ -38,10 +38,10 @@ impl Sticky {
     fn report(&self, on: bool) -> bool {
         const GRACE: Duration = Duration::from_millis(150);
         if on {
-            *self.seen.lock().unwrap() = Some(Instant::now());
+            *self.seen.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
             return !self.flag.swap(true, Ordering::Relaxed)
         }
-        let recent = self.seen.lock().unwrap().map(|at| at.elapsed()).is_some_and(|ago| ago < GRACE);
+        let recent = self.seen.lock().unwrap_or_else(|e| e.into_inner()).map(|at| at.elapsed()).is_some_and(|ago| ago < GRACE);
         if recent {
             return false
         }
@@ -129,7 +129,7 @@ pub const ARROW_MARGIN: f32 = 0.045;
 
 pub const CONTROLS: &[Control] = &[
     // Trigger button for the Drastic-style Radial Quick-Menu (at the bottom center)
-    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.958, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
+    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
     // Number keys (first row along the top).
     Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: WORLD | SAFARI },
     Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: WORLD | SAFARI },
@@ -170,13 +170,13 @@ pub const CONTROLS: &[Control] = &[
 static CUSTOM_OFFSETS: Mutex<Option<HashMap<String, (f32, f32)>>> = Mutex::new(None);
 
 pub fn set_control_offset(name: &str, ox: f32, oy: f32) {
-    let mut lock = CUSTOM_OFFSETS.lock().unwrap();
+    let mut lock = CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner());
     let map = lock.get_or_insert_with(HashMap::new);
     map.insert(name.to_string(), (ox, oy));
 }
 
 pub fn control_offset(name: &str) -> (f32, f32) {
-    let lock = CUSTOM_OFFSETS.lock().unwrap();
+    let lock = CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(map) = lock.as_ref() {
         if let Some(&(ox, oy)) = map.get(name) {
             return (ox, oy);
@@ -197,7 +197,7 @@ pub fn is_button_hidden(name: &str) -> bool {
 }
 
 pub fn set_button_hidden(name: &str, hidden: bool) {
-    let mut lock = HIDDEN_BUTTONS.lock().unwrap();
+    let mut lock = HIDDEN_BUTTONS.lock().unwrap_or_else(|e| e.into_inner());
     let set = lock.get_or_insert_with(std::collections::HashSet::new);
     if hidden {
         set.insert(name.to_string());
@@ -227,14 +227,14 @@ pub fn load_layout_file(path: &Path) {
                 }
             }
         }
-        *CUSTOM_OFFSETS.lock().unwrap() = Some(map);
-        *HIDDEN_BUTTONS.lock().unwrap() = Some(hidden_set);
+        *CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner()) = Some(map);
+        *HIDDEN_BUTTONS.lock().unwrap_or_else(|e| e.into_inner()) = Some(hidden_set);
     }
 }
 
 pub fn save_layout_file(path: &Path) {
-    let lock = CUSTOM_OFFSETS.lock().unwrap();
-    let hidden_lock = HIDDEN_BUTTONS.lock().unwrap();
+    let lock = CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner());
+    let hidden_lock = HIDDEN_BUTTONS.lock().unwrap_or_else(|e| e.into_inner());
     let mut text = String::from("# Layout personalizado de controles Pokémon Reloaded Android\n");
     if let Some(hidden) = hidden_lock.as_ref() {
         for name in hidden {
@@ -343,13 +343,13 @@ pub fn set_autofire_enabled(enabled: bool) {
 }
 
 pub fn register_autofire(index: usize) {
-    let mut lock = AUTOFIRE_HELD.lock().unwrap();
+    let mut lock = AUTOFIRE_HELD.lock().unwrap_or_else(|e| e.into_inner());
     let set = lock.get_or_insert_with(std::collections::HashSet::new);
     set.insert(index);
 }
 
 pub fn unregister_autofire(index: usize) {
-    let mut lock = AUTOFIRE_HELD.lock().unwrap();
+    let mut lock = AUTOFIRE_HELD.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(set) = lock.as_mut() {
         set.remove(&index);
     }
@@ -361,7 +361,7 @@ pub fn tick_autofire() {
         return;
     }
     let buttons = {
-        let lock = AUTOFIRE_HELD.lock().unwrap();
+        let lock = AUTOFIRE_HELD.lock().unwrap_or_else(|e| e.into_inner());
         match lock.as_ref() {
             Some(set) if !set.is_empty() => set.iter().copied().collect::<Vec<_>>(),
             _ => return,
@@ -398,22 +398,22 @@ pub fn set_dynamic_dpad_enabled(enabled: bool) {
 }
 
 pub fn set_dynamic_anchor(pos: Option<(f32, f32)>) {
-    *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap() = pos;
+    *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = pos;
 }
 
 static EDIT_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static LAYOUT_SNAPSHOT: Mutex<Option<(HashMap<String, (f32, f32)>, u32, u32)>> = Mutex::new(None);
 
 pub fn snapshot_layout() {
-    let offsets = CUSTOM_OFFSETS.lock().unwrap().clone().unwrap_or_default();
+    let offsets = CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_default();
     let sc = SCALE.load(Ordering::Relaxed);
     let op = OPACITY.load(Ordering::Relaxed);
-    *LAYOUT_SNAPSHOT.lock().unwrap() = Some((offsets, sc, op));
+    *LAYOUT_SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner()) = Some((offsets, sc, op));
 }
 
 pub fn restore_layout_snapshot() {
-    if let Some((offsets, sc, op)) = LAYOUT_SNAPSHOT.lock().unwrap().take() {
-        *CUSTOM_OFFSETS.lock().unwrap() = Some(offsets);
+    if let Some((offsets, sc, op)) = LAYOUT_SNAPSHOT.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        *CUSTOM_OFFSETS.lock().unwrap_or_else(|e| e.into_inner()) = Some(offsets);
         SCALE.store(sc, Ordering::Relaxed);
         OPACITY.store(op, Ordering::Relaxed);
     }
@@ -543,11 +543,11 @@ pub fn set_picker_boxes(boxes: Vec<(f32, f32, f32, f32)>) {
     if boxes.is_empty() && !picker_boxes().is_empty() {
         return
     }
-    *PICKER_BOXES.lock().unwrap() = boxes;
+    *PICKER_BOXES.lock().unwrap_or_else(|e| e.into_inner()) = boxes;
 }
 
 pub fn picker_boxes() -> Vec<(f32, f32, f32, f32)> {
-    PICKER_BOXES.lock().unwrap().clone()
+    PICKER_BOXES.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 static MODAL_OPEN: Sticky = Sticky::new();
@@ -667,11 +667,11 @@ pub fn effective_shape(index: usize) -> Shape {
 static VIEWPORT: Mutex<(f32, f32, f32, f32)> = Mutex::new((0.0, 0.0, 1.0, 1.0));
 
 pub fn set_viewport(x: f32, y: f32, w: f32, h: f32) {
-    *VIEWPORT.lock().unwrap() = (x, y, w, h);
+    *VIEWPORT.lock().unwrap_or_else(|e| e.into_inner()) = (x, y, w, h);
 }
 
 pub fn viewport() -> (f32, f32, f32, f32) {
-    *VIEWPORT.lock().unwrap()
+    *VIEWPORT.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// A control's shape in window coordinates. Most controls are placed relative to the window (they
@@ -706,13 +706,13 @@ pub fn index_of(name: &str) -> Option<usize> {
 static ART_ASPECTS: Mutex<Vec<(&'static str, f32)>> = Mutex::new(Vec::new());
 
 pub fn set_art_aspect(name: &'static str, aspect: f32) {
-    let mut aspects = ART_ASPECTS.lock().unwrap();
+    let mut aspects = ART_ASPECTS.lock().unwrap_or_else(|e| e.into_inner());
     aspects.retain(|(known, _)| *known != name);
     aspects.push((name, aspect));
 }
 
 fn art_aspect(name: &str) -> Option<f32> {
-    ART_ASPECTS.lock().unwrap().iter().find(|(known, _)| *known == name).map(|(_, aspect)| *aspect)
+    ART_ASPECTS.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(known, _)| *known == name).map(|(_, aspect)| *aspect)
 }
 
 fn control_contains(index: usize, name: &str, nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
@@ -905,18 +905,24 @@ pub fn hit(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
         .position(|(index, control)| is_active(index) && control_contains(index, control.name, nx, ny, ww, wh))
 }
 
-static PRESSED: AtomicU32 = AtomicU32::new(0);
+static PRESSED: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_pressed(index: usize, pressed: bool) {
-    if pressed {
-        PRESSED.fetch_or(1 << index, Ordering::Relaxed);
-    } else {
-        PRESSED.fetch_and(!(1 << index), Ordering::Relaxed);
+    if index < 64 {
+        if pressed {
+            PRESSED.fetch_or(1u64 << index, Ordering::Relaxed);
+        } else {
+            PRESSED.fetch_and(!(1u64 << index), Ordering::Relaxed);
+        }
     }
 }
 
 pub fn is_pressed(index: usize) -> bool {
-    PRESSED.load(Ordering::Relaxed) & (1 << index) != 0
+    if index < 64 {
+        PRESSED.load(Ordering::Relaxed) & (1u64 << index) != 0
+    } else {
+        false
+    }
 }
 
 /// Controls that are pressed but no longer valid, so the caller can release their keys instead of
@@ -944,7 +950,7 @@ pub fn joystick_dead() -> f32 {
 
 /// The joystick's centre, in normalised coordinates.
 pub fn joystick_center() -> (f32, f32) {
-    if let Some((ax, ay)) = *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap() {
+    if let Some((ax, ay)) = *DYNAMIC_JOYSTICK_ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) {
         return (ax, ay);
     }
     let (ox, oy) = control_offset(JOYSTICK_NAME);
@@ -997,11 +1003,11 @@ pub fn stick_dirs(dx: f32, dy: f32) -> [bool; 4] {
 static JOYSTICK_OFFSET: Mutex<(f32, f32)> = Mutex::new((0.0, 0.0));
 
 pub fn set_joystick_offset(dx: f32, dy: f32) {
-    *JOYSTICK_OFFSET.lock().unwrap() = (dx, dy);
+    *JOYSTICK_OFFSET.lock().unwrap_or_else(|e| e.into_inner()) = (dx, dy);
 }
 
 pub fn joystick_offset() -> (f32, f32) {
-    *JOYSTICK_OFFSET.lock().unwrap()
+    *JOYSTICK_OFFSET.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 static OPACITY: AtomicU32 = AtomicU32::new(70);
@@ -1226,8 +1232,8 @@ static PARTY_SPECIES: Mutex<Option<[i32; PICKER_SLOTS]>> = Mutex::new(None);
 static PARTY_VERSION: AtomicU64 = AtomicU64::new(0);
 
 pub fn set_party(species: [i32; PICKER_SLOTS]) {
-    let changed = PARTY_SPECIES.lock().unwrap().as_ref() != Some(&species);
-    *PARTY_SPECIES.lock().unwrap() = Some(species);
+    let changed = PARTY_SPECIES.lock().unwrap_or_else(|e| e.into_inner()).as_ref() != Some(&species);
+    *PARTY_SPECIES.lock().unwrap_or_else(|e| e.into_inner()) = Some(species);
     if changed {
         // The renderer watches this to know when the GIFs under the slots changed.
         PARTY_VERSION.fetch_add(1, Ordering::Relaxed);
@@ -1235,7 +1241,7 @@ pub fn set_party(species: [i32; PICKER_SLOTS]) {
 }
 
 pub fn party_species() -> [i32; PICKER_SLOTS] {
-    PARTY_SPECIES.lock().unwrap().unwrap_or([0; PICKER_SLOTS])
+    PARTY_SPECIES.lock().unwrap_or_else(|e| e.into_inner()).unwrap_or([0; PICKER_SLOTS])
 }
 
 pub fn party_version() -> u64 {
@@ -1549,4 +1555,25 @@ pub fn set_quick_save(enabled: bool) { QUICK_SAVE.store(enabled, Ordering::Relax
 
 pub fn save_reminder_enabled() -> bool { SAVE_REMINDER.load(Ordering::Relaxed) }
 pub fn set_save_reminder(enabled: bool) { SAVE_REMINDER.store(enabled, Ordering::Relaxed); }
+
+static LAST_SAVE_REMINDER: Mutex<Option<Instant>> = Mutex::new(None);
+
+pub fn tick_save_reminder() {
+    if !save_reminder_enabled() {
+        return;
+    }
+    let mut lock = LAST_SAVE_REMINDER.lock().unwrap_or_else(|e| e.into_inner());
+    let now = Instant::now();
+    match *lock {
+        None => *lock = Some(now),
+        Some(last) => {
+            // Cada 25 minutos de juego activo sin guardar muestra aviso en el HUD
+            if last.elapsed() >= Duration::from_secs(25 * 60) {
+                *lock = Some(now);
+                show_toast("RECORDATORIO: ¡No olvides guardar tu partida!");
+            }
+        }
+    }
+}
+
 
