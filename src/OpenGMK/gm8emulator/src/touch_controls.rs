@@ -1171,15 +1171,34 @@ pub fn movement_dirs(nx: f32, ny: f32, ww: f32, wh: f32) -> [bool; 4] {
     stick_dirs(dx, dy)
 }
 
+static DYNAMIC_JOYSTICK_DEAD: AtomicU32 = AtomicU32::new(35);
+
+pub fn set_joystick_dead(pct: u32) {
+    DYNAMIC_JOYSTICK_DEAD.store(pct.clamp(10, 60), Ordering::Relaxed);
+}
+
+pub fn joystick_dead() -> f32 {
+    DYNAMIC_JOYSTICK_DEAD.load(Ordering::Relaxed) as f32 / 100.0
+}
+
+pub fn joystick_hit(nx: f32, ny: f32, ww: f32, wh: f32) -> bool {
+    movement_hit(nx, ny, ww, wh)
+}
+
+pub fn joystick_dirs(nx: f32, ny: f32, ww: f32, wh: f32) -> [bool; 4] {
+    movement_dirs(nx, ny, ww, wh)
+}
+
 /// Which directions a stick pushed by (dx, dy) is asking for: up, down, left, right. Both are in
 /// the range -1..1, and this is the same dead zone the on-screen joystick uses - a physical pad's
 /// stick goes through here too, so both feel identical.
 pub fn stick_dirs(dx: f32, dy: f32) -> [bool; 4] {
+    let dead = joystick_dead();
     [
-        dy < -JOYSTICK_DEAD,
-        dy > JOYSTICK_DEAD,
-        dx < -JOYSTICK_DEAD,
-        dx > JOYSTICK_DEAD,
+        dy < -dead,
+        dy > dead,
+        dx < -dead,
+        dx > dead,
     ]
 }
 
