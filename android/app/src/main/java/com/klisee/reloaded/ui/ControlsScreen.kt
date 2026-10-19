@@ -90,8 +90,8 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     val context = LocalContext.current
     var bindings by remember { mutableStateOf(prefs.controlBindings) }
     var stick by remember { mutableStateOf(prefs.stickEnabled) }
-    var opacity by remember { mutableStateOf(prefs.touchOpacity.toFloat()) }
-    var scale by remember { mutableStateOf(prefs.touchScale.toFloat()) }
+    var opacity by remember { mutableStateOf((prefs.touchOpacity * 100f).toInt().toFloat()) }
+    var scale by remember { mutableStateOf((prefs.touchScale * 100f).toInt().toFloat()) }
     var marginX by remember { mutableStateOf(prefs.touchMarginX.toFloat()) }
     var marginY by remember { mutableStateOf(prefs.touchMarginY.toFloat()) }
     var haptics by remember { mutableStateOf(prefs.touchHaptics) }
@@ -124,8 +124,8 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
         showNumKeys = newShowNumKeys
         prefs.controlBindings = newBindings
         prefs.stickEnabled = newStick
-        prefs.touchOpacity = newOpacity
-        prefs.touchScale = newScale
+        prefs.touchOpacity = newOpacity / 100f
+        prefs.touchScale = newScale / 100f
         prefs.touchMarginX = newMarginX
         prefs.touchMarginY = newMarginY
         prefs.touchHaptics = newHaptics

@@ -85,6 +85,36 @@ class Preferences(context: Context) {
             prefs.edit().putFloat("touchScale", value).apply()
         }
 
+    var touchMarginX: Int
+        get() = prefs.getInt("touchMarginX", 0)
+        set(value) {
+            prefs.edit().putInt("touchMarginX", value).apply()
+        }
+
+    var touchMarginY: Int
+        get() = prefs.getInt("touchMarginY", 0)
+        set(value) {
+            prefs.edit().putInt("touchMarginY", value).apply()
+        }
+
+    var touchHaptics: Boolean
+        get() = prefs.getBoolean("touchHaptics", true)
+        set(value) {
+            prefs.edit().putBoolean("touchHaptics", value).apply()
+        }
+
+    var touchDeadzone: Int
+        get() = prefs.getInt("touchDeadzone", 35)
+        set(value) {
+            prefs.edit().putInt("touchDeadzone", value).apply()
+        }
+
+    var showNumKeys: Boolean
+        get() = prefs.getBoolean("showNumKeys", true)
+        set(value) {
+            prefs.edit().putBoolean("showNumKeys", value).apply()
+        }
+
     /** Where the player moved and resized each control, as `name=cx,cy,scale`. Empty means defaults. */
     var touchLayout: Map<String, Placement>
         get() = prefs.getStringSet("touchLayout", emptySet()).orEmpty().mapNotNull { entry ->
