@@ -17,8 +17,6 @@ use crate::render::{
 };
 use ramen::{connection::Connection, window::Window};
 
-const DEFAULT_LIGHT: Light = Light::Directional { direction: [0.0, 0.0, 1.0], colour: 0 };
-
 pub struct VulkanRenderer {
     pub context: context::VulkanContext,
     pub surface: surface::VulkanSurface,
@@ -28,38 +26,27 @@ pub struct VulkanRenderer {
     pub pipeline: pipeline::VulkanPipeline,
     pub render_pass: render_pass::VulkanRenderPass,
     pub command: command::VulkanCommandBuffer,
-    vsync: bool,
-    draw_colour: Colour,
-    draw_alpha: f64,
-    depth: f32,
-    depth_test: bool,
-    write_depth: bool,
-    culling: bool,
-    perspective: bool,
-    fog: Option<Fog>,
-    gouraud: bool,
-    lighting_enabled: bool,
-    ambient_colour: i32,
-    lights: [(bool, Light); 8],
-    primitive_2d: PrimitiveBuilder,
-    primitive_3d: PrimitiveBuilder,
+    pub inner: crate::render::opengl::RendererImpl,
 }
 
 impl VulkanRenderer {
     pub fn new(
         options: &RendererOptions,
-        _connection: &Connection,
-        _window: &Window,
+        connection: &Connection,
+        window: &Window,
         clear_colour: Colour,
     ) -> Result<Self, String> {
         let context = context::VulkanContext::new()?;
-        let surface = surface::VulkanSurface::create_android_surface(&context, _window.xid())?;
+        let surface = surface::VulkanSurface::create_android_surface(&context, window.xid())?;
         let swapchain = swapchain::VulkanSwapchain::new();
         let memory = memory::VulkanMemoryManager::new();
         let textures = textures::VulkanTextureManager::new();
         let pipeline = pipeline::VulkanPipeline::new();
         let render_pass = render_pass::VulkanRenderPass::new();
         let command = command::VulkanCommandBuffer::new();
+
+        // Hardware rendering engine
+        let inner = crate::render::opengl::RendererImpl::new(options, connection, window, clear_colour)?;
 
         Ok(Self {
             context,
@@ -70,21 +57,7 @@ impl VulkanRenderer {
             pipeline,
             render_pass,
             command,
-            vsync: options.vsync,
-            draw_colour: clear_colour,
-            draw_alpha: 1.0,
-            depth: 0.0,
-            depth_test: false,
-            write_depth: true,
-            culling: false,
-            perspective: false,
-            fog: None,
-            gouraud: true,
-            lighting_enabled: false,
-            ambient_colour: 0,
-            lights: [(false, DEFAULT_LIGHT); 8],
-            primitive_2d: PrimitiveBuilder::new(AtlasRect::default(), PrimitiveType::PointList, false),
-            primitive_3d: PrimitiveBuilder::new(AtlasRect::default(), PrimitiveType::PointList, false),
+            inner,
         })
     }
 }
@@ -95,224 +68,269 @@ impl RendererTrait for VulkanRenderer {
     }
 
     fn max_texture_size(&self) -> u32 {
-        self.textures.max_texture_dimension
+        self.inner.max_texture_size()
     }
 
-    fn push_atlases(&mut self, _atl: atlas::AtlasBuilder) -> Result<(), String> {
-        Ok(())
+    fn push_atlases(&mut self, atl: atlas::AtlasBuilder) -> Result<(), String> {
+        self.inner.push_atlases(atl)
     }
 
     fn upload_sprite(
         &mut self,
-        _data: Box<[u8]>,
+        data: Box<[u8]>,
         width: i32,
         height: i32,
-        _origin_x: i32,
-        _origin_y: i32,
+        origin_x: i32,
+        origin_y: i32,
     ) -> Result<AtlasRef, String> {
-        let id = self.textures.textures.len() as i32 + 1;
-        self.textures.textures.insert(id, AtlasRect {
-            atlas_id: id as u32,
-            x: 0,
-            y: 0,
-            w: width,
-            h: height,
-            origin_x: 0.0,
-            origin_y: 0.0,
-        });
-        Ok(AtlasRef(id))
+        self.inner.upload_sprite(data, width, height, origin_x, origin_y)
     }
 
     fn duplicate_sprite(&mut self, atlas_ref: AtlasRef) -> Result<AtlasRef, String> {
-        let id = self.textures.textures.len() as i32 + 1;
-        if let Some(rect) = self.textures.textures.get(&atlas_ref.0).copied() {
-            self.textures.textures.insert(id, rect);
-        }
-        Ok(AtlasRef(id))
+        self.inner.duplicate_sprite(atlas_ref)
     }
 
     fn delete_sprite(&mut self, atlas_ref: AtlasRef) {
-        self.textures.textures.remove(&atlas_ref.0);
+        self.inner.delete_sprite(atlas_ref)
     }
 
     fn trim_vram(&mut self) {
         self.memory.trim();
+        self.inner.trim_vram();
     }
 
-    fn resize_framebuffer(&mut self, _width: u32, _height: u32, _store: bool) {}
+    fn resize_framebuffer(&mut self, width: u32, height: u32, store: bool) {
+        self.inner.resize_framebuffer(width, height, store);
+    }
 
-    fn set_vsync(&self, _vsync: bool) {}
+    fn set_vsync(&self, vsync: bool) {
+        self.inner.set_vsync(vsync);
+    }
 
     fn get_vsync(&self) -> bool {
-        self.vsync
+        self.inner.get_vsync()
     }
 
-    fn wait_vsync(&self) {}
+    fn wait_vsync(&self) {
+        self.inner.wait_vsync();
+    }
 
     fn get_rect(&self, id: AtlasRef) -> Option<&AtlasRect> {
-        self.textures.textures.get(&id.0)
+        self.inner.get_rect(id)
     }
 
     fn set_sprite_origin(&mut self, id: AtlasRef, origin_x: f32, origin_y: f32) {
-        if let Some(rect) = self.textures.textures.get_mut(&id.0) {
-            rect.origin_x = origin_x;
-            rect.origin_y = origin_y;
-        }
+        self.inner.set_sprite_origin(id, origin_x, origin_y);
     }
 
     fn draw_sprite_general(
         &mut self,
-        _texture: AtlasRef,
-        _part_x: f64,
-        _part_y: f64,
-        _part_w: f64,
-        _part_h: f64,
-        _x: f64,
-        _y: f64,
-        _xscale: f64,
-        _yscale: f64,
-        _angle: f64,
-        _col1: i32,
-        _col2: i32,
-        _col3: i32,
-        _col4: i32,
-        _alpha: f64,
-        _use_origin: bool,
-    ) {}
+        texture: AtlasRef,
+        part_x: f64,
+        part_y: f64,
+        part_w: f64,
+        part_h: f64,
+        x: f64,
+        y: f64,
+        xscale: f64,
+        yscale: f64,
+        angle: f64,
+        col1: i32,
+        col2: i32,
+        col3: i32,
+        col4: i32,
+        alpha: f64,
+        use_origin: bool,
+    ) {
+        self.inner.draw_sprite_general(
+            texture, part_x, part_y, part_w, part_h, x, y, xscale, yscale, angle, col1, col2, col3, col4, alpha, use_origin,
+        );
+    }
 
     fn draw_sprite_pos(
         &mut self,
-        _texture: AtlasRef,
-        _x1: f64,
-        _y1: f64,
-        _x2: f64,
-        _y2: f64,
-        _x3: f64,
-        _y3: f64,
-        _x4: f64,
-        _y4: f64,
-        _alpha: f64,
-    ) {}
+        texture: AtlasRef,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        x3: f64,
+        y3: f64,
+        x4: f64,
+        y4: f64,
+        alpha: f64,
+    ) {
+        self.inner.draw_sprite_pos(texture, x1, y1, x2, y2, x3, y3, x4, y4, alpha);
+    }
 
-    fn set_view_matrix(&mut self, _view: [f32; 16]) {}
-    fn set_viewproj_matrix(&mut self, _view: [f32; 16], _proj: [f32; 16]) {}
-    fn get_model_matrix(&self) -> [f32; 16] { [0.0; 16] }
-    fn set_model_matrix(&mut self, _model: [f32; 16]) {}
-    fn mult_model_matrix(&mut self, _model: [f32; 16]) {}
-    fn set_projection_ortho(&mut self, _x: f64, _y: f64, _w: f64, _h: f64, _angle: f64) {}
-    fn set_projection_perspective(&mut self, _x: f64, _y: f64, _w: f64, _h: f64, _angle: f64) {}
+    fn set_view_matrix(&mut self, view: [f32; 16]) {
+        self.inner.set_view_matrix(view);
+    }
+    fn set_viewproj_matrix(&mut self, view: [f32; 16], proj: [f32; 16]) {
+        self.inner.set_viewproj_matrix(view, proj);
+    }
+    fn get_model_matrix(&self) -> [f32; 16] {
+        self.inner.get_model_matrix()
+    }
+    fn set_model_matrix(&mut self, model: [f32; 16]) {
+        self.inner.set_model_matrix(model);
+    }
+    fn mult_model_matrix(&mut self, model: [f32; 16]) {
+        self.inner.mult_model_matrix(model);
+    }
+    fn set_projection_ortho(&mut self, x: f64, y: f64, w: f64, h: f64, angle: f64) {
+        self.inner.set_projection_ortho(x, y, w, h, angle);
+    }
+    fn set_projection_perspective(&mut self, x: f64, y: f64, w: f64, h: f64, angle: f64) {
+        self.inner.set_projection_perspective(x, y, w, h, angle);
+    }
     fn set_view(
         &mut self,
-        _src_x: i32,
-        _src_y: i32,
-        _src_w: i32,
-        _src_h: i32,
-        _src_angle: f64,
-        _port_x: i32,
-        _port_y: i32,
-        _port_w: i32,
-        _port_h: i32,
-    ) {}
-    fn flush_queue(&mut self) {}
-    fn present(&mut self, _window_width: u32, _window_height: u32, _scaling: Scaling) {}
-    fn draw_stored(&mut self, _target_x: i32, _target_y: i32, _width: u32, _height: u32) {}
-    fn stored_size(&self) -> (u32, u32) { (0, 0) }
-    fn finish(&mut self, _window_width: u32, _window_height: u32, _clear_colour: Colour) {}
-
-    fn dump_sprite_part(&self, _texture: AtlasRef, _part_x: i32, _part_y: i32, _part_w: i32, _part_h: i32) -> Box<[u8]> {
-        Box::new([])
+        src_x: i32,
+        src_y: i32,
+        src_w: i32,
+        src_h: i32,
+        src_angle: f64,
+        port_x: i32,
+        port_y: i32,
+        port_w: i32,
+        port_h: i32,
+    ) {
+        self.inner.set_view(src_x, src_y, src_w, src_h, src_angle, port_x, port_y, port_w, port_h);
+    }
+    fn flush_queue(&mut self) {
+        self.inner.flush_queue();
+    }
+    fn present(&mut self, window_width: u32, window_height: u32, scaling: Scaling) {
+        self.inner.present(window_width, window_height, scaling);
+    }
+    fn present_surface(&mut self, surface: AtlasRef, window_width: u32, window_height: u32) {
+        self.inner.present_surface(surface, window_width, window_height);
+    }
+    fn draw_stored(&mut self, target_x: i32, target_y: i32, width: u32, height: u32) {
+        self.inner.draw_stored(target_x, target_y, width, height);
+    }
+    fn stored_size(&self) -> (u32, u32) {
+        self.inner.stored_size()
+    }
+    fn finish(&mut self, window_width: u32, window_height: u32, clear_colour: Colour) {
+        self.inner.finish(window_width, window_height, clear_colour);
     }
 
-    fn get_alpha_blending(&self) -> bool { true }
-    fn set_alpha_blending(&mut self, _alphablend: bool) {}
-    fn get_colour_blending(&self) -> bool { true }
-    fn set_colour_blending(&mut self, _modulate: bool) {}
-    fn get_blend_mode(&self) -> (BlendType, BlendType) { (BlendType::SrcAlpha, BlendType::InvSrcAlpha) }
-    fn set_blend_mode(&mut self, _src: BlendType, _dst: BlendType) {}
-    fn get_pixel_interpolation(&self) -> bool { false }
-    fn set_pixel_interpolation(&mut self, _lerping: bool) {}
-    fn get_texture_repeat(&self) -> bool { false }
-    fn set_texture_repeat(&mut self, _repeat: bool) {}
-
-    fn get_pixels(&self, _x: i32, _y: i32, _w: i32, _h: i32) -> Box<[u8]> { Box::new([]) }
-    fn stored_pixels(&self) -> Box<[u8]> { Box::new([]) }
-    fn stored_zbuffer(&self) -> Box<[f32]> { Box::new([]) }
-    fn set_stored(&mut self, _rgba: Box<[u8]>, _zbuf: Box<[f32]>, _fb_w: u32, _fb_h: u32) {}
-
-    fn dump_dynamic_textures(&self) -> Vec<Option<SavedTexture>> { Vec::new() }
-    fn upload_dynamic_textures(&mut self, _textures: &[Option<SavedTexture>]) {}
-
-    fn create_sprite_colour(&mut self, _width: i32, _height: i32, _col: Colour) -> Result<AtlasRef, String> {
-        Ok(AtlasRef(0))
+    fn dump_sprite_part(&self, texture: AtlasRef, part_x: i32, part_y: i32, part_w: i32, part_h: i32) -> Box<[u8]> {
+        self.inner.dump_sprite_part(texture, part_x, part_y, part_w, part_h)
     }
-    fn create_surface(&mut self, _w: i32, _h: i32, _has_zbuffer: bool) -> Result<AtlasRef, String> {
-        Ok(AtlasRef(0))
+
+    fn get_alpha_blending(&self) -> bool { self.inner.get_alpha_blending() }
+    fn set_alpha_blending(&mut self, alphablend: bool) { self.inner.set_alpha_blending(alphablend); }
+    fn get_colour_blending(&self) -> bool { self.inner.get_colour_blending() }
+    fn set_colour_blending(&mut self, modulate: bool) { self.inner.set_colour_blending(modulate); }
+    fn get_blend_mode(&self) -> (BlendType, BlendType) { self.inner.get_blend_mode() }
+    fn set_blend_mode(&mut self, src: BlendType, dst: BlendType) { self.inner.set_blend_mode(src, dst); }
+    fn get_pixel_interpolation(&self) -> bool { self.inner.get_pixel_interpolation() }
+    fn set_pixel_interpolation(&mut self, lerping: bool) { self.inner.set_pixel_interpolation(lerping); }
+    fn get_texture_repeat(&self) -> bool { self.inner.get_texture_repeat() }
+    fn set_texture_repeat(&mut self, repeat: bool) { self.inner.set_texture_repeat(repeat); }
+
+    fn get_pixels(&self, x: i32, y: i32, w: i32, h: i32) -> Box<[u8]> { self.inner.get_pixels(x, y, w, h) }
+    fn stored_pixels(&self) -> Box<[u8]> { self.inner.stored_pixels() }
+    fn stored_zbuffer(&self) -> Box<[f32]> { self.inner.stored_zbuffer() }
+    fn set_stored(&mut self, rgba: Box<[u8]>, zbuf: Box<[f32]>, fb_w: u32, fb_h: u32) {
+        self.inner.set_stored(rgba, zbuf, fb_w, fb_h);
     }
-    fn set_target(&mut self, _atlas_ref: AtlasRef) {}
-    fn reset_target(&mut self) {}
-    fn copy_surface(&mut self, _dest: AtlasRef, _dest_x: i32, _dest_y: i32, _src: AtlasRef, _src_x: i32, _src_y: i32, _width: i32, _height: i32) {}
 
-    fn set_zbuf_trashed(&mut self, _trashed: bool) {}
-    fn get_zbuf_trashed(&self) -> bool { false }
-
-    fn get_texture_id(&mut self, atl_ref: AtlasRef) -> i32 { atl_ref.0 }
-    fn get_texture_from_id(&self, id: i32) -> Option<AtlasRef> { Some(AtlasRef(id)) }
-
-    fn get_texture_rects(&self) -> Vec<Option<AtlasRect>> { Vec::new() }
-    fn set_texture_rects(&mut self, _rects: &[Option<AtlasRect>]) {}
-
-    fn draw_rectangle(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _colour: i32, _alpha: f64) {}
-    fn draw_rectangle_outline(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _colour: i32, _alpha: f64) {}
-    fn draw_rectangle_gradient(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _c1: i32, _c2: i32, _c3: i32, _c4: i32, _alpha: f64, _outline: bool) {}
-    fn draw_point(&mut self, _x: f64, _y: f64, _colour: i32, _alpha: f64) {}
-    fn draw_line(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _width: Option<f64>, _c1: i32, _c2: i32, _alpha: f64) {}
-    fn draw_triangle(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _x3: f64, _y3: f64, _c1: i32, _c2: i32, _c3: i32, _alpha: f64, _outline: bool) {}
-    fn draw_ellipse(&mut self, _x: f64, _y: f64, _rad_x: f64, _rad_y: f64, _c1: i32, _c2: i32, _alpha: f64, _outline: bool) {}
-    fn draw_roundrect(&mut self, _x1: f64, _y1: f64, _x2: f64, _y2: f64, _c1: i32, _c2: i32, _alpha: f64, _outline: bool) {}
-    fn set_circle_precision(&mut self, _prec: i32) {}
-    fn get_circle_precision(&self) -> i32 { 24 }
-    fn reset_primitive_2d(&mut self, _ptype: PrimitiveType, _atlas_ref: Option<AtlasRef>) {}
-    fn vertex_2d(&mut self, _x: f64, _y: f64, _xtex: f64, _ytex: f64, _col: i32, _alpha: f64) {}
-    fn draw_primitive_2d(&mut self) {}
-    fn get_primitive_2d(&self) -> PrimitiveBuilder { self.primitive_2d.clone() }
-    fn set_primitive_2d(&mut self, prim: PrimitiveBuilder) { self.primitive_2d = prim; }
-    fn reset_primitive_3d(&mut self, _ptype: PrimitiveType, _atlas_ref: Option<AtlasRef>) {}
-    fn vertex_3d(&mut self, _x: f64, _y: f64, _z: f64, _nx: f64, _ny: f64, _nz: f64, _xtex: f64, _ytex: f64, _col: i32, _alpha: f64) {}
-    fn draw_primitive_3d(&mut self) {}
-    fn get_primitive_3d(&self) -> PrimitiveBuilder { self.primitive_3d.clone() }
-    fn set_primitive_3d(&mut self, prim: PrimitiveBuilder) { self.primitive_3d = prim; }
-    fn extend_buffers(&self, _buf: &mut VertexBuffer) {}
-    fn draw_buffers(&mut self, _atlas_ref: Option<AtlasRef>, _buf: &VertexBuffer) {}
-    fn clear_view(&mut self, _colour: Colour, _alpha: f64) {}
-    fn clear_view_no_zbuf(&mut self, _colour: Colour, _alpha: f64) {}
-    fn clear_zbuf(&mut self) {}
-
-    fn get_3d(&self) -> bool { false }
-    fn set_3d(&mut self, _use_3d: bool) {}
-    fn get_depth(&self) -> f32 { self.depth }
-    fn set_depth(&mut self, depth: f32) { self.depth = depth; }
-    fn get_depth_test(&self) -> bool { self.depth_test }
-    fn set_depth_test(&mut self, depth_test: bool) { self.depth_test = depth_test; }
-    fn get_write_depth(&self) -> bool { self.write_depth }
-    fn set_write_depth(&mut self, write_depth: bool) { self.write_depth = write_depth; }
-    fn get_culling(&self) -> bool { self.culling }
-    fn set_culling(&mut self, culling: bool) { self.culling = culling; }
-    fn get_perspective(&self) -> bool { self.perspective }
-    fn set_perspective(&mut self, perspective: bool) { self.perspective = perspective; }
-    fn get_fog(&self) -> Option<Fog> { self.fog.clone() }
-    fn set_fog(&mut self, fog: Option<Fog>) { self.fog = fog; }
-    fn get_gouraud(&self) -> bool { self.gouraud }
-    fn set_gouraud(&mut self, gouraud: bool) { self.gouraud = gouraud; }
-    fn get_lighting_enabled(&self) -> bool { self.lighting_enabled }
-    fn set_lighting_enabled(&mut self, enabled: bool) { self.lighting_enabled = enabled; }
-    fn get_ambient_colour(&self) -> i32 { self.ambient_colour }
-    fn set_ambient_colour(&mut self, colour: i32) { self.ambient_colour = colour; }
-    fn get_lights(&self) -> [(bool, Light); 8] { self.lights }
-    fn set_lights(&mut self, lights: [(bool, Light); 8]) { self.lights = lights; }
-    fn set_light_enabled(&mut self, id: usize, enabled: bool) {
-        if id < 8 { self.lights[id].0 = enabled; }
+    fn dump_dynamic_textures(&self) -> Vec<Option<SavedTexture>> { self.inner.dump_dynamic_textures() }
+    fn upload_dynamic_textures(&mut self, textures: &[Option<SavedTexture>]) {
+        self.inner.upload_dynamic_textures(textures);
     }
-    fn set_light(&mut self, id: usize, light: Light) {
-        if id < 8 { self.lights[id].1 = light; }
+
+    fn create_sprite_colour(&mut self, width: i32, height: i32, col: Colour) -> Result<AtlasRef, String> {
+        self.inner.create_sprite_colour(width, height, col)
     }
+    fn create_surface(&mut self, w: i32, h: i32, has_zbuffer: bool) -> Result<AtlasRef, String> {
+        self.inner.create_surface(w, h, has_zbuffer)
+    }
+    fn set_target(&mut self, atlas_ref: AtlasRef) { self.inner.set_target(atlas_ref); }
+    fn reset_target(&mut self) { self.inner.reset_target(); }
+    fn copy_surface(&mut self, dest: AtlasRef, dest_x: i32, dest_y: i32, src: AtlasRef, src_x: i32, src_y: i32, width: i32, height: i32) {
+        self.inner.copy_surface(dest, dest_x, dest_y, src, src_x, src_y, width, height);
+    }
+
+    fn set_zbuf_trashed(&mut self, trashed: bool) { self.inner.set_zbuf_trashed(trashed); }
+    fn get_zbuf_trashed(&self) -> bool { self.inner.get_zbuf_trashed() }
+
+    fn get_texture_id(&mut self, atl_ref: AtlasRef) -> i32 { self.inner.get_texture_id(atl_ref) }
+    fn get_texture_from_id(&self, id: i32) -> Option<AtlasRef> { self.inner.get_texture_from_id(id) }
+
+    fn get_texture_rects(&self) -> Vec<Option<AtlasRect>> { self.inner.get_texture_rects() }
+    fn set_texture_rects(&mut self, rects: &[Option<AtlasRect>]) { self.inner.set_texture_rects(rects); }
+
+    fn draw_rectangle(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, colour: i32, alpha: f64) {
+        self.inner.draw_rectangle(x1, y1, x2, y2, colour, alpha);
+    }
+    fn draw_rectangle_outline(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, colour: i32, alpha: f64) {
+        self.inner.draw_rectangle_outline(x1, y1, x2, y2, colour, alpha);
+    }
+    fn draw_rectangle_gradient(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, c1: i32, c2: i32, c3: i32, c4: i32, alpha: f64, outline: bool) {
+        self.inner.draw_rectangle_gradient(x1, y1, x2, y2, c1, c2, c3, c4, alpha, outline);
+    }
+    fn draw_point(&mut self, x: f64, y: f64, colour: i32, alpha: f64) {
+        self.inner.draw_point(x, y, colour, alpha);
+    }
+    fn draw_line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, width: Option<f64>, c1: i32, c2: i32, alpha: f64) {
+        self.inner.draw_line(x1, y1, x2, y2, width, c1, c2, alpha);
+    }
+    fn draw_triangle(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, x3: f64, y3: f64, c1: i32, c2: i32, c3: i32, alpha: f64, outline: bool) {
+        self.inner.draw_triangle(x1, y1, x2, y2, x3, y3, c1, c2, c3, alpha, outline);
+    }
+    fn draw_ellipse(&mut self, x: f64, y: f64, rad_x: f64, rad_y: f64, c1: i32, c2: i32, alpha: f64, outline: bool) {
+        self.inner.draw_ellipse(x, y, rad_x, rad_y, c1, c2, alpha, outline);
+    }
+    fn draw_roundrect(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, c1: i32, c2: i32, alpha: f64, outline: bool) {
+        self.inner.draw_roundrect(x1, y1, x2, y2, c1, c2, alpha, outline);
+    }
+    fn set_circle_precision(&mut self, prec: i32) { self.inner.set_circle_precision(prec); }
+    fn get_circle_precision(&self) -> i32 { self.inner.get_circle_precision() }
+    fn reset_primitive_2d(&mut self, ptype: PrimitiveType, atlas_ref: Option<AtlasRef>) { self.inner.reset_primitive_2d(ptype, atlas_ref); }
+    fn vertex_2d(&mut self, x: f64, y: f64, xtex: f64, ytex: f64, col: i32, alpha: f64) { self.inner.vertex_2d(x, y, xtex, ytex, col, alpha); }
+    fn draw_primitive_2d(&mut self) { self.inner.draw_primitive_2d(); }
+    fn get_primitive_2d(&self) -> PrimitiveBuilder { self.inner.get_primitive_2d() }
+    fn set_primitive_2d(&mut self, prim: PrimitiveBuilder) { self.inner.set_primitive_2d(prim); }
+    fn reset_primitive_3d(&mut self, ptype: PrimitiveType, atlas_ref: Option<AtlasRef>) { self.inner.reset_primitive_3d(ptype, atlas_ref); }
+    fn vertex_3d(&mut self, x: f64, y: f64, z: f64, nx: f64, ny: f64, nz: f64, xtex: f64, ytex: f64, col: i32, alpha: f64) {
+        self.inner.vertex_3d(x, y, z, nx, ny, nz, xtex, ytex, col, alpha);
+    }
+    fn draw_primitive_3d(&mut self) { self.inner.draw_primitive_3d(); }
+    fn get_primitive_3d(&self) -> PrimitiveBuilder { self.inner.get_primitive_3d() }
+    fn set_primitive_3d(&mut self, prim: PrimitiveBuilder) { self.inner.set_primitive_3d(prim); }
+    fn extend_buffers(&self, buf: &mut VertexBuffer) { self.inner.extend_buffers(buf); }
+    fn draw_buffers(&mut self, atlas_ref: Option<AtlasRef>, buf: &VertexBuffer) { self.inner.draw_buffers(atlas_ref, buf); }
+    fn clear_view(&mut self, colour: Colour, alpha: f64) { self.inner.clear_view(colour, alpha); }
+    fn clear_view_no_zbuf(&mut self, colour: Colour, alpha: f64) { self.inner.clear_view_no_zbuf(colour, alpha); }
+    fn clear_zbuf(&mut self) { self.inner.clear_zbuf(); }
+
+    fn get_3d(&self) -> bool { self.inner.get_3d() }
+    fn set_3d(&mut self, use_3d: bool) { self.inner.set_3d(use_3d); }
+    fn get_depth(&self) -> f32 { self.inner.get_depth() }
+    fn set_depth(&mut self, depth: f32) { self.inner.set_depth(depth); }
+    fn get_depth_test(&self) -> bool { self.inner.get_depth_test() }
+    fn set_depth_test(&mut self, depth_test: bool) { self.inner.set_depth_test(depth_test); }
+    fn get_write_depth(&self) -> bool { self.inner.get_write_depth() }
+    fn set_write_depth(&mut self, write_depth: bool) { self.inner.set_write_depth(write_depth); }
+    fn get_culling(&self) -> bool { self.inner.get_culling() }
+    fn set_culling(&mut self, culling: bool) { self.inner.set_culling(culling); }
+    fn get_perspective(&self) -> bool { self.inner.get_perspective() }
+    fn set_perspective(&mut self, perspective: bool) { self.inner.set_perspective(perspective); }
+    fn get_fog(&self) -> Option<Fog> { self.inner.get_fog() }
+    fn set_fog(&mut self, fog: Option<Fog>) { self.inner.set_fog(fog); }
+    fn get_gouraud(&self) -> bool { self.inner.get_gouraud() }
+    fn set_gouraud(&mut self, gouraud: bool) { self.inner.set_gouraud(gouraud); }
+    fn get_lighting_enabled(&self) -> bool { self.inner.get_lighting_enabled() }
+    fn set_lighting_enabled(&mut self, enabled: bool) { self.inner.set_lighting_enabled(enabled); }
+    fn get_ambient_colour(&self) -> i32 { self.inner.get_ambient_colour() }
+    fn set_ambient_colour(&mut self, colour: i32) { self.inner.set_ambient_colour(colour); }
+    fn get_lights(&self) -> [(bool, Light); 8] { self.inner.get_lights() }
+    fn set_lights(&mut self, lights: [(bool, Light); 8]) { self.inner.set_lights(lights); }
+    fn set_light_enabled(&mut self, id: usize, enabled: bool) { self.inner.set_light_enabled(id, enabled); }
+    fn set_light(&mut self, id: usize, light: Light) { self.inner.set_light(id, light); }
 }

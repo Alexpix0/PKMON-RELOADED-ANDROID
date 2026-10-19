@@ -1458,21 +1458,32 @@ impl Particle {
             },
             ParticleGraphic::Shape(s) => usize::try_from(s).ok().and_then(|s| shapes.get(s).copied()),
         };
-        let mut angle_wiggle_factor = ((self.timer + self.random_start * 2) % 16) as f64 / 4.0;
-        if 2.0 < angle_wiggle_factor {
-            angle_wiggle_factor = 4.0 - angle_wiggle_factor;
-        }
-        angle_wiggle_factor -= 1.0;
-        let mut angle = self.image_angle + ptype.ang_wiggle * angle_wiggle_factor.into();
-        if ptype.ang_relative {
-            angle += self.direction;
-        }
-        let mut size_wiggle_factor = ((self.timer + self.random_start) % 16) as f64 / 4.0;
-        if 2.0 < size_wiggle_factor {
-            size_wiggle_factor = 4.0 - size_wiggle_factor;
-        }
-        size_wiggle_factor -= 1.0;
-        let size = self.size + ptype.size_wiggle * size_wiggle_factor.into();
+        let angle = if ptype.ang_wiggle != Real::from(0.0) || ptype.ang_relative {
+            let mut angle_wiggle_factor = ((self.timer + self.random_start * 2) % 16) as f64 / 4.0;
+            if 2.0 < angle_wiggle_factor {
+                angle_wiggle_factor = 4.0 - angle_wiggle_factor;
+            }
+            angle_wiggle_factor -= 1.0;
+            let mut a = self.image_angle + ptype.ang_wiggle * angle_wiggle_factor.into();
+            if ptype.ang_relative {
+                a += self.direction;
+            }
+            a
+        } else {
+            self.image_angle
+        };
+
+        let size = if ptype.size_wiggle != Real::from(0.0) {
+            let mut size_wiggle_factor = ((self.timer + self.random_start) % 16) as f64 / 4.0;
+            if 2.0 < size_wiggle_factor {
+                size_wiggle_factor = 4.0 - size_wiggle_factor;
+            }
+            size_wiggle_factor -= 1.0;
+            self.size + ptype.size_wiggle * size_wiggle_factor.into()
+        } else {
+            self.size
+        };
+
         if self.alpha <= Real::from(0.001) || size <= Real::from(0.0) {
             return;
         }

@@ -431,38 +431,70 @@ fn joystick_holds(key: Key) -> bool {
 
 fn control_key_down(index: usize) {
     use crate::touch_controls as tc;
-    if tc::controls()[index].name == "o" && matches!(tc::current_context(),tc::WORLD|tc::BATTLE|tc::SAFARI) {crate::touch_navigation::arm_bag();}
-    else {crate::touch_navigation::disarm_bag();}
-    let keys=tc::control_keys(index);
-    let held=keys.map(|key| key.is_some_and(|key| tc::key_held_by_buttons(key) || joystick_holds(key)));
-    tc::set_pressed(index,true);
-    for (i,key) in keys.into_iter().enumerate() {
-        if let Some(key)=key.filter(|_| !held[i]) {
-            match key {Key::LeftArrow=>tc::picker_step(-1),Key::RightArrow=>tc::picker_step(1),_=>{}}
-            android::push_input(ramen::platform::android::InputEvent::KeyDown {key,text:None});
+    if tc::controls()[index].name == "o" && matches!(tc::current_context(), tc::WORLD | tc::BATTLE | tc::SAFARI) {
+        crate::touch_navigation::arm_bag();
+    } else {
+        crate::touch_navigation::disarm_bag();
+    }
+    tc::set_pressed(index, true);
+
+    // Trick combination
+    if tc::controls()[index].name == tc::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
+        }
+        tc::set_combo_used();
+        return;
+    }
+
+    let name = tc::controls()[index].name;
+    if tc::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
+        tc::register_autofire(index);
+    }
+
+    let key = tc::controls()[index].key;
+    match key {
+        Key::LeftArrow => tc::picker_step(-1),
+        Key::RightArrow => tc::picker_step(1),
+        _ => {}
+    }
+
+    if tc::fishing_haptic_enabled() && (name == "v" || name == "c" || name == "z") {
+        jni_vibrate(28);
+    } else {
+        jni_vibrate(18);
+    }
+
+    let keys = tc::control_keys(index);
+    let held = keys.map(|k| k.is_some_and(|k| tc::key_held_by_buttons(k) || joystick_holds(k)));
+    for (i, k) in keys.into_iter().enumerate() {
+        if let Some(k) = k.filter(|_| !held[i]) {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: k, text: None });
         }
     }
-    if tc::controls()[index].name==tc::COMBO_BUTTON_NAME {tc::set_combo_used();}
 }
 
 fn control_key_up(index: usize) {
     use crate::touch_controls as tc;
-    if !tc::is_pressed(index) {return}
-    tc::set_pressed(index,false);
+    if !tc::is_pressed(index) { return; }
+    tc::set_pressed(index, false);
+    tc::unregister_autofire(index);
+
+    if tc::controls()[index].name == tc::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+        }
+        return;
+    }
+
     for key in tc::control_keys(index).into_iter().flatten() {
         if !tc::key_held_by_buttons(key) && !joystick_holds(key) {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp {key});
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
         }
     }
 }
 
-/// Pointers whose press was swallowed to bring the on-screen controls back, so that their release
-/// is ignored too instead of reaching the game as a stray mouse-up.
-static SWALLOWED_INPUTS: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
-
-/// A touch on an on-screen control presses the key that control maps to; any other touch is
-/// forwarded to the game as a mouse, exactly as before.
-fn jni_vibrate(duration_ms: i64) {
+pub fn jni_vibrate(duration_ms: i64) {
     if !haptics_enabled() {
         return;
     }
@@ -487,7 +519,7 @@ fn jni_vibrate(duration_ms: i64) {
             )?
             .l()?;
         if vibrator.is_null() {
-            return Ok(())
+            return Ok(());
         }
         env.call_method(
             &vibrator,
@@ -499,57 +531,8 @@ fn jni_vibrate(duration_ms: i64) {
     })();
 }
 
-fn control_key_down(index: usize) {
-    crate::touch_controls::set_pressed(index, true);
-    // The trick combination needs both keys held at once, so it is not one key like the rest.
-    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
-        for key in [Key::LeftControl, Key::P] {
-            android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
-        }
-        // It has done its job: it takes itself away until the next new game.
-        crate::touch_controls::set_combo_used();
-        return
-    }
-    let name = crate::touch_controls::CONTROLS[index].name;
-    if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
-        crate::touch_controls::register_autofire(index);
-    }
-    let key = crate::touch_controls::CONTROLS[index].key;
-    // On the character picker the overlay's arrows travel with the game's own selection, so the
-    // buttons stay around the character the player is on rather than around the first one.
-    match key {
-        Key::LeftArrow => crate::touch_controls::picker_step(-1),
-        Key::RightArrow => crate::touch_controls::picker_step(1),
-        _ => {},
-    }
-    if crate::touch_controls::fishing_haptic_enabled() && (name == "v" || name == "c" || name == "z") {
-        jni_vibrate(28);
-    } else {
-        jni_vibrate(18);
-    }
-    android::push_input(ramen::platform::android::InputEvent::KeyDown {
-        key,
-        text: None,
-    });
-}
-
-fn control_key_up(index: usize) {
-    crate::touch_controls::set_pressed(index, false);
-    crate::touch_controls::unregister_autofire(index);
-    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
-        for key in [Key::LeftControl, Key::P] {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
-        }
-        return
-    }
-    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::CONTROLS[index].key });
-}
-
-/// Pointers whose press was swallowed to bring the on-screen controls back, so that their release
-/// is ignored too instead of reaching the game as a stray mouse-up.
 static SWALLOWED_INPUTS: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
 static DRAGGED_ITEM: Mutex<Option<(String, f32, f32)>> = Mutex::new(None);
-
 
 fn perform_quick_snapshot() {
     let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
@@ -1268,762 +1251,6 @@ fn jni_adjust_volume(up: bool) {
         )?;
         Ok(())
     })();
-}
-
-fn publish_window(app: &AndroidApp) {
-    if let Some(window) = app.native_window() {
-        let ptr = window.ptr().as_ptr() as *mut std::ffi::c_void;
-        // The `NativeWindow` wrapper above owns a reference and drops it when this function
-        // returns; without acquiring our own, the window can be freed before the game thread
-        // calls eglCreateWindowSurface on it, which crashes with a null function pointer.
-        // SAFETY: `ptr` is a valid ANativeWindow handed out by the activity, and this only
-        // bumps its reference count.
-        unsafe { ANativeWindow_acquire(ptr) };
-        let width = window.width() as u32;
-        let height = window.height() as u32;
-        android::set_native_window(ptr, width, height);
-    }
-}
-
-extern "C" {
-    /// Bumps the reference count of an `ANativeWindow`. From `libandroid`, always linked.
-    fn ANativeWindow_acquire(window: *mut std::ffi::c_void) -> i32;
-}
-
-
-fn touch_feedback() {
-    if !crate::touch_appearance::settings().haptics { return }
-    with_activity(|env, class| {
-        env.call_static_method(class, "touchControlPressed", "()V", &[])?;
-        Ok(())
-    });
-}
-
-fn pointer_down(id: i32, x: f32, y: f32) {
-    // If Drastic-style Radial Quick-Menu is open, intercept touch for menu wheel actions
-    if crate::touch_controls::radial_menu_open() {
-        let action = crate::touch_controls::radial_menu_hit(x, y, wf, hf);
-        match action {
-            crate::touch_controls::RadialAction::Turbo => {
-                let on = crate::touch_controls::toggle_fast_forward();
-                let mult = crate::touch_controls::fast_forward_multiplier();
-                if on {
-                    crate::touch_controls::show_toast(&format!("TURBO: {:.1}x ACTIVADO", mult));
-                } else {
-                    crate::touch_controls::show_toast("TURBO: DESACTIVADO");
-                }
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Mute => {
-                let muted = crate::touch_controls::toggle_audio_mute();
-                crate::touch_controls::show_toast(if muted { "AUDIO: SILENCIADO" } else { "AUDIO: ACTIVADO" });
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Log => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_log_modal();
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Guide => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_guide_modal();
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Snapshot => {
-                crate::touch_controls::set_radial_menu_open(false);
-                perform_quick_snapshot();
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Fps => {
-                let on = crate::touch_controls::toggle_fps();
-                crate::touch_controls::show_toast(if on { "FPS: MOSTRAR" } else { "FPS: OCULTAR" });
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Bezel => {
-                let mode = crate::touch_controls::cycle_bezel();
-                crate::touch_controls::show_toast(&format!("BEZEL: {}", mode.to_ascii_uppercase()));
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Edit => {
-                crate::touch_controls::set_radial_menu_open(false);
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Bike => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::show_toast("OBJETO: Bicicleta (C)");
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::C, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::C });
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Rod => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::show_toast("OBJETO: Caña de Pescar (V)");
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::V, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::V });
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Bag => {
-                crate::touch_controls::set_radial_menu_open(false);
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::O, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::O });
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Pause => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_puzzle_pause();
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::Close | crate::touch_controls::RadialAction::Outside => {
-                crate::touch_controls::set_radial_menu_open(false);
-                touch_feedback();
-            },
-            crate::touch_controls::RadialAction::None => {},
-        }
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
-        return;
-    }
-    // A new gesture cannot inherit a swallowed Up from an Android cancellation.
-    if let Some(ids)=SWALLOWED_INPUTS.lock().unwrap().as_mut(){ids.remove(&id);}
-    let (w, h) = android::window_size();
-    let (wf, hf) = (w as f32, h as f32);
-    // The first touch after using a pad only brings the controls back. It must not also land in the
-    // game as a click, or reaching for the on-screen buttons would act on whatever is under them.
-    if crate::touch_controls::pad_active() {
-        crate::touch_controls::set_pad_active(false);
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
-        return
-    }
-    let on_movement = wf > 0.0 && hf > 0.0 && crate::touch_controls::movement_hit(x / wf, y / hf, wf, hf);
-    // Any *other* touch while the party wheel is up cancels it - but not the movement stick: while
-    // walking the player keeps touching and lifting it, and that must not close the wheel.
-    if crate::touch_controls::wheel_open() && *WHEEL_PTR.lock().unwrap() != Some(id) && !on_movement {
-        crate::touch_controls::set_wheel_open(false);
-        WHEEL_PTR.lock().unwrap().take();
-    }
-    if on_movement {
-        *MOVEMENT_PTR.lock().unwrap() = Some(id);
-        movement_update(x, y);
-        return
-    }
-    let hit = if w > 0 && h > 0 { crate::touch_controls::hit(x / wf, y / hf, wf, hf) } else { None };
-    if hit.is_some_and(|i| crate::touch_controls::controls()[i].name == crate::touch_controls::RADIAL_MENU_NAME) {
-        crate::touch_controls::toggle_radial_menu();
-        touch_feedback();
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);
-        return;
-    }
-    if hit.is_some_and(|i|crate::touch_controls::controls()[i].name==crate::field_controls::NAME){
-        crate::field_controls::toggle();touch_feedback();
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);return
-    }
-    if crate::field_controls::open(){
-        if let Some(slot)=crate::field_controls::item_at(x,y,wf,hf){let mut owner=FIELD_POINTER.lock().unwrap();if owner.is_none(){*owner=Some((id,slot));touch_feedback();}}
-        SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);return
-    }
-    if hit.is_none()&&crate::touch_navigation::active(){
-        if !crate::touch_navigation::begin(id,x,y,hf){SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).insert(id);}return
-    }
-    match hit {
-        Some(index) => {
-            if crate::touch_controls::controls()[index].name == crate::touch_controls::PARTY_NAME {
-                // Holding it opens the party wheel instead of pressing a key of its own.
-                crate::touch_controls::set_wheel_open(true);
-                *WHEEL_PTR.lock().unwrap() = Some(id);
-            } else {
-                let first = {
-                    let mut pointers = POINTER_CONTROLS.lock().unwrap();
-                    let pointers = pointers.get_or_insert_with(HashMap::new);
-                    let first = !pointers.values().any(|held| *held == index);
-                    pointers.insert(id, index);
-                    first
-                };
-                if first { control_key_down(index); }
-            }
-            touch_feedback();
-        },
-        None => {
-            // The game asks for text through its own dialog, and touching it opens the system
-            // keyboard. The only clickable thing the game has there is its "Aceptar" box, so a touch
-            // anywhere else is free; touching "Aceptar" still confirms, because the game keeps the tap.
-            if crate::touch_controls::text_entry_open() {
-                ime_set(true);
-            }
-            mouse_down(id, x, y)
-        },
-    }
-}
-
-fn pointer_up(id: i32, x: f32, y: f32) {
-    if crate::touch_navigation::owns(id){
-        if let Some((x,y))=crate::touch_navigation::end(id,x,y){android::push_input(ramen::platform::android::InputEvent::PointerMoved{x,y});}return
-    }
-    let selected={let mut owner=FIELD_POINTER.lock().unwrap();if owner.is_some_and(|(pointer,_)|pointer==id){owner.take().map(|(_,slot)|slot)}else{None}};
-    if let Some(slot)=selected{let(w,h)=android::window_size();if crate::field_controls::open()&&crate::field_controls::item_at(x,y,w as f32,h as f32)==Some(slot){tap_key(crate::field_controls::KEYS[slot]);crate::field_controls::close();}}
-
-    let closes_wheel = {
-        let mut owner = WHEEL_PTR.lock().unwrap();
-        if *owner == Some(id) { *owner = None; true } else { false }
-    };
-    if closes_wheel {
-        // The key only goes out now, on the release, and only if a slot was picked. Letting go over
-        // the middle of the wheel, or letting go without moving at all, sends nothing.
-        let selected = crate::touch_controls::wheel_selected();
-        if selected >= 0 {
-            tap_key(crate::touch_controls::PICKER_KEYS[selected as usize]);
-        }
-        crate::touch_controls::set_wheel_open(false);
-        return
-    }
-    if SWALLOWED_INPUTS.lock().unwrap().get_or_insert_with(std::collections::HashSet::new).remove(&id) {
-        return
-    }
-    if is_movement_pointer(id) {
-        movement_release();
-        return
-    }
-    let index = POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).remove(&id);
-    match index {
-        Some(index) => {
-            let still_held = POINTER_CONTROLS.lock().unwrap().as_ref().is_some_and(|p| p.values().any(|held| *held == index));
-            if !still_held { control_key_up(index); }
-        },
-        None => mouse_up(id, x, y),
-    }
-}
-
-/// A real tap lasts ~100 ms, but a quick one can deliver press and release inside a single poll.
-/// The game reads the mouse once per frame, so such a tap is simply missed — that is why clicking
-/// the game's menus with the finger felt random. Holding the release briefly makes taps behave
-/// like real mouse clicks.
-const MIN_TAP: Duration = Duration::from_millis(70);
-
-/// The game decides which menu entry is under the cursor while it *moves*; a click only confirms
-/// the current one. A finger sends move and press together, so the press used to land on whatever
-/// was selected before. Delivering the move a hair earlier gives the game that frame.
-const HOVER_DELAY: Duration = Duration::from_millis(45);
-
-static MOUSE_DOWN_AT: Mutex<Vec<(i32, Instant)>> = Mutex::new(Vec::new());
-static DELAYED_UPS: Mutex<Vec<(Instant, f32, f32)>> = Mutex::new(Vec::new());
-static DELAYED_DOWNS: Mutex<Vec<(Instant, f32, f32)>> = Mutex::new(Vec::new());
-
-fn mouse_down(id: i32, x: f32, y: f32) {
-    let deliver_at = Instant::now() + HOVER_DELAY;
-    let mut downs = MOUSE_DOWN_AT.lock().unwrap();
-    downs.retain(|(pointer, _)| *pointer != id);
-    downs.push((id, deliver_at));
-    drop(downs);
-    // The move goes out now; the press follows on a later poll so the hover is in place first.
-    android::push_input(ramen::platform::android::InputEvent::PointerMoved { x, y });
-    DELAYED_DOWNS.lock().unwrap().push((deliver_at, x, y));
-}
-
-fn mouse_up(id: i32, x: f32, y: f32) {
-    let pressed_at = {
-        let mut downs = MOUSE_DOWN_AT.lock().unwrap();
-        let at = downs.iter().find(|(pointer, _)| *pointer == id).map(|(_, at)| *at);
-        downs.retain(|(pointer, _)| *pointer != id);
-        at
-    };
-    let deadline = pressed_at.map(|at| at + MIN_TAP).unwrap_or_else(Instant::now);
-    if deadline > Instant::now() {
-        DELAYED_UPS.lock().unwrap().push((deadline, x, y));
-    } else {
-        android::push_input(ramen::platform::android::InputEvent::PointerUp { x, y, button: 0 });
-    }
-}
-
-/// Delivers the presses and releases that were held back to make a short tap a proper click.
-fn flush_delayed_mouse() {
-    let now = Instant::now();
-    let mut downs: Vec<(f32, f32)> = Vec::new();
-    DELAYED_DOWNS.lock().unwrap().retain(|(at, x, y)| {
-        if *at <= now {
-            downs.push((*x, *y));
-            false
-        } else {
-            true
-        }
-    });
-    for (x, y) in downs {
-        android::push_input(ramen::platform::android::InputEvent::PointerDown { x, y, button: 0 });
-    }
-
-    let mut ups: Vec<(f32, f32)> = Vec::new();
-    DELAYED_UPS.lock().unwrap().retain(|(at, x, y)| {
-        if *at <= now {
-            ups.push((*x, *y));
-            false
-        } else {
-            true
-        }
-    });
-    for (x, y) in ups {
-        android::push_input(ramen::platform::android::InputEvent::PointerUp { x, y, button: 0 });
-    }
-}
-
-fn pointer_is_control(id: i32) -> bool {
-    POINTER_CONTROLS.lock().unwrap().as_ref().map(|m| m.contains_key(&id)).unwrap_or(false)
-}
-
-// --- Movement (joystick or D-pad) ---------------------------------------------------------
-
-/// Pointer id currently driving the movement control, if any.
-static MOVEMENT_PTR: Mutex<Option<i32>> = Mutex::new(None);
-/// Which arrow keys the movement control is holding (bit 0 up, 1 down, 2 left, 3 right).
-static MOVEMENT_STATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
-const MOVEMENT_KEYS: [Key; 4] = [Key::UpArrow, Key::DownArrow, Key::LeftArrow, Key::RightArrow];
-
-fn is_movement_pointer(id: i32) -> bool {
-    *MOVEMENT_PTR.lock().unwrap() == Some(id)
-}
-
-/// Presses/releases the arrow keys so they match where the movement control is being pushed.
-fn movement_update(x: f32, y: f32) {
-    crate::touch_navigation::disarm_bag();
-    use std::sync::atomic::Ordering;
-    let (w, h) = android::window_size();
-    let (wf, hf) = (w as f32, h as f32);
-    if wf <= 0.0 || hf <= 0.0 {
-        return
-    }
-    let dirs = crate::touch_controls::movement_dirs(x / wf, y / hf, wf, hf);
-    crate::touch_controls::set_move_dirs(dirs);
-    let mut state = MOVEMENT_STATE.load(Ordering::Relaxed);
-    let mut new_direction = false;
-    for (i, &on) in dirs.iter().enumerate() {
-        let bit = 1u32 << i;
-        if on != (state & bit != 0) {
-            if on {
-                if !crate::touch_controls::key_held_by_buttons(MOVEMENT_KEYS[i]) {
-                    android::push_input(ramen::platform::android::InputEvent::KeyDown { key: MOVEMENT_KEYS[i], text: None });
-                }
-                new_direction = true;
-                state |= bit;
-            } else {
-                if !crate::touch_controls::key_held_by_buttons(MOVEMENT_KEYS[i]) {
-                    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: MOVEMENT_KEYS[i] });
-                }
-                state &= !bit;
-            }
-        }
-    }
-    MOVEMENT_STATE.store(state, Ordering::Relaxed);
-    // The D-pad gives a short tap each time a direction is marked; the analog stick stays silent.
-    if new_direction && crate::touch_controls::move_mode() == crate::touch_controls::MoveMode::Dpad {
-        touch_feedback();
-    }
-
-    // Clamp the drawn knob to the ring.
-    let classic = crate::touch_controls::overlay_style() == crate::touch_controls::OverlayStyle::Classic;
-    let (jcx, jcy) = if classic { crate::touch_controls::joystick_center_in_window(wf, hf) } else { crate::touch_controls::movement_center() };
-    let r = if classic { crate::touch_controls::joystick_radius() } else { crate::touch_controls::movement_radius() } * hf;
-    let mut dx = (x - jcx * wf) / r;
-    let mut dy = (y - jcy * hf) / r;
-    let len = (dx * dx + dy * dy).sqrt();
-    if len > 1.0 {
-        dx /= len;
-        dy /= len;
-    }
-    crate::touch_controls::set_movement_offset(dx, dy);
-}
-
-fn movement_release() {
-    use std::sync::atomic::Ordering;
-    crate::touch_controls::set_move_dirs([false; 4]);
-    let state = MOVEMENT_STATE.swap(0, Ordering::Relaxed);
-    for i in 0..4 {
-        if state & (1 << i) != 0 && !crate::touch_controls::key_held_by_buttons(MOVEMENT_KEYS[i]) {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: MOVEMENT_KEYS[i] });
-        }
-    }
-    crate::touch_controls::set_movement_offset(0.0, 0.0);
-    *MOVEMENT_PTR.lock().unwrap() = None;
-}
-
-fn release_touch_profile() {
-    let held = POINTER_CONTROLS.lock().unwrap().take().unwrap_or_default();
-    let mut swallowed = SWALLOWED_INPUTS.lock().unwrap();
-    let ids = swallowed.get_or_insert_with(std::collections::HashSet::new);
-    for (id, index) in held {
-        control_key_up(index);
-        ids.insert(id);
-    }
-    if let Some(id) = *MOVEMENT_PTR.lock().unwrap() { ids.insert(id); }
-    movement_release();
-    if let Some(id) = WHEEL_PTR.lock().unwrap().take() { ids.insert(id); }
-    crate::touch_controls::set_wheel_open(false);
-    crate::field_controls::close();
-    if let Some((id,_))=FIELD_POINTER.lock().unwrap().take(){ids.insert(id);}
-    if let Some(id)=crate::touch_navigation::cancel(){ids.insert(id);}
-    if let Some((x,y))=crate::touch_navigation::cancel_pointer(){
-        android::push_input(ramen::platform::android::InputEvent::PointerUp{x,y,button:0});
-    }
-}
-
-/// The pointer the current action refers to, if it is valid.
-fn changed_pointer(motion: &android_activity::input::MotionEvent) -> Option<(i32, f32, f32)> {
-    let index = motion.pointer_index();
-    if index >= motion.pointer_count() {
-        return None
-    }
-    let p = motion.pointer_at_index(index);
-    Some((p.pointer_id(), p.x(), p.y()))
-}
-
-/// Android key codes for the hardware volume rocker.
-const KEYCODE_VOLUME_UP: i32 = 24;
-const KEYCODE_VOLUME_DOWN: i32 = 25;
-
-/// Translates one `android-activity` input event into ramen's queue.
-fn translate(event: &InputEvent) {
-    match event {
-        InputEvent::KeyEvent(key) => match key.action() {
-            KeyAction::Down => {
-                let code = key_code_value(&key.key_code());
-                if code == KEYCODE_VOLUME_UP || code == KEYCODE_VOLUME_DOWN {
-                    // Volume keys arrive through the native queue, so Android never handles them.
-                    jni_adjust_volume(code == KEYCODE_VOLUME_UP);
-                    return
-                }
-                if let Some(k) = mapped_key(code) {
-                    // A real key press means a pad or a keyboard is in the player's hands, so the
-                    // on-screen controls get out of the way.
-                    crate::touch_controls::set_pad_active(true);
-                    eprintln!("[pad] tecla {} -> {:?}", code, k);
-                    android::push_input(ramen::platform::android::InputEvent::KeyDown { key: k, text: None });
-                }
-            },
-            KeyAction::Up => {
-                if let Some(k) = mapped_key(key_code_value(&key.key_code())) {
-                    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: k });
-                }
-            },
-            _ => {},
-        },
-        InputEvent::MotionEvent(motion) => {
-            // A pad's stick arrives as a generic motion event, not as a key, so its axes have to be
-            // read from the event itself rather than from a pointer.
-            if motion.source().is_joystick_class() {
-                crate::touch_controls::set_pad_active(true);
-                if STICK_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
-                    let (mut x, mut y) = (axis_value(motion, Axis::X), axis_value(motion, Axis::Y));
-                    // A d-pad is usually reported as a hat axis rather than as keys, and it has to
-                    // win over the stick when it is pressed: a resting stick is not always at exactly
-                    // zero, and requiring that is what kept the d-pad from doing anything.
-                    let (hat_x, hat_y) = (axis_value(motion, Axis::HatX), axis_value(motion, Axis::HatY));
-                    if hat_x != 0.0 || hat_y != 0.0 {
-                        x = hat_x;
-                        y = hat_y;
-                    }
-                    stick_update(x, y);
-                }
-                return
-            }
-
-            match motion.action() {
-                MotionAction::Down | MotionAction::PointerDown => {
-                    if let Some((id, x, y)) = changed_pointer(motion) {
-                        pointer_down(id, x, y);
-                    }
-                },
-                MotionAction::Up | MotionAction::PointerUp => {
-                    if let Some((id, x, y)) = changed_pointer(motion) {
-                        pointer_up(id, x, y);
-                    }
-                },
-                MotionAction::Move | MotionAction::HoverMove => {
-                    let wheel_ptr = *WHEEL_PTR.lock().unwrap();
-                    for p in motion.pointers() {
-                        if SWALLOWED_INPUTS.lock().unwrap().as_ref().is_some_and(|ids|ids.contains(&p.pointer_id())){continue}
-                        if crate::touch_navigation::moved(p.pointer_id(),p.x(),p.y()){continue}
-                        if wheel_ptr == Some(p.pointer_id()) {
-                            let (w, h) = android::window_size();
-                            let (wf, hf) = (w as f32, h as f32);
-                            if wf > 0.0 && hf > 0.0 {
-                                // Only highlight while the finger moves. The key waits for the
-                                // release: in battle it sends the Pokémon out, so it must never go
-                                // out on a touch that was not meant as a pick.
-                                let picked = crate::touch_controls::wheel_item_at(p.x() / wf, p.y() / hf, wf, hf);
-                                crate::touch_controls::set_wheel_selected(picked.map(|i| i as i32).unwrap_or(-1));
-                            }
-                        } else if is_movement_pointer(p.pointer_id()) {
-                            movement_update(p.x(), p.y());
-                        } else if !pointer_is_control(p.pointer_id()) {
-                            android::push_input(ramen::platform::android::InputEvent::PointerMoved { x: p.x(), y: p.y() });
-                        }
-                    }
-                },
-                MotionAction::Cancel => {
-                    release_touch_profile();
-                    if let Some(ids)=SWALLOWED_INPUTS.lock().unwrap().as_mut(){ids.clear();}
-                    movement_release();
-                    let ids: Vec<i32> =
-                        POINTER_CONTROLS.lock().unwrap().as_ref().map(|m| m.keys().copied().collect()).unwrap_or_default();
-                    for id in ids {
-                        if let Some(index) = POINTER_CONTROLS.lock().unwrap().get_or_insert_with(HashMap::new).remove(&id) {
-                            control_key_up(index);
-                        }
-                    }
-                },
-                _ => {},
-            }
-        },
-        _ => {},
-    }
-}
-
-/// A NativeActivity receives key events through the native queue, so the system never sees the
-/// volume keys and the volume can't be changed. Adjust the music stream ourselves instead.
-fn jni_adjust_volume(up: bool) {
-    let ctx = ndk_context::android_context();
-    let vm = match unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) } {
-        Ok(vm) => vm,
-        Err(_) => return,
-    };
-    let mut env = match vm.attach_current_thread() {
-        Ok(env) => env,
-        Err(_) => return,
-    };
-    let _ = (|| -> jni::errors::Result<()> {
-        let activity = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
-        let name = env.new_string("audio")?;
-        let manager = env
-            .call_method(
-                &activity,
-                "getSystemService",
-                "(Ljava/lang/String;)Ljava/lang/Object;",
-                &[jni::objects::JValue::Object(&name)],
-            )?
-            .l()?;
-        if manager.is_null() {
-            return Ok(())
-        }
-        // STREAM_MUSIC = 3, ADJUST_RAISE = 1 / ADJUST_LOWER = -1, FLAG_SHOW_UI = 1
-        let direction = if up { 1 } else { -1 };
-        env.call_method(
-            &manager,
-            "adjustStreamVolume",
-            "(III)V",
-            &[
-                jni::objects::JValue::Int(3),
-                jni::objects::JValue::Int(direction),
-                jni::objects::JValue::Int(1),
-            ],
-        )?;
-        Ok(())
-    })();
-}
-
-// ---------------------------------------------------------------------------------------------
-// System (soft) keyboard.
-//
-// The game has no Android view of its own to type into, so the activity's `InputConnection` sends
-// what is typed here through the JNI exports below. `ime_pump` then feeds it to ramen the same way
-// a hardware keyboard would, right before each poll, so the game's dialog sees a normal key tap.
-
-/// What the system keyboard committed, waiting for the next poll.
-enum ImeEvent {
-    Text(String),
-    Backspace,
-    Enter,
-}
-
-fn ime_queue() -> &'static Mutex<std::collections::VecDeque<ImeEvent>> {
-    static QUEUE: std::sync::OnceLock<Mutex<std::collections::VecDeque<ImeEvent>>> = std::sync::OnceLock::new();
-    QUEUE.get_or_init(|| Mutex::new(std::collections::VecDeque::new()))
-}
-
-/// Feeds what the system keyboard typed into ramen's queue. Each character goes in as a quick key
-/// tap that carries its text (`KeyDown{text}` + `KeyUp`): the press sets `keyboard_lastkey` and
-/// `vk_anykey`, the text fills `keyboard_string`, and the deferred release keeps the key down for
-/// the poll it arrived in - exactly what `tap_key` does for the on-screen buttons. Backspace and
-/// enter are plain taps of the keys the game already reads for those.
-pub fn ime_pump() {
-    let events: Vec<ImeEvent> = match ime_queue().lock() {
-        Ok(mut queue) => queue.drain(..).collect(),
-        Err(_) => return,
-    };
-    for event in events {
-        match event {
-            ImeEvent::Text(text) => {
-                for c in text.chars() {
-                    let key = ime_char_to_key(c);
-                    android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: Some(c) });
-                    android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
-                }
-            },
-            ImeEvent::Backspace => tap_key(Key::Backspace),
-            ImeEvent::Enter => tap_key(Key::Return),
-        }
-    }
-}
-
-/// The key a committed character is reported as. It only decides `keyboard_lastkey`; the character
-/// itself travels in the event's text. Letters and digits become the same keys a hardware keyboard
-/// would send; anything without a Game Maker key (accents, most signs) falls back to space, whose
-/// code no dialog key uses.
-fn ime_char_to_key(c: char) -> Key {
-    if c.is_ascii_alphabetic() {
-        return LETTERS[usize::from(c.to_ascii_uppercase() as u8 - b'A')]
-    }
-    if c.is_ascii_digit() {
-        const DIGITS: [Key; 10] = [
-            Key::Alpha0, Key::Alpha1, Key::Alpha2, Key::Alpha3, Key::Alpha4, Key::Alpha5, Key::Alpha6,
-            Key::Alpha7, Key::Alpha8, Key::Alpha9,
-        ];
-        return DIGITS[usize::from(c as u8 - b'0')]
-    }
-    match c {
-        ' ' => Key::Space,
-        '.' => Key::Period,
-        ',' => Key::Comma,
-        '-' => Key::Minus,
-        '+' => Key::Plus,
-        '=' => Key::Equals,
-        '/' => Key::Slash,
-        '\\' => Key::Backslash,
-        ';' => Key::Semicolon,
-        ':' => Key::Colon,
-        '\'' => Key::Apostrophe,
-        '"' => Key::Quote,
-        '?' => Key::QuestionMark,
-        '_' => Key::Underscore,
-        _ => Key::Space,
-    }
-}
-
-/// Called from the activity's `InputConnection` for every committed string.
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'local>(
-    mut env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-    text: jni::objects::JString<'local>,
-) {
-    let value: String = env.get_string(&text).map(Into::into).unwrap_or_default();
-    if value.is_empty() {
-        return
-    }
-    if let Ok(mut queue) = ime_queue().lock() {
-        queue.push_back(ImeEvent::Text(value));
-    }
-}
-
-/// Called from the activity's `InputConnection` for the delete key.
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeBackspace<'local>(
-    _env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-) {
-    if let Ok(mut queue) = ime_queue().lock() {
-        queue.push_back(ImeEvent::Backspace);
-    }
-}
-
-/// Called from the activity's `InputConnection` for the enter/done key.
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeEnter<'local>(
-    _env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-) {
-    if let Ok(mut queue) = ime_queue().lock() {
-        queue.push_back(ImeEvent::Enter);
-    }
-}
-
-/// Called from the activity whenever the system keyboard's height changes, so the renderer can keep
-/// the game above it.
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeImeInset<'local>(
-    _env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-    height: jni::sys::jint,
-) {
-    // A keyboard taller than the window is not a keyboard: a value like that would push the game off
-    // the top and hide the controls behind nothing, so it is dropped rather than believed.
-    let (_, window_height) = android::window_size();
-    let height = height.max(0) as u32;
-    let height = if window_height > 0 && height >= window_height { 0 } else { height };
-    crate::touch_controls::set_ime_inset(height);
-    // The keyboard can be dropped by the system as well as by us - its own close button, or the back
-    // gesture - so whether it is up is taken from its height. Without this, the next touch on the
-    // game's text would be read as "already up" and would not raise it again.
-    IME_SHOWN.store(height > 0, std::sync::atomic::Ordering::Relaxed);
-}
-
-/// Whether the system keyboard is up, so it is only raised or dropped on a change.
-static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-/// Raises or drops the system keyboard, but only when that is a change.
-fn ime_set(visible: bool) {
-    if IME_SHOWN.swap(visible, std::sync::atomic::Ordering::Relaxed) != visible {
-        jni_set_ime(visible);
-    }
-}
-
-/// Raises or drops the system keyboard by calling the activity's static `GameActivity.setImeVisible`.
-/// The activity shows it from the UI thread, which Kotlin takes care of; here we only need to reach
-/// the class. `FindClass` would look on the system class path (the context the activity publishes is
-/// the Application), so the class is loaded through its own loader instead.
-fn jni_set_ime(visible: bool) {
-    with_activity(|env, class| {
-        env.call_static_method(class, "setImeVisible", "(Z)V", &[jni::objects::JValue::Bool(visible as u8)])?;
-        Ok(())
-    });
-}
-
-/// Asks the activity to read the keyboard's height again.
-///
-/// The height normally arrives on its own, from the inset callback. This is the belt to that braces:
-/// while the engine believes the keyboard is up it asks again once in a while, so an inset callback
-/// that never came cannot leave the game pushed up top with the controls hidden.
-fn jni_refresh_ime_height() {
-    with_activity(|env, class| {
-        env.call_static_method(class, "refreshImeHeight", "()V", &[])?;
-        Ok(())
-    });
-}
-
-/// The activity's class, held for the life of the process.
-///
-/// It has to be looked up through the activity's own class loader: `FindClass` would look on the
-/// system class path, because the context the activity publishes for JNI is the Application. Holding
-/// it globally means the lookup happens once instead of on every call, and that the watchdog below
-/// does not leave a reference behind each time it runs.
-static ACTIVITY_CLASS: std::sync::OnceLock<jni::objects::GlobalRef> = std::sync::OnceLock::new();
-
-/// Attaches this thread and runs `f` with the activity's class.
-fn with_activity(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JClass) -> jni::errors::Result<()>) {
-    let ctx = ndk_context::android_context();
-    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return };
-    // Permanent: the thread stays attached, and attaching on every call would only add work.
-    let Ok(mut env) = vm.attach_current_thread_permanently() else { return };
-    if ACTIVITY_CLASS.get().is_none() {
-        let loaded = (|| -> jni::errors::Result<jni::objects::GlobalRef> {
-            let context = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
-            let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
-            let name = env.new_string("com.klisee.reloaded.GameActivity")?;
-            let class = env
-                .call_method(
-                    &loader,
-                    "loadClass",
-                    "(Ljava/lang/String;)Ljava/lang/Class;",
-                    &[jni::objects::JValue::Object(&name)],
-                )?
-                .l()?;
-            env.new_global_ref(class)
-        })();
-        match loaded {
-            Ok(global) => {
-                let _ = ACTIVITY_CLASS.set(global);
-            },
-            Err(_) => return,
-        }
-    }
-    let Some(global) = ACTIVITY_CLASS.get() else { return };
-    let class = unsafe { jni::objects::JClass::from_raw(global.as_obj().as_raw()) };
-    let _ = f(&mut env, &class);
 }
 
 fn publish_window(app: &AndroidApp) {
