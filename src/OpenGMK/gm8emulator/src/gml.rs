@@ -5,6 +5,7 @@ pub mod datetime;
 pub mod ds;
 pub mod file;
 pub mod jit;
+pub mod jit_arm64;
 pub mod kernel;
 pub mod mappings;
 pub mod network;

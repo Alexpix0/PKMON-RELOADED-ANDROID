@@ -212,6 +212,83 @@ fn load_video() {
                 crate::touch_controls::set_quick_save(value == "1" || value.eq_ignore_ascii_case("true"));
             } else if name == "save_reminder" {
                 crate::touch_controls::set_save_reminder(value == "1" || value.eq_ignore_ascii_case("true"));
+            } else if name == "extreme_combat" {
+                let ec = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_extreme_combat(ec);
+            } else if name == "mali_earlyz" {
+                let me = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_mali_earlyz(me);
+            } else if name == "gpu_wakeup" {
+                let gw = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_gpu_wakeup(gw);
+            } else if name == "smart_preroll_skip" {
+                let sp = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_smart_preroll_skip(sp);
+            } else if name == "adaptive_ltpo" {
+                let al = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_adaptive_ltpo(al);
+            } else if name == "pip_mode" {
+                let pm = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_pip_mode(pm);
+            } else if name == "live_activity" {
+                let la = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_live_activity(la);
+            } else if name == "active_static_partition" {
+                let asp = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_active_static_partition(asp);
+            } else if name == "mega_atlas" {
+                let ma = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::touch_controls::set_mega_atlas(ma);
+            } else if name == "fsr_mode" {
+                if let Ok(m) = value.parse::<u32>() {
+                    crate::render::fsr::set_fsr_mode(m);
+                }
+            } else if name == "drs_enabled" {
+                let drs = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::render::fsr::set_drs_enabled(drs);
+            } else if name == "xbrz_enabled" {
+                let xbrz = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::render::fsr::set_xbrz_enabled(xbrz);
+            } else if name == "lighting2d" {
+                let l2d = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::render::lighting2d::set_lighting2d_enabled(l2d);
+            } else if name == "audio_3d" {
+                let a3d = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::audio_3d::set_audio_3d_enabled(a3d);
+            } else if name == "reactive_stems" {
+                let rs = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::audio_3d::set_reactive_stems_enabled(rs);
+            } else if name == "wsola" {
+                let ws = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::audio_3d::set_wsola_enabled(ws);
+            } else if name == "colorblind_mode" {
+                if let Ok(cbm) = value.parse::<u32>() {
+                    crate::render::colorblind::set_colorblind_mode(cbm);
+                }
+            } else if name == "radial_menu" {
+                let rm = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::radial_menu::set_radial_menu_enabled(rm);
+            } else if name == "gestures" {
+                let gst = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::gestures::set_gestures_enabled(gst);
+            } else if name == "floating_dpad" {
+                let fd = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::gestures::set_floating_dpad_enabled(fd);
+            } else if name == "one_handed" {
+                let oh = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::gestures::set_one_handed_layout_enabled(oh);
+            } else if name == "replay_blackbox" {
+                let rb = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::replay_blackbox::set_replay_blackbox_enabled(rb);
+            } else if name == "achievements" {
+                let ach = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::achievements::set_achievements_enabled(ach);
+            } else if name == "jit_arm64" {
+                let jit = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::gml::jit_arm64::set_jit_arm64_enabled(jit);
+            } else if name == "big_little_affinity" {
+                let bla = value == "1" || value.eq_ignore_ascii_case("true");
+                crate::game::big_little::set_big_little_affinity_enabled(bla);
             }
         }
     }
@@ -1527,7 +1604,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.7.0\n\
+             Version: 0.9.0\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

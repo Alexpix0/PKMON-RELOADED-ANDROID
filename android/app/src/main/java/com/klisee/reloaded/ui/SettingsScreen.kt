@@ -143,6 +143,33 @@ fun SettingsScreen(
     var saveReminder by remember { mutableStateOf(prefs.saveReminder) }
     var checking by remember { mutableStateOf(false) }
 
+    // v0.9.0 State Variables
+    var extremeCombat by remember { mutableStateOf(prefs.extremeCombat) }
+    var maliEarlyZ by remember { mutableStateOf(prefs.maliEarlyZ) }
+    var gpuWakeup by remember { mutableStateOf(prefs.gpuWakeup) }
+    var fsrMode by remember { mutableStateOf(prefs.fsrMode) }
+    var drsEnabled by remember { mutableStateOf(prefs.drsEnabled) }
+    var xbrzEnabled by remember { mutableStateOf(prefs.xbrzEnabled) }
+    var lighting2d by remember { mutableStateOf(prefs.lighting2d) }
+    var adaptiveLtpo by remember { mutableStateOf(prefs.adaptiveLtpo) }
+    var colorblindMode by remember { mutableStateOf(prefs.colorblindMode) }
+    var jitArm64 by remember { mutableStateOf(prefs.jitArm64) }
+    var bigLittleAffinity by remember { mutableStateOf(prefs.bigLittleAffinity) }
+    var megaAtlas by remember { mutableStateOf(prefs.megaAtlas) }
+    var activeStaticPartition by remember { mutableStateOf(prefs.activeStaticPartition) }
+    var radialMenu by remember { mutableStateOf(prefs.radialMenu) }
+    var gestures by remember { mutableStateOf(prefs.gestures) }
+    var oneHanded by remember { mutableStateOf(prefs.oneHanded) }
+    var audio3d by remember { mutableStateOf(prefs.audio3d) }
+    var reactiveStems by remember { mutableStateOf(prefs.reactiveStems) }
+    var wsola by remember { mutableStateOf(prefs.wsola) }
+    var pipMode by remember { mutableStateOf(prefs.pipMode) }
+    var liveActivity by remember { mutableStateOf(prefs.liveActivity) }
+    var smartPrerollSkip by remember { mutableStateOf(prefs.smartPrerollSkip) }
+    var replayBlackbox by remember { mutableStateOf(prefs.replayBlackbox) }
+    var achievements by remember { mutableStateOf(prefs.achievements) }
+    var uiStyle by remember { mutableStateOf(prefs.uiStyle) }
+
     // Snapshots state
     var showSnapshotsDialog by remember { mutableStateOf(false) }
     var snapshotsList by remember { mutableStateOf<List<GameRepository.SnapshotItem>>(emptyList()) }
@@ -539,6 +566,541 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Spacer(Modifier.height(4.dp))
+
+            SettingsGroup("Ajustes de Vídeo (v0.9.0 & Gráficos)") {
+                SwitchRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Perfil Combate Extremo Mali/Infinix (1 Toque)",
+                    subtitle = "Fija 60 FPS estables en combates: escala 0.85x con nitidez CAS al 60%, FPK Early-Z activo y 40 partículas",
+                    checked = extremeCombat,
+                    items = 15,
+                    index = 0,
+                    onCheckedChange = {
+                        extremeCombat = it
+                        prefs.extremeCombat = it
+                        if (it) {
+                            prefs.applyPerformanceProfile("extreme_combat")
+                            renderScale = prefs.renderScale
+                            fsrMode = prefs.fsrMode
+                            drsEnabled = prefs.drsEnabled
+                            force60Fps = prefs.force60Fps
+                        }
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AMD FSR 1.0: Desactivado",
+                    subtitle = "Renderizado a resolución nativa estándar sin upscaling espacial",
+                    selected = fsrMode == 0,
+                    items = 15,
+                    index = 1,
+                    onSelect = {
+                        fsrMode = 0
+                        prefs.fsrMode = 0
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AMD FSR 1.0: Ultra Calidad (0.77x)",
+                    subtitle = "Edge-Adaptive Spatial Upsampling (EASU) + Robust Contrast Adaptive Sharpening (RCAS)",
+                    selected = fsrMode == 1,
+                    items = 15,
+                    index = 2,
+                    onSelect = {
+                        fsrMode = 1
+                        prefs.fsrMode = 1
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AMD FSR 1.0: Equilibrado (0.67x)",
+                    subtitle = "Balance ideal entre nitidez visual reconstruida y ganancia de fotogramas",
+                    selected = fsrMode == 2,
+                    items = 15,
+                    index = 3,
+                    onSelect = {
+                        fsrMode = 2
+                        prefs.fsrMode = 2
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.AutoAwesome,
+                    title = "AMD FSR 1.0: Máximo Rendimiento (0.50x)",
+                    subtitle = "Reconstruye la imagen desde la mitad de resolución para máxima tasa de cuadros",
+                    selected = fsrMode == 3,
+                    items = 15,
+                    index = 4,
+                    onSelect = {
+                        fsrMode = 3
+                        prefs.fsrMode = 3
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.LightMode,
+                    title = "Iluminación 2D Dinámica por Ataques",
+                    subtitle = "Ataques como Lanzallamas, Rayo o Bola Sombra emiten luces puntuales y sombras en tiempo real",
+                    checked = lighting2d,
+                    items = 15,
+                    index = 5,
+                    onCheckedChange = {
+                        lighting2d = it
+                        prefs.lighting2d = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Filtro Gráfico: Original (Sharp Bilinear)",
+                    subtitle = "Aspecto fiel y nítido original de Pokémon Reloaded",
+                    selected = videoFilter == "sharp" && !xbrzEnabled,
+                    items = 15,
+                    index = 6,
+                    onSelect = {
+                        videoFilter = "sharp"
+                        prefs.videoFilter = "sharp"
+                        xbrzEnabled = false
+                        prefs.xbrzEnabled = false
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Filtro Gráfico: Super-Resolución xBRZ 4x HD",
+                    subtitle = "Vectorización neuronal en tiempo real de curvas de pixel-art para pantallas 1080p",
+                    selected = xbrzEnabled && videoFilter == "xbrz_4x",
+                    items = 15,
+                    index = 7,
+                    onSelect = {
+                        videoFilter = "xbrz_4x"
+                        prefs.videoFilter = "xbrz_4x"
+                        xbrzEnabled = true
+                        prefs.xbrzEnabled = true
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Filtro Gráfico: Super-Resolución xBRZ 6x HD",
+                    subtitle = "Máxima definición de contornos pixel-art para pantallas 2K/AMOLED",
+                    selected = xbrzEnabled && videoFilter == "xbrz_6x",
+                    items = 15,
+                    index = 8,
+                    onSelect = {
+                        videoFilter = "xbrz_6x"
+                        prefs.videoFilter = "xbrz_6x"
+                        xbrzEnabled = true
+                        prefs.xbrzEnabled = true
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Filtro Gráfico: AMD FidelityFX FSR Shader",
+                    subtitle = "Aplica pase de nitidez RCAS adaptativo al contraste en la composición final",
+                    selected = videoFilter == "fsr",
+                    items = 15,
+                    index = 9,
+                    onSelect = {
+                        videoFilter = "fsr"
+                        prefs.videoFilter = "fsr"
+                        xbrzEnabled = false
+                        prefs.xbrzEnabled = false
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Accesibilidad Cromática: Desactivado",
+                    subtitle = "Gama de colores RGB natural sin transformaciones",
+                    selected = colorblindMode == 0,
+                    items = 15,
+                    index = 10,
+                    onSelect = {
+                        colorblindMode = 0
+                        prefs.colorblindMode = 0
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Accesibilidad Cromática: Protanopía",
+                    subtitle = "Matriz de corrección GPU para deficiencia en conos rojos",
+                    selected = colorblindMode == 1,
+                    items = 15,
+                    index = 11,
+                    onSelect = {
+                        colorblindMode = 1
+                        prefs.colorblindMode = 1
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Accesibilidad Cromática: Deuteranopía",
+                    subtitle = "Matriz de corrección GPU para deficiencia en conos verdes",
+                    selected = colorblindMode == 2,
+                    items = 15,
+                    index = 12,
+                    onSelect = {
+                        colorblindMode = 2
+                        prefs.colorblindMode = 2
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Accesibilidad Cromática: Tritanopía",
+                    subtitle = "Matriz de corrección GPU para deficiencia en conos azules",
+                    selected = colorblindMode == 3,
+                    items = 15,
+                    index = 13,
+                    onSelect = {
+                        colorblindMode = 3
+                        prefs.colorblindMode = 3
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Tasa de Refresco Adaptativa LTPO / VRR",
+                    subtitle = "Modula la pantalla entre 10 Hz/30 Hz en diálogos y 60 Hz/120 Hz en movimiento con Surface.setFrameRate",
+                    checked = adaptiveLtpo,
+                    items = 15,
+                    index = 14,
+                    onCheckedChange = {
+                        adaptiveLtpo = it
+                        prefs.adaptiveLtpo = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Ajustes de Rendimiento (v0.9.0 & Bajo Nivel)") {
+                SwitchRow(
+                    icon = Icons.Filled.Memory,
+                    title = "Compilador JIT Tier-2 ARM64 (AArch64 Nativo)",
+                    subtitle = "Recompilador JIT en Rust que emite código máquina nativo en páginas seguras W^X puenteando el intérprete GML",
+                    checked = jitArm64,
+                    items = 5,
+                    index = 0,
+                    onCheckedChange = {
+                        jitArm64 = it
+                        prefs.jitArm64 = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Afinidad Big.LITTLE de CPU (sched_setaffinity)",
+                    subtitle = "Ancla los hilos de Lógica y Render a núcleos Cortex-A7x/X y tareas auxiliares a núcleos Cortex-A5x",
+                    checked = bigLittleAffinity,
+                    items = 5,
+                    index = 1,
+                    onCheckedChange = {
+                        bigLittleAffinity = it
+                        prefs.bigLittleAffinity = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Resolución Dinámica DRS con Controlador PID",
+                    subtitle = "Muestrea el frametime cada 20 cuadros: modula la resolución entre 0.85x y 1.0x para garantizar 60 FPS",
+                    checked = drsEnabled,
+                    items = 5,
+                    index = 2,
+                    onCheckedChange = {
+                        drsEnabled = it
+                        prefs.drsEnabled = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Despertador de Frecuencia GPU Mali (Anti-Downclock)",
+                    subtitle = "Envía sugerencias de 16.66 ms a APerformanceHintManager e inyecta glFlush() para mantener 800-950 MHz",
+                    checked = gpuWakeup,
+                    items = 5,
+                    index = 3,
+                    onCheckedChange = {
+                        gpuWakeup = it
+                        prefs.gpuWakeup = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Memory,
+                    title = "Mega-Atlas Virtual Zero Draw Calls",
+                    subtitle = "Fusiona quads y texturas en un VBO mapeado persistente reduciendo las llamadas de dibujo a 1-3 por frame",
+                    checked = megaAtlas,
+                    items = 5,
+                    index = 4,
+                    onCheckedChange = {
+                        megaAtlas = it
+                        prefs.megaAtlas = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Ajustes de Controles (v0.9.0 & Movilidad)") {
+                ChoiceRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "D-Pad Fijo Clásico",
+                    subtitle = "Posición estática fija del pad virtual en la esquina inferior izquierda",
+                    selected = !dynamicDpad,
+                    items = 7,
+                    index = 0,
+                    onSelect = {
+                        dynamicDpad = false
+                        prefs.dynamicDpad = false
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "D-Pad Flotante Dinámico",
+                    subtitle = "El centro del joystick se ancla automáticamente bajo el pulgar al tocar la pantalla",
+                    selected = dynamicDpad,
+                    items = 7,
+                    index = 1,
+                    onSelect = {
+                        dynamicDpad = true
+                        prefs.dynamicDpad = true
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Tune,
+                    title = "Rueda Radial Táctica de Combate (Doom/GTA)",
+                    subtitle = "Aplica dilatación temporal (0.2x) y despliega menú radial a 60 FPS para cambios y objetos rápidos",
+                    checked = radialMenu,
+                    items = 7,
+                    index = 2,
+                    onCheckedChange = {
+                        radialMenu = it
+                        prefs.radialMenu = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.TouchApp,
+                    title = "Gestos Multitáctiles Inteligentes",
+                    subtitle = "Deslizar 3 dedos para Rebobinar tiempo, pellizco con 2 dedos para Zoom y doble toque lateral para Turbo",
+                    checked = gestures,
+                    items = 7,
+                    index = 3,
+                    onCheckedChange = {
+                        gestures = it
+                        prefs.gestures = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Disposición de Controles: Estándar",
+                    subtitle = "Distribución equilibrada tradicional para agarre a dos manos",
+                    selected = !oneHanded,
+                    items = 7,
+                    index = 4,
+                    onSelect = {
+                        oneHanded = false
+                        prefs.oneHanded = false
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Disposición de Controles: Ergonómica Una Mano",
+                    subtitle = "Reposiciona el D-Pad y los botones en arco curvo accesible para el pulgar derecho",
+                    selected = oneHanded,
+                    items = 7,
+                    index = 5,
+                    onSelect = {
+                        oneHanded = true
+                        prefs.oneHanded = true
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Vibration,
+                    title = "Vibración Háptica HD en Mandos Físicos Pro",
+                    subtitle = "Control independiente de motores de baja y alta frecuencia para DualSense, Xbox y Razer Kishi",
+                    checked = fishingHaptic,
+                    items = 7,
+                    index = 6,
+                    onCheckedChange = {
+                        fishingHaptic = it
+                        prefs.fishingHaptic = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Ajustes de Audio (v0.9.0 & DSP)") {
+                SwitchRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Audio Espacial 3D Binaural (HRTF)",
+                    subtitle = "Filtro Head-Related Transfer Function para ubicar la posición acústica de ataques y Pokémon en auriculares",
+                    checked = audio3d,
+                    items = 3,
+                    index = 0,
+                    onCheckedChange = {
+                        audio3d = it
+                        prefs.audio3d = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Extension,
+                    title = "Música Reactiva de Combate (Stems de Tensión)",
+                    subtitle = "Mezcla dinámica en tiempo real que intensifica percusiones y sintetizadores cuando el HP cae por debajo del 20%",
+                    checked = reactiveStems,
+                    items = 3,
+                    index = 1,
+                    onCheckedChange = {
+                        reactiveStems = it
+                        prefs.reactiveStems = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Preservación de Tono en Modo Turbo (WSOLA)",
+                    subtitle = "Resampler armónico Waveform Similarity Overlap-Add: acelera el juego de 2x a 8x sin agudos chillones",
+                    checked = wsola,
+                    items = 3,
+                    index = 2,
+                    onCheckedChange = {
+                        wsola = it
+                        prefs.wsola = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
+
+            SettingsGroup("Ajustes de Interfaz & QoL (v0.9.0)") {
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Estilo de Interfaz: Moderno Glassmorphism",
+                    subtitle = "Paneles traslúcidos con desenfoque Gaussiano/Dual-Kawase del juego en vivo y paleta Material You",
+                    selected = uiStyle == "glassmorphic",
+                    items = 9,
+                    index = 0,
+                    onSelect = {
+                        uiStyle = "glassmorphic"
+                        prefs.uiStyle = "glassmorphic"
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Palette,
+                    title = "Estilo de Interfaz: Clásico Sólido",
+                    subtitle = "Diseño opaco tradicional con bordes redondeados y estilo clásico",
+                    selected = uiStyle == "classic",
+                    items = 9,
+                    index = 1,
+                    onSelect = {
+                        uiStyle = "classic"
+                        prefs.uiStyle = "classic"
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Save,
+                    title = "Carrusel de Guardados Rápidos (WebP)",
+                    subtitle = "Muestra capturas WebP ultraligeras (160x120) con estado del equipo y mapa en ranuras de guardado",
+                    checked = quickSave,
+                    items = 9,
+                    index = 2,
+                    onCheckedChange = {
+                        quickSave = it
+                        prefs.quickSave = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Info,
+                    title = "Asistente Flotante de Debilidades de Pokédex",
+                    subtitle = "Widget compacto en combate que calcula y muestra debilidades (x2, x4), resistencias e inmunidades del rival",
+                    checked = berryTracker,
+                    items = 9,
+                    index = 3,
+                    onCheckedChange = {
+                        berryTracker = it
+                        prefs.berryTracker = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Fullscreen,
+                    title = "Modo Ventana Flotante / Picture-in-Picture (PiP)",
+                    subtitle = "Continúa farmeando o caminando con el emulador en miniatura sobre otras aplicaciones",
+                    checked = pipMode,
+                    items = 9,
+                    index = 4,
+                    onCheckedChange = {
+                        pipMode = it
+                        prefs.pipMode = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Alarm,
+                    title = "Notificación Dinámica en Segundo Plano (Live Activity)",
+                    subtitle = "Aviso en vivo de Android 14/15/16 en barra de estado con pasos restantes para huevos y repelente",
+                    checked = liveActivity,
+                    items = 9,
+                    index = 5,
+                    onCheckedChange = {
+                        liveActivity = it
+                        prefs.liveActivity = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Speed,
+                    title = "Salto de Intro de Batalla (Smart Pre-Roll Skip)",
+                    subtitle = "Omite la animación del remolino al entrar en combate en hierba alta para entrar directo a la acción",
+                    checked = smartPrerollSkip,
+                    items = 9,
+                    index = 6,
+                    onCheckedChange = {
+                        smartPrerollSkip = it
+                        prefs.smartPrerollSkip = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Article,
+                    title = "Caja Negra de Repetición Determinista (<30 KB)",
+                    subtitle = "Graba la semilla RNG y las pulsaciones por cuadro para exportar y reproducir batallas a 60/120 FPS",
+                    checked = replayBlackbox,
+                    items = 9,
+                    index = 7,
+                    onCheckedChange = {
+                        replayBlackbox = it
+                        prefs.replayBlackbox = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                SwitchRow(
+                    icon = Icons.Filled.Star,
+                    title = "Sistema de Logros Retro con Banners Animados",
+                    subtitle = "Notificaciones emergentes a 60 FPS al cumplir hitos de gimnasio, variocolores o retos especiales",
+                    checked = achievements,
+                    items = 9,
+                    index = 8,
+                    onCheckedChange = {
+                        achievements = it
+                        prefs.achievements = it
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+            }
 
             SettingsGroup("Mando y Controles") {
                 NavRow(

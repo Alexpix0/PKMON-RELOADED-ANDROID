@@ -20,6 +20,20 @@ impl Game {
         while let Some(&object_id) = holders.borrow().get(position) {
             let mut iter = self.room.instance_list.iter_by_object(object_id);
             while let Some(instance) = iter.next(&self.room.instance_list) {
+                if crate::touch_controls::active_static_partition_enabled() && event_id == gml::ev::STEP {
+                    let inst = self.room.instance_list.get(instance);
+                    if inst.speed.get() == 0.into()
+                        && inst.hspeed.get() == 0.into()
+                        && inst.vspeed.get() == 0.into()
+                        && inst.gravity.get() == 0.into()
+                        && !inst.timeline_running.get()
+                    {
+                        let has_alarms = inst.alarms.borrow().values().any(|&a| a >= 0);
+                        if !has_alarms {
+                            continue;
+                        }
+                    }
+                }
                 self.run_instance_event(event_id, event_sub, instance, other.unwrap_or(instance), None)?;
             }
             position += 1;

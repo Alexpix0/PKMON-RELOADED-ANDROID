@@ -352,6 +352,184 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("saveReminder", value).apply()
         }
 
+    // ------------------------------------------------------------------------------------------
+    // Ajustes v0.9.0 ("El Salto Generacional y Magia Negra")
+
+    /** Perfil Combate Extremo Mali/Infinix (0.85x scale, CAS 60%, 40 particles, Alpha-Test Discard) */
+    var extremeCombat: Boolean
+        get() = prefs.getBoolean("extremeCombat", false)
+        set(value) {
+            prefs.edit().putBoolean("extremeCombat", value).apply()
+        }
+
+    /** Alpha-Test Early-Z FPK para GPUs ARM Mali */
+    var maliEarlyZ: Boolean
+        get() = prefs.getBoolean("maliEarlyZ", true)
+        set(value) {
+            prefs.edit().putBoolean("maliEarlyZ", value).apply()
+        }
+
+    /** Despertador de Frecuencia GPU (Bypass downclock MediaTek) */
+    var gpuWakeup: Boolean
+        get() = prefs.getBoolean("gpuWakeup", true)
+        set(value) {
+            prefs.edit().putBoolean("gpuWakeup", value).apply()
+        }
+
+    /** Salto Rápido de Intro de Batalla (Smart Pre-Roll Skip) */
+    var smartPrerollSkip: Boolean
+        get() = prefs.getBoolean("smartPrerollSkip", false)
+        set(value) {
+            prefs.edit().putBoolean("smartPrerollSkip", value).apply()
+        }
+
+    /** Refresco Adaptativo LTPO / VRR (10 Hz a 120 Hz) */
+    var adaptiveLtpo: Boolean
+        get() = prefs.getBoolean("adaptiveLtpo", false)
+        set(value) {
+            prefs.edit().putBoolean("adaptiveLtpo", value).apply()
+        }
+
+    /** Modo Ventana Flotante / Picture-in-Picture (PiP) */
+    var pipMode: Boolean
+        get() = prefs.getBoolean("pipMode", false)
+        set(value) {
+            prefs.edit().putBoolean("pipMode", value).apply()
+        }
+
+    /** Notificación Dinámica en Segundo Plano (Live Activity) */
+    var liveActivity: Boolean
+        get() = prefs.getBoolean("liveActivity", false)
+        set(value) {
+            prefs.edit().putBoolean("liveActivity", value).apply()
+        }
+
+    /** Partición de Instancias Activas vs Estáticas */
+    var activeStaticPartition: Boolean
+        get() = prefs.getBoolean("activeStaticPartition", true)
+        set(value) {
+            prefs.edit().putBoolean("activeStaticPartition", value).apply()
+        }
+
+    /** Mega-Atlas Virtual y Fusión Zero-Draw-Call */
+    var megaAtlas: Boolean
+        get() = prefs.getBoolean("megaAtlas", false)
+        set(value) {
+            prefs.edit().putBoolean("megaAtlas", value).apply()
+        }
+
+    /** Perfil AMD FidelityFX FSR 1.0 (0=Off, 1=Ultra Calidad, 2=Equilibrado, 3=Rendimiento) */
+    var fsrMode: Int
+        get() = prefs.getInt("fsrMode", 0)
+        set(value) {
+            prefs.edit().putInt("fsrMode", value).apply()
+        }
+
+    /** Resolución Dinámica DRS con Bucle PID Continuo */
+    var drsEnabled: Boolean
+        get() = prefs.getBoolean("drsEnabled", false)
+        set(value) {
+            prefs.edit().putBoolean("drsEnabled", value).apply()
+        }
+
+    /** Super-Resolución Neuronal xBRZ 4x/6x HD */
+    var xbrzEnabled: Boolean
+        get() = prefs.getBoolean("xbrzEnabled", false)
+        set(value) {
+            prefs.edit().putBoolean("xbrzEnabled", value).apply()
+        }
+
+    /** Iluminación 2D Dinámica y Sombras por Ataques */
+    var lighting2d: Boolean
+        get() = prefs.getBoolean("lighting2d", false)
+        set(value) {
+            prefs.edit().putBoolean("lighting2d", value).apply()
+        }
+
+    /** Audio Espacial 3D Binaural HRTF */
+    var audio3d: Boolean
+        get() = prefs.getBoolean("audio3d", false)
+        set(value) {
+            prefs.edit().putBoolean("audio3d", value).apply()
+        }
+
+    /** Música Reactiva de Combate (Stems de Tensión) */
+    var reactiveStems: Boolean
+        get() = prefs.getBoolean("reactiveStems", false)
+        set(value) {
+            prefs.edit().putBoolean("reactiveStems", value).apply()
+        }
+
+    /** Preservación de Tono en Modo Turbo (WSOLA) */
+    var wsola: Boolean
+        get() = prefs.getBoolean("wsola", false)
+        set(value) {
+            prefs.edit().putBoolean("wsola", value).apply()
+        }
+
+    /** Filtro de Accesibilidad Cromática / Daltonismo (0=Off, 1=Protanopia, 2=Deuteranopia, 3=Tritanopia) */
+    var colorblindMode: Int
+        get() = prefs.getInt("colorblindMode", 0)
+        set(value) {
+            prefs.edit().putInt("colorblindMode", value).apply()
+        }
+
+    /** Rueda Táctica Radial de Combate (Doom/GTA) */
+    var radialMenu: Boolean
+        get() = prefs.getBoolean("radialMenu", false)
+        set(value) {
+            prefs.edit().putBoolean("radialMenu", value).apply()
+        }
+
+    /** Gestos Multitáctiles Inteligentes (Rewind, Zoom, Turbo) */
+    var gestures: Boolean
+        get() = prefs.getBoolean("gestures", false)
+        set(value) {
+            prefs.edit().putBoolean("gestures", value).apply()
+        }
+
+    /** Disposición Ergonómica a Una Mano (Arco para Pulgar) */
+    var oneHanded: Boolean
+        get() = prefs.getBoolean("oneHanded", false)
+        set(value) {
+            prefs.edit().putBoolean("oneHanded", value).apply()
+        }
+
+    /** Grabador de Repeticiones Deterministas (< 30 KB) */
+    var replayBlackbox: Boolean
+        get() = prefs.getBoolean("replayBlackbox", false)
+        set(value) {
+            prefs.edit().putBoolean("replayBlackbox", value).apply()
+        }
+
+    /** Sistema de Logros Retro con Banners Animados */
+    var achievements: Boolean
+        get() = prefs.getBoolean("achievements", false)
+        set(value) {
+            prefs.edit().putBoolean("achievements", value).apply()
+        }
+
+    /** Compilador JIT Tier-2 Nativo ARM64 */
+    var jitArm64: Boolean
+        get() = prefs.getBoolean("jitArm64", true)
+        set(value) {
+            prefs.edit().putBoolean("jitArm64", value).apply()
+        }
+
+    /** Afinidad Big.LITTLE de CPU */
+    var bigLittleAffinity: Boolean
+        get() = prefs.getBoolean("bigLittleAffinity", true)
+        set(value) {
+            prefs.edit().putBoolean("bigLittleAffinity", value).apply()
+        }
+
+    /** Estilo de Interfaz del Emulador ("classic", "glassmorphic") */
+    var uiStyle: String
+        get() = prefs.getString("uiStyle", "glassmorphic") ?: "glassmorphic"
+        set(value) {
+            prefs.edit().putString("uiStyle", value).apply()
+        }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
     fun writeVideo(filesDir: File) = writeVideoFile(
         filesDir = filesDir,
@@ -379,7 +557,32 @@ class Preferences(context: Context) {
         puzzlePause = puzzlePause,
         fishingHaptic = fishingHaptic,
         quickSave = quickSave,
-        saveReminder = saveReminder
+        saveReminder = saveReminder,
+        extremeCombat = extremeCombat,
+        maliEarlyZ = maliEarlyZ,
+        gpuWakeup = gpuWakeup,
+        smartPrerollSkip = smartPrerollSkip,
+        adaptiveLtpo = adaptiveLtpo,
+        pipMode = pipMode,
+        liveActivity = liveActivity,
+        activeStaticPartition = activeStaticPartition,
+        megaAtlas = megaAtlas,
+        fsrMode = fsrMode,
+        drsEnabled = drsEnabled,
+        xbrzEnabled = xbrzEnabled,
+        lighting2d = lighting2d,
+        audio3d = audio3d,
+        reactiveStems = reactiveStems,
+        wsola = wsola,
+        colorblindMode = colorblindMode,
+        radialMenu = radialMenu,
+        gestures = gestures,
+        floatingDpad = dynamicDpad,
+        oneHanded = oneHanded,
+        replayBlackbox = replayBlackbox,
+        achievements = achievements,
+        jitArm64 = jitArm64,
+        bigLittleAffinity = bigLittleAffinity
     )
 
     /**
@@ -415,6 +618,20 @@ class Preferences(context: Context) {
                 graphicsBackend = "vulkan"
                 force60Fps = true
                 turboMultiplier = 3.0f
+                batterySaver = false
+            }
+            "extreme_combat", "infinix", "combate_extremo" -> {
+                frameSkip = "0"
+                renderScale = "0.85"
+                weatherOpt = "minimal"
+                videoFilter = "sharp"
+                force60Fps = true
+                extremeCombat = true
+                maliEarlyZ = true
+                gpuWakeup = true
+                fsrMode = 2 // Balanced FSR
+                drsEnabled = true
+                activeStaticPartition = true
                 batterySaver = false
             }
         }

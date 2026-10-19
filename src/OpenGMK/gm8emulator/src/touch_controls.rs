@@ -2228,10 +2228,51 @@ pub fn tick_movement_step(is_moving: bool) {
         // ~3000 movement frames â‰ˆ 500 steps (standard egg hatch cycle)
         if count >= 3000 {
             EGG_STEPS.store(0, Ordering::Relaxed);
-            show_toast("HUEVO: Ciclo de eclosiÃ³n alcanzado (~500 pasos)");
+            show_toast("HUEVO: Ciclo de eclosión alcanzado (~500 pasos)");
             #[cfg(target_os = "android")]
             crate::android_main::jni_vibrate(35);
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Opciones Maestras de v0.9.0 (Opcionales en Ajustes)
+
+static EXTREME_COMBAT: AtomicBool = AtomicBool::new(false);
+static MALI_EARLYZ: AtomicBool = AtomicBool::new(true);
+static GPU_WAKEUP: AtomicBool = AtomicBool::new(true);
+static SMART_PREROLL_SKIP: AtomicBool = AtomicBool::new(false);
+static ADAPTIVE_LTPO: AtomicBool = AtomicBool::new(false);
+static PIP_MODE: AtomicBool = AtomicBool::new(false);
+static LIVE_ACTIVITY: AtomicBool = AtomicBool::new(false);
+static ACTIVE_STATIC_PARTITION: AtomicBool = AtomicBool::new(true);
+static MEGA_ATLAS: AtomicBool = AtomicBool::new(false);
+
+pub fn extreme_combat_enabled() -> bool { EXTREME_COMBAT.load(Ordering::Relaxed) }
+pub fn set_extreme_combat(enabled: bool) { EXTREME_COMBAT.store(enabled, Ordering::Relaxed); }
+
+pub fn mali_earlyz_enabled() -> bool { MALI_EARLYZ.load(Ordering::Relaxed) }
+pub fn set_mali_earlyz(enabled: bool) { MALI_EARLYZ.store(enabled, Ordering::Relaxed); }
+
+pub fn gpu_wakeup_enabled() -> bool { GPU_WAKEUP.load(Ordering::Relaxed) }
+pub fn set_gpu_wakeup(enabled: bool) { GPU_WAKEUP.store(enabled, Ordering::Relaxed); }
+
+pub fn smart_preroll_skip_enabled() -> bool { SMART_PREROLL_SKIP.load(Ordering::Relaxed) }
+pub fn set_smart_preroll_skip(enabled: bool) { SMART_PREROLL_SKIP.store(enabled, Ordering::Relaxed); }
+
+pub fn adaptive_ltpo_enabled() -> bool { ADAPTIVE_LTPO.load(Ordering::Relaxed) }
+pub fn set_adaptive_ltpo(enabled: bool) { ADAPTIVE_LTPO.store(enabled, Ordering::Relaxed); }
+
+pub fn pip_mode_enabled() -> bool { PIP_MODE.load(Ordering::Relaxed) }
+pub fn set_pip_mode(enabled: bool) { PIP_MODE.store(enabled, Ordering::Relaxed); }
+
+pub fn live_activity_enabled() -> bool { LIVE_ACTIVITY.load(Ordering::Relaxed) }
+pub fn set_live_activity(enabled: bool) { LIVE_ACTIVITY.store(enabled, Ordering::Relaxed); }
+
+pub fn active_static_partition_enabled() -> bool { ACTIVE_STATIC_PARTITION.load(Ordering::Relaxed) }
+pub fn set_active_static_partition(enabled: bool) { ACTIVE_STATIC_PARTITION.store(enabled, Ordering::Relaxed); }
+
+pub fn mega_atlas_enabled() -> bool { MEGA_ATLAS.load(Ordering::Relaxed) }
+pub fn set_mega_atlas(enabled: bool) { MEGA_ATLAS.store(enabled, Ordering::Relaxed); }
+
 

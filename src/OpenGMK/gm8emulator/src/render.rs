@@ -4,6 +4,9 @@ pub mod atlas;
 pub mod opengl;
 pub mod snapshot;
 pub mod vulkan;
+pub mod colorblind;
+pub mod fsr;
+pub mod lighting2d;
 
 use crate::types::Colour;
 use atlas::{AtlasRect, AtlasRef};

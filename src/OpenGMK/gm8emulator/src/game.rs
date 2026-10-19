@@ -19,6 +19,14 @@ pub mod spatial_hash;
 pub mod surface;
 pub mod transition;
 pub mod view;
+pub mod fast_lut;
+pub mod damage_memo;
+pub mod big_little;
+pub mod radial_menu;
+pub mod gestures;
+pub mod audio_3d;
+pub mod replay_blackbox;
+pub mod achievements;
 
 pub use background::Background;
 pub use replay::Replay;
@@ -2111,6 +2119,11 @@ impl Game {
         // Update xprevious and yprevious for all instances
         let mut iter = self.room.instance_list.iter_by_drawing();
         while let Some(instance) = iter.next(&self.room.instance_list).map(|x| self.room.instance_list.get(x)) {
+            if crate::touch_controls::active_static_partition_enabled() {
+                if instance.speed.get() == 0.into() && instance.hspeed.get() == 0.into() && instance.vspeed.get() == 0.into() && instance.path_index.get() < 0 {
+                    continue;
+                }
+            }
             instance.xprevious.set(instance.x.get());
             instance.yprevious.set(instance.y.get());
             instance.path_positionprevious.set(instance.path_position.get().clamp(0.into(), 1.into()));
