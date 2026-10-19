@@ -642,14 +642,18 @@ impl Game {
                 function.0(&arg_values[..args.len()])
             },
             Node::Script { args, script_id } => {
+                let mut arg_values: [Value; 16] = Default::default();
+                for (src, dest) in args.iter().zip(arg_values.iter_mut()) {
+                    *dest = self.eval(src, context)?;
+                }
+
+                // Check native precompiled AOT fast-path hook
+                if let Some(res) = crate::gml::jit::try_fast_path(*script_id, self, context, &arg_values[..args.len()]) {
+                    return res;
+                }
+
                 if let Some(Some(script)) = self.assets.scripts.get(*script_id) {
                     let instructions = script.compiled.clone();
-
-                    let mut arg_values: [Value; 16] = Default::default();
-                    for (src, dest) in args.iter().zip(arg_values.iter_mut()) {
-                        *dest = self.eval(src, context)?;
-                    }
-
                     let mut new_context = Context::copy_with_args(context, arg_values, args.len());
                     self.execute(&instructions, &mut new_context)?;
                     Ok(new_context.return_value)

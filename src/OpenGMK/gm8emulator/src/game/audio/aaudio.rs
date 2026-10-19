@@ -24,8 +24,13 @@ use super::mixer::{Mixer, MixerHandle};
 const AAUDIO_OK: i32 = 0;
 const AAUDIO_DIRECTION_OUTPUT: i32 = 0;
 const AAUDIO_FORMAT_PCM_FLOAT: i32 = 2;
+const AAUDIO_SHARING_MODE_EXCLUSIVE: i32 = 0;
+const AAUDIO_SHARING_MODE_SHARED: i32 = 1;
 const AAUDIO_PERFORMANCE_MODE_LOW_LATENCY: i32 = 12;
 const AAUDIO_CALLBACK_RESULT_CONTINUE: i32 = 0;
+const AAUDIO_ERROR_DISCONNECTED: i32 = -899;
+
+static RECONNECT_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The mixer currently being pulled by the AAudio callback, if any.
 static MIXER: Mutex<Option<Mixer>> = Mutex::new(None);
@@ -74,21 +79,36 @@ extern "C" {
     fn AAudio_createStreamBuilder(builder: *mut *mut c_void) -> i32;
     fn AAudioStreamBuilder_setDirection(builder: *mut c_void, direction: i32);
     fn AAudioStreamBuilder_setFormat(builder: *mut c_void, format: i32);
+    fn AAudioStreamBuilder_setSharingMode(builder: *mut c_void, sharing_mode: i32);
     fn AAudioStreamBuilder_setChannelCount(builder: *mut c_void, channel_count: i32);
     fn AAudioStreamBuilder_setSampleRate(builder: *mut c_void, sample_rate: i32);
     fn AAudioStreamBuilder_setPerformanceMode(builder: *mut c_void, mode: i32);
+    fn AAudioStreamBuilder_setBufferCapacityInFrames(builder: *mut c_void, num_frames: i32);
     fn AAudioStreamBuilder_setDataCallback(
         builder: *mut c_void,
         callback: extern "C" fn(*mut c_void, *mut c_void, *mut c_void, i32) -> i32,
+        user_data: *mut c_void,
+    );
+    fn AAudioStreamBuilder_setErrorCallback(
+        builder: *mut c_void,
+        callback: extern "C" fn(*mut c_void, *mut c_void, i32),
         user_data: *mut c_void,
     );
     fn AAudioStreamBuilder_openStream(builder: *mut c_void, stream: *mut *mut c_void) -> i32;
     fn AAudioStreamBuilder_delete(builder: *mut c_void) -> i32;
     fn AAudioStream_requestStart(stream: *mut c_void) -> i32;
     fn AAudioStream_requestPause(stream: *mut c_void) -> i32;
+    fn AAudioStream_requestStop(stream: *mut c_void) -> i32;
     fn AAudioStream_requestFlush(stream: *mut c_void) -> i32;
     fn AAudioStream_getChannelCount(stream: *mut c_void) -> i32;
     fn AAudioStream_getSampleRate(stream: *mut c_void) -> i32;
+}
+
+extern "C" fn error_callback(_stream: *mut c_void, _user_data: *mut c_void, error: i32) {
+    if error == AAUDIO_ERROR_DISCONNECTED {
+        eprintln!("[aaudio] Dispositivo de audio desconectado/cambiado. Reconexion en caliente activada.");
+        RECONNECT_REQUESTED.store(true, Ordering::Release);
+    }
 }
 
 /// Set once the mixer has produced something audible. The launcher waits for this before handing the
@@ -170,10 +190,18 @@ pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, Sampl
         AAudioStreamBuilder_setChannelCount(builder, 2);
         AAudioStreamBuilder_setSampleRate(builder, 48000);
         AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+        AAudioStreamBuilder_setBufferCapacityInFrames(builder, 192); // ~2.0 ms latency at 48kHz
         AAudioStreamBuilder_setDataCallback(builder, data_callback, std::ptr::null_mut());
+        AAudioStreamBuilder_setErrorCallback(builder, error_callback, std::ptr::null_mut());
 
+        // Try exclusive mode first for minimum latency (< 3 ms), fallback to shared mode if unsupported
+        AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_EXCLUSIVE);
         let mut stream: *mut c_void = std::ptr::null_mut();
-        let result = AAudioStreamBuilder_openStream(builder, &mut stream);
+        let mut result = AAudioStreamBuilder_openStream(builder, &mut stream);
+        if result != AAUDIO_OK {
+            AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_SHARED);
+            result = AAudioStreamBuilder_openStream(builder, &mut stream);
+        }
         AAudioStreamBuilder_delete(builder);
         check(result, "AAudioStreamBuilder_openStream")?;
 
@@ -192,6 +220,15 @@ pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, Sampl
             .spawn(|| {
                 let mut chunk = [0.0f32; 512];
                 while FEEDER_ACTIVE.load(Ordering::Relaxed) {
+                    if RECONNECT_REQUESTED.swap(false, Ordering::AcqRel) {
+                        let stream_ptr = STREAM.load(Ordering::Relaxed) as *mut c_void;
+                        if !stream_ptr.is_null() {
+                            unsafe {
+                                let _ = AAudioStream_requestStop(stream_ptr);
+                                let _ = AAudioStream_requestStart(stream_ptr);
+                            }
+                        }
+                    }
                     if STREAM_PAUSED.load(Ordering::Relaxed) {
                         std::thread::sleep(std::time::Duration::from_millis(15));
                         continue;

@@ -13,7 +13,9 @@ pub mod pathfinding;
 pub mod platform;
 pub mod recording;
 pub mod replay;
+pub mod rewind;
 pub mod savestate;
+pub mod spatial_hash;
 pub mod surface;
 pub mod transition;
 pub mod view;
@@ -181,6 +183,9 @@ pub struct Game {
     pub uninit_fields_are_zero: bool,
     pub uninit_args_are_zero: bool,
     pub swap_creation_events: bool,
+
+    pub spatial_hash: spatial_hash::SpatialHashGrid,
+    pub rewind_manager: rewind::RewindManager,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
 
@@ -1382,6 +1387,8 @@ impl Game {
             uninit_fields_are_zero: settings.zero_uninitialized_vars,
             uninit_args_are_zero: !settings.error_on_uninitialized_args,
             swap_creation_events: settings.swap_creation_events,
+            spatial_hash: spatial_hash::SpatialHashGrid::new(),
+            rewind_manager: rewind::RewindManager::new(),
             potential_step_settings: Default::default(),
             transition_kind: 0,
             transition_steps: 80,
@@ -2332,6 +2339,45 @@ impl Game {
         // Tell renderer to finish the frame
         if self.auto_draw && !skip_visual_frame && self.scene_change.is_none() && self.play_type != PlayType::Record {
             self.renderer.present(self.window_inner_size.0, self.window_inner_size.1, self.scaling);
+        }
+
+        // Live Time Rewind: step back or record current frame
+        if rewind::is_rewind_requested() {
+            self.rewind_manager.rewind_step(self);
+        } else {
+            self.rewind_manager.record_frame(self);
+        }
+
+        // Threaded Game Loop: publish immutable RenderStateSnapshot to Lock-Free SPSC queue for 90/120 Hz AMOLED interpolation
+        if crate::render::snapshot::is_interpolation_enabled() {
+            let mut entities = Vec::new();
+            let mut iter = self.room.instance_list.iter_by_drawing();
+            while let Some(handle) = iter.next(&self.room.instance_list) {
+                let inst = self.room.instance_list.get(handle);
+                entities.push(crate::render::snapshot::RenderEntitySnapshot {
+                    id: handle,
+                    x: inst.x.get().into_inner() as f32,
+                    y: inst.y.get().into_inner() as f32,
+                    sprite_index: inst.sprite_index.get(),
+                    image_index: inst.image_index.get().into_inner() as f32,
+                    xscale: inst.image_xscale.get().into_inner() as f32,
+                    yscale: inst.image_yscale.get().into_inner() as f32,
+                    angle: inst.image_angle.get().into_inner() as f32,
+                    alpha: inst.image_alpha.get().into_inner() as f32,
+                    blend_col: [1.0, 1.0, 1.0, 1.0],
+                });
+            }
+            let (view_x, view_y) = if self.room.views_enabled && !self.room.views.is_empty() {
+                (self.room.views[0].source_x as f32, self.room.views[0].source_y as f32)
+            } else {
+                (0.0, 0.0)
+            };
+            crate::render::snapshot::SNAPSHOT_QUEUE.publish(crate::render::snapshot::RenderStateSnapshot {
+                timestamp: std::time::Instant::now(),
+                view_x,
+                view_y,
+                entities,
+            });
         }
 
         // Clear inputs for this frame

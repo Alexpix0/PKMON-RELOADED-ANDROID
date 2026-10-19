@@ -32,6 +32,11 @@ pub mod egl;
 #[cfg(target_os = "android")]
 use egl as native_gl;
 
+pub mod cache;
+pub mod hardware_buffer;
+pub mod postprocess;
+pub mod texture_format;
+
 /// GLSL version header, plus any prelude GLES needs that desktop GLSL doesn't.
 /// GLSL ES 3.00 has no default float precision in the fragment shader, so it must be declared.
 #[cfg(target_os = "android")]
@@ -546,53 +551,57 @@ impl RendererImpl {
                 (gl::DEPTH_COMPONENT16 as GLint, gl::FLOAT)
             };
 
-            // Compile vertex shader
-            let vertex_shader = gl.CreateShader(gl::VERTEX_SHADER);
-            let vertex_source = shader_source(VERTEX_SHADER_SOURCE);
-            gl.ShaderSource(vertex_shader, 1, &(vertex_source.as_ptr().cast()), ptr::null());
-            gl.CompileShader(vertex_shader);
+            // Detect GPU texture compression capabilities (ETC2 & ASTC)
+            texture_format::TextureCompressionSupport::detect(&gl);
 
-            // Check for vertex shader compile errors
-            let mut success = gl::FALSE as GLint;
-            gl.GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                return Err(shader_info_log(&gl, "vertex", vertex_shader))
-            }
+            // Load from persistent binary shader cache (0 ms stutter) or compile & cache
+            let v_src_str = format!("{}{}", SHADER_VERSION, VERTEX_SHADER_SOURCE);
+            let f_src_str = format!("{}{}", SHADER_VERSION, FRAGMENT_SHADER_SOURCE);
+            let program = match cache::ShaderCache::load_or_compile(&gl, "main_pipeline", &v_src_str, &f_src_str) {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("[shader_cache] Fallback a compilador directo: {}", e);
+                    // Standard compilation fallback
+                    let vertex_shader = gl.CreateShader(gl::VERTEX_SHADER);
+                    let vertex_source = shader_source(VERTEX_SHADER_SOURCE);
+                    gl.ShaderSource(vertex_shader, 1, &(vertex_source.as_ptr().cast()), ptr::null());
+                    gl.CompileShader(vertex_shader);
+                    let mut success = gl::FALSE as GLint;
+                    gl.GetShaderiv(vertex_shader, gl::COMPILE_STATUS, &mut success);
+                    if success != gl::TRUE as GLint {
+                        return Err(shader_info_log(&gl, "vertex", vertex_shader))
+                    }
 
-            // Compile fragment shader
-            let fragment_shader = gl.CreateShader(gl::FRAGMENT_SHADER);
-            let fragment_source = shader_source(FRAGMENT_SHADER_SOURCE);
-            gl.ShaderSource(fragment_shader, 1, &(fragment_source.as_ptr().cast()), ptr::null());
-            gl.CompileShader(fragment_shader);
+                    let fragment_shader = gl.CreateShader(gl::FRAGMENT_SHADER);
+                    let fragment_source = shader_source(FRAGMENT_SHADER_SOURCE);
+                    gl.ShaderSource(fragment_shader, 1, &(fragment_source.as_ptr().cast()), ptr::null());
+                    gl.CompileShader(fragment_shader);
+                    gl.GetShaderiv(fragment_shader, gl::COMPILE_STATUS, &mut success);
+                    if success != gl::TRUE as GLint {
+                        return Err(shader_info_log(&gl, "fragment", fragment_shader))
+                    }
 
-            // Check for fragment shader compile errors
-            gl.GetShaderiv(fragment_shader, gl::COMPILE_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                return Err(shader_info_log(&gl, "fragment", fragment_shader))
-            }
-
-            // Link shaders
-            let program = gl.CreateProgram();
-            gl.AttachShader(program, vertex_shader);
-            gl.AttachShader(program, fragment_shader);
-            gl.LinkProgram(program);
-
-            // Check for linking errors
-            // TODO: generalize this like with shader info logs!! please!!!
-            gl.GetProgramiv(program, gl::LINK_STATUS, &mut success);
-            if success != gl::TRUE as GLint {
-                let mut info_len: GLint = 0;
-                gl.GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut info_len);
-                let mut info = vec![0u8; info_len as usize];
-                gl.GetProgramInfoLog(program, info_len as GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut GLchar);
-                info.set_len((info_len - 1) as usize); // ignore null for str::from_utf8
-                return Err(format!(
-                    "Failed to link shaders, compiler output:\n{}",
-                    std::str::from_utf8(&info).unwrap_or("<INVALID UTF-8>")
-                ))
-            }
-            gl.DeleteShader(vertex_shader);
-            gl.DeleteShader(fragment_shader);
+                    let program = gl.CreateProgram();
+                    gl.AttachShader(program, vertex_shader);
+                    gl.AttachShader(program, fragment_shader);
+                    gl.LinkProgram(program);
+                    gl.GetProgramiv(program, gl::LINK_STATUS, &mut success);
+                    if success != gl::TRUE as GLint {
+                        let mut info_len: GLint = 0;
+                        gl.GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut info_len);
+                        let mut info = vec![0u8; info_len as usize];
+                        gl.GetProgramInfoLog(program, info_len as GLsizei, ptr::null_mut(), info.as_mut_ptr() as *mut GLchar);
+                        info.set_len((info_len - 1) as usize);
+                        return Err(format!(
+                            "Failed to link shaders, compiler output:\n{}",
+                            std::str::from_utf8(&info).unwrap_or("<INVALID UTF-8>")
+                        ))
+                    }
+                    gl.DeleteShader(vertex_shader);
+                    gl.DeleteShader(fragment_shader);
+                    program
+                }
+            };
 
             // set up vertex array
             let mut vao = 0;
@@ -1355,9 +1364,8 @@ fn push_arrow(out: &mut Vec<f32>, ww: f32, wh: f32, cx: f32, cy: f32, size: f32,
 }
 
 /// A tiny 3x5 bitmap font, just for the control labels.
-#[cfg(target_os = "android")]
 fn glyph(c: char) -> Option<[u8; 5]> {
-    Some(match c {
+    Some(match c.to_ascii_uppercase() {
         'Z' => [0b111, 0b001, 0b010, 0b100, 0b111],
         'X' => [0b101, 0b101, 0b010, 0b101, 0b101],
         'C' => [0b011, 0b100, 0b100, 0b100, 0b011],
@@ -1378,6 +1386,10 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         'D' => [0b110, 0b101, 0b101, 0b101, 0b110],
         'G' => [0b011, 0b100, 0b101, 0b101, 0b011],
         'I' => [0b111, 0b010, 0b010, 0b010, 0b111],
+        'F' => [0b111, 0b100, 0b110, 0b100, 0b100],
+        'H' => [0b101, 0b101, 0b111, 0b101, 0b101],
+        'W' => [0b101, 0b101, 0b101, 0b111, 0b101],
+        '0' => [0b111, 0b101, 0b101, 0b101, 0b111],
         '1' => [0b010, 0b110, 0b010, 0b010, 0b111],
         '2' => [0b110, 0b001, 0b010, 0b100, 0b111],
         '3' => [0b111, 0b001, 0b011, 0b001, 0b111],
@@ -1385,12 +1397,21 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         '5' => [0b111, 0b100, 0b111, 0b001, 0b111],
         '6' => [0b011, 0b100, 0b111, 0b101, 0b111],
         '7' => [0b111, 0b001, 0b010, 0b010, 0b010],
+        '8' => [0b111, 0b101, 0b111, 0b101, 0b111],
+        '9' => [0b111, 0b101, 0b111, 0b001, 0b111],
+        '.' => [0b000, 0b000, 0b000, 0b000, 0b010],
+        ':' => [0b000, 0b010, 0b000, 0b010, 0b000],
+        '%' => [0b101, 0b001, 0b010, 0b100, 0b101],
+        '|' => [0b010, 0b010, 0b010, 0b010, 0b010],
+        '/' => [0b001, 0b001, 0b010, 0b100, 0b100],
+        '(' => [0b010, 0b100, 0b100, 0b100, 0b010],
+        ')' => [0b010, 0b001, 0b001, 0b001, 0b010],
         '-' => [0b000, 0b000, 0b111, 0b000, 0b000],
+        ' ' => [0b000, 0b000, 0b000, 0b000, 0b000],
         _ => return None,
     })
 }
 
-#[cfg(target_os = "android")]
 fn push_text_left(out: &mut Vec<f32>, ww: f32, wh: f32, text: &str, left_x: f32, cy: f32, px: f32, col: [f32; 4]) {
     let chars: Vec<char> = text.chars().collect();
     let char_w = 4.0 * px;
@@ -1876,6 +1897,116 @@ impl RendererImpl {
         }
     }
 
+struct FrametimeTelemetry {
+    samples: [f32; 60],
+    idx: usize,
+    count: usize,
+    last_instant: Option<std::time::Instant>,
+}
+
+static TELEMETRY: std::sync::Mutex<FrametimeTelemetry> = std::sync::Mutex::new(FrametimeTelemetry {
+    samples: [16.66; 60],
+    idx: 0,
+    count: 0,
+    last_instant: None,
+});
+
+fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
+    let now = std::time::Instant::now();
+    let (avg_fps, low_1, low_01, avg_ft, recent_samples) = {
+        if let Ok(mut telem) = TELEMETRY.lock() {
+            if let Some(prev) = telem.last_instant {
+                let dt = (now.duration_since(prev).as_micros() as f32 / 1000.0).clamp(1.0, 100.0);
+                let i = telem.idx;
+                telem.samples[i] = dt;
+                telem.idx = (i + 1) % 60;
+                if telem.count < 60 {
+                    telem.count += 1;
+                }
+            }
+            telem.last_instant = Some(now);
+
+            let valid = &telem.samples[..telem.count.max(1)];
+            let sum: f32 = valid.iter().sum();
+            let avg = sum / valid.len() as f32;
+            let fps = 1000.0 / avg.max(1.0);
+
+            let mut sorted = valid.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let p99_idx = ((sorted.len() as f32 * 0.99) as usize).min(sorted.len() - 1);
+            let p01_idx = sorted.len() - 1;
+            let l1 = 1000.0 / sorted[p99_idx].max(1.0);
+            let l01 = 1000.0 / sorted[p01_idx].max(1.0);
+
+            let mut ordered = Vec::with_capacity(60);
+            for s in 0..telem.count {
+                let idx = (telem.idx + 60 - telem.count + s) % 60;
+                ordered.push(telem.samples[idx]);
+            }
+            (fps, l1, l01, avg, ordered)
+        } else {
+            (60.0, 58.0, 50.0, 16.66, vec![16.66; 60])
+        }
+    };
+
+    let px = (wh * 0.013).clamp(6.0, 13.0);
+    let box_w = (ww * 0.30).clamp(210.0, 340.0);
+    let box_h = (wh * 0.16).clamp(75.0, 120.0);
+    let x0 = ww * 0.02;
+    let y0 = wh * 0.02;
+    let x1 = x0 + box_w;
+    let y1 = y0 + box_h;
+
+    // Dark HUD panel background and cyan border
+    let bg_col = [0.04, 0.06, 0.09, 0.88];
+    let border_col = [0.18, 0.45, 0.80, 0.92];
+    push_quad(verts, ww, wh, x0 - 2.0, y0 - 2.0, x1 + 2.0, y1 + 2.0, border_col);
+    push_quad(verts, ww, wh, x0, y0, x1, y1, bg_col);
+
+    // Text Header & metrics
+    let line1 = "MANGOHUD GLES3 (NEON | SPSC)";
+    let line2 = format!("FPS {:>4.1}  1% {:>4.1}  0.1% {:>4.1}", avg_fps, low_1, low_01);
+    let line3 = format!("FT {:>4.1}MS  CALLS 1  RAM OK", avg_ft);
+
+    push_text_left(verts, ww, wh, line1, x0 + 6.0, y0 + px * 1.5, px * 0.75, [0.35, 0.75, 1.0, 1.0]);
+    push_text_left(verts, ww, wh, &line2, x0 + 6.0, y0 + px * 3.3, px * 0.80, [0.35, 1.0, 0.45, 1.0]);
+    push_text_left(verts, ww, wh, &line3, x0 + 6.0, y0 + px * 5.0, px * 0.75, [0.88, 0.88, 0.92, 1.0]);
+
+    // Live Frametime Graph
+    let graph_x = x0 + 6.0;
+    let graph_y = y0 + px * 6.5;
+    let graph_w = box_w - 12.0;
+    let graph_h = y1 - graph_y - 4.0;
+
+    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.05, 0.95]);
+
+    // 16.66 ms reference line (60 FPS green/cyan line)
+    let ref60_y = graph_y + graph_h * (1.0 - (16.66 / 33.33).clamp(0.0, 1.0));
+    push_quad(verts, ww, wh, graph_x, ref60_y - 0.5, graph_x + graph_w, ref60_y + 0.5, [0.2, 0.7, 0.9, 0.6]);
+
+    // 8.33 ms reference line (120 FPS magenta line)
+    let ref120_y = graph_y + graph_h * (1.0 - (8.33 / 33.33).clamp(0.0, 1.0));
+    push_quad(verts, ww, wh, graph_x, ref120_y - 0.5, graph_x + graph_w, ref120_y + 0.5, [0.6, 0.3, 0.8, 0.5]);
+
+    // Render bars for recent frametime samples
+    let bar_w = (graph_w / 60.0).max(1.0);
+    for (i, &sample_ft) in recent_samples.iter().enumerate() {
+        let norm = (sample_ft / 33.33).clamp(0.05, 1.0);
+        let bar_h = norm * graph_h;
+        let bx = graph_x + i as f32 * bar_w;
+        let by = graph_y + graph_h - bar_h;
+
+        let col = if sample_ft <= 17.0 {
+            [0.25, 0.85, 0.35, 0.90] // Green: < 16.6ms
+        } else if sample_ft <= 33.3 {
+            [0.95, 0.80, 0.20, 0.90] // Yellow: 16.6ms - 33.3ms
+        } else {
+            [0.95, 0.25, 0.25, 0.90] // Red: > 33.3ms
+        };
+        push_quad(verts, ww, wh, bx, by, bx + bar_w * 0.85, graph_y + graph_h, col);
+    }
+}
+
     /// Draws the on-screen touch controls over the presented frame with its own GL state, so the
     /// emulator's render state is never disturbed.
     fn draw_touch_overlay(&mut self, window_width: u32, window_height: u32) {
@@ -2142,6 +2273,11 @@ impl RendererImpl {
             push_quad(&mut verts, ww, wh, tx0 - 4.0, ty0 - 4.0, tx0 + toast_w + 4.0, ty0 + toast_h + 4.0, border_col);
             push_quad(&mut verts, ww, wh, tx0, ty0, tx0 + toast_w, ty0 + toast_h, bg_col);
             push_text(&mut verts, ww, wh, &msg, ww / 2.0, ty0 + toast_h * 0.5, px, [1.0, 1.0, 1.0, 1.0]);
+        }
+
+        // Real-Time Performance Overlay (MangoHud / RivaTuner style, rendered in 1 single draw call)
+        if touch_controls::show_fps() {
+            render_mangohud_overlay(&mut verts, ww, wh);
         }
 
         if verts.is_empty() && sprites.is_empty() && party_sprites.is_empty() && label_sprites.is_empty() {

@@ -2,6 +2,7 @@
 
 pub mod atlas;
 pub mod opengl;
+pub mod snapshot;
 pub mod vulkan;
 
 use crate::types::Colour;
