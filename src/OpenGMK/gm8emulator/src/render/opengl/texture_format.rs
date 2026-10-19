@@ -3,7 +3,8 @@
 //! ETC2 is a standard format across all OpenGL ES 3.0+ hardware.
 //! ASTC provides high-efficiency adaptive block sizes (4x4, 8x8) reducing VRAM consumption by ~60%.
 
-use gl::types::*;
+use super::gl;
+use super::gl::types::*;
 
 pub const GL_COMPRESSED_RGB8_ETC2: GLenum = 0x9274;
 pub const GL_COMPRESSED_RGBA8_ETC2_EAC: GLenum = 0x9278;

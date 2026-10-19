@@ -222,7 +222,6 @@ fn load_video() {
 fn load_controls() {
     let path = PathBuf::from(format!("/data/data/{}/files/controls.conf", PACKAGE_DIR));
     let mut buttons = HashMap::new();
-    crate::touch_controls::set_sprite_opacity(1.0);
     if let Ok(text) = fs::read_to_string(&path) {
         eprintln!("[pad] leyendo {}", path.display());
         for line in text.lines() {
@@ -234,12 +233,38 @@ fn load_controls() {
             let Some((name, value)) = line.split_once('=') else { continue };
             if name.trim() == "stick" {
                 STICK_ENABLED.store(value.trim() != "0", std::sync::atomic::Ordering::Relaxed);
-            } else if name.trim() == "opacity" {
-                if let Ok(opacity) = value.trim().parse::<f32>() { crate::touch_controls::set_sprite_opacity(opacity); }
             } else if name.trim() == "pad" {
                 // A pad was connected when the game started, so start with the controls out of the
                 // way; touching the screen brings them back.
                 crate::touch_controls::set_pad_active(value.trim() != "0");
+            } else if name.trim() == "opacity" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_opacity(pct);
+                }
+            } else if name.trim() == "scale" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_scale(pct);
+                }
+            } else if name.trim() == "margin_x" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_margin_x(pct);
+                }
+            } else if name.trim() == "margin_y" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_margin_y(pct);
+                }
+            } else if name.trim() == "haptics" {
+                set_haptics_enabled(value.trim() != "0");
+            } else if name.trim() == "deadzone" {
+                if let Ok(pct) = value.trim().parse::<u32>() {
+                    crate::touch_controls::set_joystick_dead(pct);
+                }
+            } else if name.trim() == "show_num_keys" {
+                crate::touch_controls::set_show_num_keys(value.trim() != "0");
+            } else if name.trim() == "autofire" {
+                crate::touch_controls::set_autofire_enabled(value.trim() != "0");
+            } else if name.trim() == "dynamic_dpad" {
+                crate::touch_controls::set_dynamic_dpad_enabled(value.trim() != "0");
             } else if let (Ok(code), Some(key)) = (name.trim().parse::<AKeyCode>(), parse_key(value.trim())) {
                 buttons.insert(code, key);
             }
@@ -249,88 +274,8 @@ fn load_controls() {
     if let Ok(mut map) = MAPPED_BUTTONS.get_or_init(|| Mutex::new(HashMap::new())).lock() {
         *map = buttons;
     }
-}
-
-/// Reads the overlay the launcher's editor left behind: the style, what drives the movement, the
-/// overall size and where each control sits. Best effort: with no file, the built-in defaults are used.
-fn load_touch() {
-    let path = PathBuf::from(format!("/data/data/{}/files/touch.conf", PACKAGE_DIR));
-    let Ok(text) = fs::read_to_string(&path) else { return };
-    eprintln!("[overlay] leyendo {}", path.display());
-    crate::touch_controls::clear_layout();
-    let mut positions: Vec<(String, f32, f32)> = Vec::new();
-    let mut sizes: Vec<(String, f32)> = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue
-        }
-        let Some((name, value)) = line.split_once('=') else { continue };
-        let (name, value) = (name.trim(), value.trim());
-        match name {
-            "style" => crate::touch_controls::set_overlay_style(match value {
-                "classic" => crate::touch_controls::OverlayStyle::Classic,
-                "none" => crate::touch_controls::OverlayStyle::None,
-                _ => crate::touch_controls::OverlayStyle::New,
-            }),
-            "move" => crate::touch_controls::set_move_mode(if value == "dpad" {
-                crate::touch_controls::MoveMode::Dpad
-            } else {
-                crate::touch_controls::MoveMode::Joystick
-            }),
-            "scale" => {
-                if let Ok(scale) = value.parse::<f32>() {
-                    crate::touch_controls::set_ui_scale(scale);
-                }
-            },
-            "opacity" => {
-                if let Ok(opacity) = value.parse::<f32>() {
-                    crate::touch_controls::set_sprite_opacity(opacity);
-                }
-            },
-            _ => {
-                if let Some(target) = name.strip_prefix("pos.") {
-                    let mut parts = value.split(',');
-                    if let (Some(cx), Some(cy)) = (parts.next(), parts.next()) {
-                        if let (Ok(cx), Ok(cy)) = (cx.trim().parse::<f32>(), cy.trim().parse::<f32>()) {
-                            positions.push((target.to_string(), cx, cy));
-                        }
-                    }
-                } else if let Some(target) = name.strip_prefix("size.") {
-                    if let Ok(scale) = value.parse::<f32>() {
-                        sizes.push((target.to_string(), scale));
-                    }
-                }
-            },
-        }
-    }
-    for (name, cx, cy) in &positions {
-        let scale = sizes.iter().find(|(other, _)| other == name).map(|(_, scale)| *scale).unwrap_or(1.0);
-        crate::touch_controls::set_placement(name, *cx, *cy, scale);
-    }
-    for (name, scale) in &sizes {
-        if positions.iter().any(|(other, _, _)| other == name) {
-            continue
-        }
-        let (cx, cy) = crate::touch_controls::default_center(name).unwrap_or((0.5, 0.5));
-        crate::touch_controls::set_placement(name, cx, cy, *scale);
-    }
-    let style = match crate::touch_controls::overlay_style() {
-        crate::touch_controls::OverlayStyle::New => "new",
-        crate::touch_controls::OverlayStyle::Classic => "classic",
-        crate::touch_controls::OverlayStyle::None => "none",
-    };
-    let movement = match crate::touch_controls::move_mode() {
-        crate::touch_controls::MoveMode::Joystick => "joystick",
-        crate::touch_controls::MoveMode::Dpad => "dpad",
-    };
-    eprintln!(
-        "[overlay] estilo={} move={} escala={} controles={}",
-        style,
-        movement,
-        crate::touch_controls::ui_scale(),
-        positions.len().max(sizes.len())
-    );
+    let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
+    crate::touch_controls::load_layout_file(&layout_path);
 }
 
 /// The key names the control screen can write into `controls.conf`.
@@ -366,9 +311,10 @@ fn stick_update(x: f32, y: f32) {
         let bit = 1u32 << index;
         let was = state & bit != 0;
         if *held && !was {
-            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: MOVEMENT_KEYS[index], text: None });
+            jni_vibrate(12);
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: JOYSTICK_KEYS[index], text: None });
         } else if !*held && was {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: MOVEMENT_KEYS[index] });
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: JOYSTICK_KEYS[index] });
         }
         if *held {
             state |= bit;
@@ -377,6 +323,18 @@ fn stick_update(x: f32, y: f32) {
         }
     }
     STICK_STATE.store(state, std::sync::atomic::Ordering::Relaxed);
+    let is_moving = state != 0;
+    if is_moving {
+        crate::touch_controls::tick_movement_step(true);
+    }
+    if crate::touch_controls::auto_run_enabled() {
+        static STICK_AUTO_RUN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if is_moving && !STICK_AUTO_RUN.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::E, text: None });
+        } else if !is_moving && STICK_AUTO_RUN.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
+        }
+    }
     if state != before {
         // Only when the direction actually changes, so holding a direction does not flood logcat.
         eprintln!("[pad] ejes x={:.2} y={:.2} -> direcciones {}", x, y, state);
@@ -394,10 +352,13 @@ fn axis_value(motion: &android_activity::input::MotionEvent, axis: Axis) -> f32 
 
 fn stick_release() {
     let state = STICK_STATE.swap(0, std::sync::atomic::Ordering::Relaxed);
-    for (index, key) in MOVEMENT_KEYS.iter().enumerate() {
+    for (index, key) in JOYSTICK_KEYS.iter().enumerate() {
         if state & (1 << index) != 0 {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key: *key });
         }
+    }
+    if crate::touch_controls::auto_run_enabled() {
+        android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::E });
     }
 }
 
@@ -412,86 +373,31 @@ fn key_code_value(keycode: &android_activity::input::Keycode) -> i32 {
 /// the right control. Keyed by Android pointer id.
 static POINTER_CONTROLS: Mutex<Option<HashMap<i32, usize>>> = Mutex::new(None);
 
+static HAPTICS_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_haptics_enabled(enabled: bool) {
+    HAPTICS_ENABLED.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn haptics_enabled() -> bool {
+    HAPTICS_ENABLED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The pointer the party wheel is following, if any.
 static WHEEL_PTR: Mutex<Option<i32>> = Mutex::new(None);
-static FIELD_POINTER: Mutex<Option<(i32,usize)>> = Mutex::new(None);
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SliderTarget {
+    Scale,
+    Opacity,
+}
+static EDIT_SLIDER_DRAG: Mutex<Option<(SliderTarget, i32)>> = Mutex::new(None);
 
 /// Sends a key as a quick tap. The engine defers the release to the end of the poll, so the game
 /// still sees it as pressed.
 fn tap_key(key: ramen::input::Key) {
-    if crate::touch_controls::key_held_by_buttons(key) || joystick_holds(key) { return }
     android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
     android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
-}
-
-fn joystick_holds(key: Key) -> bool {
-    let state=MOVEMENT_STATE.load(std::sync::atomic::Ordering::Relaxed);
-    MOVEMENT_KEYS.iter().enumerate().any(|(i,k)| *k==key && state & (1<<i)!=0)
-}
-
-fn control_key_down(index: usize) {
-    use crate::touch_controls as tc;
-    if tc::controls()[index].name == "o" && matches!(tc::current_context(), tc::WORLD | tc::BATTLE | tc::SAFARI) {
-        crate::touch_navigation::arm_bag();
-    } else {
-        crate::touch_navigation::disarm_bag();
-    }
-    tc::set_pressed(index, true);
-
-    // Trick combination
-    if tc::controls()[index].name == tc::COMBO_BUTTON_NAME {
-        for key in [Key::LeftControl, Key::P] {
-            android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
-        }
-        tc::set_combo_used();
-        return;
-    }
-
-    let name = tc::controls()[index].name;
-    if tc::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
-        tc::register_autofire(index);
-    }
-
-    let key = tc::controls()[index].key;
-    match key {
-        Key::LeftArrow => tc::picker_step(-1),
-        Key::RightArrow => tc::picker_step(1),
-        _ => {}
-    }
-
-    if tc::fishing_haptic_enabled() && (name == "v" || name == "c" || name == "z") {
-        jni_vibrate(28);
-    } else {
-        jni_vibrate(18);
-    }
-
-    let keys = tc::control_keys(index);
-    let held = keys.map(|k| k.is_some_and(|k| tc::key_held_by_buttons(k) || joystick_holds(k)));
-    for (i, k) in keys.into_iter().enumerate() {
-        if let Some(k) = k.filter(|_| !held[i]) {
-            android::push_input(ramen::platform::android::InputEvent::KeyDown { key: k, text: None });
-        }
-    }
-}
-
-fn control_key_up(index: usize) {
-    use crate::touch_controls as tc;
-    if !tc::is_pressed(index) { return; }
-    tc::set_pressed(index, false);
-    tc::unregister_autofire(index);
-
-    if tc::controls()[index].name == tc::COMBO_BUTTON_NAME {
-        for key in [Key::LeftControl, Key::P] {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
-        }
-        return;
-    }
-
-    for key in tc::control_keys(index).into_iter().flatten() {
-        if !tc::key_held_by_buttons(key) && !joystick_holds(key) {
-            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
-        }
-    }
 }
 
 pub fn jni_vibrate(duration_ms: i64) {
@@ -519,7 +425,7 @@ pub fn jni_vibrate(duration_ms: i64) {
             )?
             .l()?;
         if vibrator.is_null() {
-            return Ok(());
+            return Ok(())
         }
         env.call_method(
             &vibrator,
@@ -531,6 +437,54 @@ pub fn jni_vibrate(duration_ms: i64) {
     })();
 }
 
+fn control_key_down(index: usize) {
+    crate::touch_controls::set_pressed(index, true);
+    // The trick combination needs both keys held at once, so it is not one key like the rest.
+    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
+        }
+        // It has done its job: it takes itself away until the next new game.
+        crate::touch_controls::set_combo_used();
+        return
+    }
+    let name = crate::touch_controls::CONTROLS[index].name;
+    if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
+        crate::touch_controls::register_autofire(index);
+    }
+    let key = crate::touch_controls::CONTROLS[index].key;
+    // On the character picker the overlay's arrows travel with the game's own selection, so the
+    // buttons stay around the character the player is on rather than around the first one.
+    match key {
+        Key::LeftArrow => crate::touch_controls::picker_step(-1),
+        Key::RightArrow => crate::touch_controls::picker_step(1),
+        _ => {},
+    }
+    if crate::touch_controls::fishing_haptic_enabled() && (name == "v" || name == "c" || name == "z") {
+        jni_vibrate(28);
+    } else {
+        jni_vibrate(18);
+    }
+    android::push_input(ramen::platform::android::InputEvent::KeyDown {
+        key,
+        text: None,
+    });
+}
+
+fn control_key_up(index: usize) {
+    crate::touch_controls::set_pressed(index, false);
+    crate::touch_controls::unregister_autofire(index);
+    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+        for key in [Key::LeftControl, Key::P] {
+            android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+        }
+        return
+    }
+    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::CONTROLS[index].key });
+}
+
+/// Pointers whose press was swallowed to bring the on-screen controls back, so that their release
+/// is ignored too instead of reaching the game as a stray mouse-up.
 static SWALLOWED_INPUTS: Mutex<Option<std::collections::HashSet<i32>>> = Mutex::new(None);
 static DRAGGED_ITEM: Mutex<Option<(String, f32, f32)>> = Mutex::new(None);
 
@@ -1273,13 +1227,212 @@ extern "C" {
     fn ANativeWindow_acquire(window: *mut std::ffi::c_void) -> i32;
 }
 
-/// Copies everything the engine prints to logcat.
+// ---------------------------------------------------------------------------------------------
+// System (soft) keyboard.
+//
+// The game has no Android view of its own to type into, so the activity's `InputConnection` sends
+// what is typed here through the JNI exports below. `ime_pump` then feeds it to ramen the same way
+// a hardware keyboard would, right before each poll, so the game's dialog sees a normal key tap.
+
+/// What the system keyboard committed, waiting for the next poll.
+enum ImeEvent {
+    Text(String),
+    Backspace,
+    Enter,
+}
+
+fn ime_queue() -> &'static Mutex<std::collections::VecDeque<ImeEvent>> {
+    static QUEUE: std::sync::OnceLock<Mutex<std::collections::VecDeque<ImeEvent>>> = std::sync::OnceLock::new();
+    QUEUE.get_or_init(|| Mutex::new(std::collections::VecDeque::new()))
+}
+
+/// Feeds what the system keyboard typed into ramen's queue. Each character goes in as a quick key
+/// tap that carries its text (`KeyDown{text}` + `KeyUp`): the press sets `keyboard_lastkey` and
+/// `vk_anykey`, the text fills `keyboard_string`, and the deferred release keeps the key down for
+/// the poll it arrived in - exactly what `tap_key` does for the on-screen buttons. Backspace and
+/// enter are plain taps of the keys the game already reads for those.
+pub fn ime_pump() {
+    let events: Vec<ImeEvent> = match ime_queue().lock() {
+        Ok(mut queue) => queue.drain(..).collect(),
+        Err(_) => return,
+    };
+    for event in events {
+        match event {
+            ImeEvent::Text(text) => {
+                for c in text.chars() {
+                    let key = ime_char_to_key(c);
+                    android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: Some(c) });
+                    android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
+                }
+            },
+            ImeEvent::Backspace => tap_key(Key::Backspace),
+            ImeEvent::Enter => tap_key(Key::Return),
+        }
+    }
+}
+
+/// The key a committed character is reported as. It only decides `keyboard_lastkey`; the character
+/// itself travels in the event's text. Letters and digits become the same keys a hardware keyboard
+/// would send; anything without a Game Maker key (accents, most signs) falls back to space, whose
+/// code no dialog key uses.
+fn ime_char_to_key(c: char) -> Key {
+    if c.is_ascii_alphabetic() {
+        return LETTERS[usize::from(c.to_ascii_uppercase() as u8 - b'A')]
+    }
+    if c.is_ascii_digit() {
+        const DIGITS: [Key; 10] = [
+            Key::Alpha0, Key::Alpha1, Key::Alpha2, Key::Alpha3, Key::Alpha4, Key::Alpha5, Key::Alpha6,
+            Key::Alpha7, Key::Alpha8, Key::Alpha9,
+        ];
+        return DIGITS[usize::from(c as u8 - b'0')]
+    }
+    match c {
+        ' ' => Key::Space,
+        '.' => Key::Period,
+        ',' => Key::Comma,
+        '-' => Key::Minus,
+        '+' => Key::Plus,
+        '=' => Key::Equals,
+        '/' => Key::Slash,
+        '\\' => Key::Backslash,
+        ';' => Key::Semicolon,
+        ':' => Key::Colon,
+        '\'' => Key::Apostrophe,
+        '"' => Key::Quote,
+        '?' => Key::QuestionMark,
+        '_' => Key::Underscore,
+        _ => Key::Space,
+    }
+}
+
+/// Called from the activity's `InputConnection` for every committed string.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'local>(
+    mut env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    text: jni::objects::JString<'local>,
+) {
+    let value: String = env.get_string(&text).map(Into::into).unwrap_or_default();
+    if value.is_empty() {
+        return
+    }
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Text(value));
+    }
+}
+
+/// Called from the activity's `InputConnection` for the delete key.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeBackspace<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+) {
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Backspace);
+    }
+}
+
+/// Called from the activity's `InputConnection` for the enter/done key.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeEnter<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+) {
+    if let Ok(mut queue) = ime_queue().lock() {
+        queue.push_back(ImeEvent::Enter);
+    }
+}
+
+/// Called from the activity whenever the system keyboard's height changes, so the renderer can keep
+/// the game above it.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeImeInset<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    height: jni::sys::jint,
+) {
+    // A keyboard taller than the window is not a keyboard: a value like that would push the game off
+    // the top and hide the controls behind nothing, so it is dropped rather than believed.
+    let (_, window_height) = android::window_size();
+    let height = height.max(0) as u32;
+    let height = if window_height > 0 && height >= window_height { 0 } else { height };
+    crate::touch_controls::set_ime_inset(height);
+    // The keyboard can be dropped by the system as well as by us - its own close button, or the back
+    // gesture - so whether it is up is taken from its height. Without this, the next touch on the
+    // game's text would be read as "already up" and would not raise it again.
+    IME_SHOWN.store(height > 0, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the system keyboard is up, so it is only raised or dropped on a change.
+static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Raises or drops the system keyboard, but only when that is a change.
+fn ime_set(visible: bool) {
+    if IME_SHOWN.swap(visible, std::sync::atomic::Ordering::Relaxed) != visible {
+        jni_set_ime(visible);
+    }
+}
+
+/// Raises or drops the system keyboard by calling the activity's static `GameActivity.setImeVisible`.
+/// The activity shows it from the UI thread, which Kotlin takes care of; here we only need to reach
+/// the class. `FindClass` would look on the system class path (the context the activity publishes is
+/// the Application), so the class is loaded through its own loader instead.
+fn jni_set_ime(visible: bool) {
+    with_activity(|env, class| {
+        env.call_static_method(class, "setImeVisible", "(Z)V", &[jni::objects::JValue::Bool(visible as u8)])?;
+        Ok(())
+    });
+}
+
+/// Asks the activity to read the keyboard's height again.
 ///
-/// An Android app's stdout and stderr go nowhere, so every diagnostic the emulator writes with
-/// `println!`/`eprintln!` - the `Runtime error: ... (room N)` line that says why the runner stopped
-/// above all - is thrown away, and a report of "the game threw me back to the app" arrives with no
-/// reason in it. With the process's own stdout and stderr pointing at a pipe, all of it lands in
-/// logcat, which is also what the launcher's log screen reads.
+/// The height normally arrives on its own, from the inset callback. This is the belt to that braces:
+/// while the engine believes the keyboard is up it asks again once in a while, so an inset callback
+/// that never came cannot leave the game pushed up top with the controls hidden.
+fn jni_refresh_ime_height() {
+    with_activity(|env, class| {
+        env.call_static_method(class, "refreshImeHeight", "()V", &[])?;
+        Ok(())
+    });
+}
+
+/// The activity's class, held for the life of the process.
+static ACTIVITY_CLASS: std::sync::OnceLock<jni::objects::GlobalRef> = std::sync::OnceLock::new();
+
+/// Attaches this thread and runs `f` with the activity's class.
+fn with_activity(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JClass) -> jni::errors::Result<()>) {
+    let ctx = ndk_context::android_context();
+    let Ok(vm) = (unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }) else { return };
+    // Permanent: the thread stays attached, and attaching on every call would only add work.
+    let Ok(mut env) = vm.attach_current_thread_permanently() else { return };
+    if ACTIVITY_CLASS.get().is_none() {
+        let loaded = (|| -> jni::errors::Result<jni::objects::GlobalRef> {
+            let context = unsafe { jni::objects::JObject::from_raw(ctx.context().cast()) };
+            let loader = env.call_method(&context, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?.l()?;
+            let name = env.new_string("com.klisee.reloaded.GameActivity")?;
+            let class = env
+                .call_method(
+                    &loader,
+                    "loadClass",
+                    "(Ljava/lang/String;)Ljava/lang/Class;",
+                    &[jni::objects::JValue::Object(&name)],
+                )?
+                .l()?;
+            env.new_global_ref(class)
+        })();
+        match loaded {
+            Ok(global) => {
+                let _ = ACTIVITY_CLASS.set(global);
+            },
+            Err(_) => return,
+        }
+    }
+    let Some(global) = ACTIVITY_CLASS.get() else { return };
+    let class = unsafe { jni::objects::JClass::from_raw(global.as_obj().as_raw()) };
+    let _ = f(&mut env, &class);
+}
+
+/// Copies everything the engine prints to logcat.
 fn pipe_std_to_logcat() {
     let mut fds = [0 as libc::c_int; 2];
     // SAFETY: `fds` is a valid array of two ints, which is what pipe() fills in.
@@ -1315,9 +1468,6 @@ fn pipe_std_to_logcat() {
                 if text.is_empty() {
                     continue
                 }
-                // A message repeated every frame - an unimplemented function called from a draw
-                // event, say - would flood the log and slow the game down with it, so runs of the
-                // same line are counted instead of copied.
                 if text == last {
                     repeats += 1;
                     continue
@@ -1358,15 +1508,41 @@ extern "C" {
 pub fn android_entry(app: AndroidApp) {
     // First thing, so the opening lines of the session are captured as well.
     pipe_std_to_logcat();
-    // Panics then land in the same log, with a backtrace.
     std::env::set_var("RUST_BACKTRACE", "1");
 
-    // The pad layout, the touch overlay and the video mode are read once, before any input can arrive.
+    // Install robust crash dump telemetry hook
+    std::panic::set_hook(Box::new(|info| {
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            *s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "Error desconocido"
+        };
+        let location = info.location().map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column())).unwrap_or_else(|| "ubicacion desconocida".to_string());
+        let current_room = crate::touch_controls::current_context();
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| format!("{} seg (UNIX)", d.as_secs()))
+            .unwrap_or_else(|_| "desconocida".to_string());
+        let dump = format!(
+            "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
+             Version: 0.7.0\n\
+             Fecha/Hora (UTC): {}\n\
+             Panico: {}\n\
+             Ubicacion: {}\n\
+             Estado de Sala: {}\n\
+             ===========================================\n",
+            timestamp, payload, location, current_room
+        );
+        eprintln!("{}", dump);
+        let _ = std::fs::write("/data/data/com.klisee.reloaded/files/crash_dump.txt", &dump);
+        let _ = std::fs::write("crash_dump.txt", &dump);
+    }));
+
+    // The pad layout and the video mode are read once, before any input can arrive.
     load_controls();
-    load_touch();
     load_video();
-    crate::touch_controls::load_layout(&fs::read_to_string(format!("/data/data/{}/files/touch-layout.conf", PACKAGE_DIR)).unwrap_or_default());
-    crate::touch_appearance::load(&fs::read_to_string(format!("/data/data/{}/files/touch-appearance.conf", PACKAGE_DIR)).unwrap_or_default());
 
     publish_window(&app);
 
@@ -1403,12 +1579,17 @@ pub fn android_entry(app: AndroidApp) {
         };
 
         crate::render::opengl::egl::log_stubbed_once();
-        provision_soundfont(game_exe.parent().unwrap_or_else(|| std::path::Path::new("/")));
+        let game_parent = game_exe.parent().unwrap_or_else(|| std::path::Path::new("/")).to_path_buf();
+        provision_soundfont(&game_parent);
+        let battle_dir = game_parent.join("data").join("pkmnbattle");
+        crate::asset::sprite_cache::start_background_asset_streamer(&battle_dir);
+
         logf(&format!("arrancando {}", game_exe.display()));
-        // The emulator returning is what finishes the Activity, so how it returned - its exit code,
-        // or a panic - is the answer to "why did the game kick me back to the launcher?".
         let outcome = std::panic::catch_unwind(|| {
-            crate::run_game(vec!["gm8emulator".to_string(), game_exe.to_string_lossy().into_owned()])
+            crate::run_game(vec![
+                "gm8emulator".to_string(),
+                game_exe.to_string_lossy().into_owned(),
+            ])
         });
         match outcome {
             Ok(code) => logf(&format!("el emulador termino (codigo {}); se cierra la actividad", code)),
@@ -1418,21 +1599,11 @@ pub fn android_entry(app: AndroidApp) {
     });
 
     let mut destroying = false;
-    let mut input_context = crate::touch_controls::current_context();
-    let mut input_identity=crate::touch_navigation::identity();
     let mut ime_check = Instant::now();
     let mut text_entry_was_open = false;
     loop {
         if game_over.load(std::sync::atomic::Ordering::SeqCst) || destroying {
             break
-        }
-        let context = crate::touch_controls::current_context();
-        let identity=crate::touch_navigation::identity();
-        if context!=input_context || identity!=input_identity {release_touch_profile();input_context=context;input_identity=identity;}
-        if let Some(key)=crate::touch_navigation::next_key(){tap_key(key);}
-        if let Some((down,x,y))=crate::touch_navigation::next_pointer(){
-            use ramen::platform::android::InputEvent;
-            android::push_input(if down {InputEvent::PointerDown{x,y,button:0}} else {InputEvent::PointerUp{x,y,button:0}});
         }
         // When the game moves to another state, drop the keys of controls that are no longer shown
         // so none of them stays stuck down.
@@ -1440,12 +1611,11 @@ pub fn android_entry(app: AndroidApp) {
             control_key_up(index);
         }
         flush_delayed_mouse();
+
         // The keyboard follows the game's text dialog: it comes up by itself the moment the game asks
         // for a name, and goes away when the dialog closes. Only the change is acted on, so closing
         // it by hand while the dialog is open is respected instead of being undone on the next tick;
-        // touching the text brings it back (see `pointer_down`). The engine reports the dialog from
-        // inside its own wait loop, so the game thread keeps the flag current even though the frame
-        // loop is not coming round.
+        // touching the text brings it back (see `pointer_down`).
         let text_entry = crate::touch_controls::text_entry_open();
         if text_entry != text_entry_was_open {
             text_entry_was_open = text_entry;
@@ -1458,6 +1628,7 @@ pub fn android_entry(app: AndroidApp) {
             ime_check = Instant::now();
             jni_refresh_ime_height();
         }
+
         game_app.poll_events(Some(Duration::from_millis(8)), |event| match event {
             PollEvent::Main(main_event) => match main_event {
                 // Init/Resume/Start all mean the surface is (re)available, which is also what
@@ -1516,11 +1687,6 @@ pub fn android_entry(app: AndroidApp) {
             _ => {},
         });
     }
-    logf(&format!(
-        "cerrando la actividad (juego terminado: {}, destruyendo: {})",
-        game_over.load(std::sync::atomic::Ordering::SeqCst),
-        destroying
-    ));
 }
 
 /// android-activity provides `ANativeActivity_onCreate`; this is the plain-Rust-ABI symbol
@@ -1691,7 +1857,8 @@ fn ensure_game_extracted() -> Result<PathBuf, String> {
     fs::rename(&staging, &game_dir)
         .map_err(|e| format!("no pude mover lo extraido a {}: {}", game_dir.display(), e))?;
 
-    let exe = game_dir.join(exe.file_name().unwrap());
+    let exe_name = exe.file_name().ok_or_else(|| "nombre de archivo .exe invalido".to_string())?;
+    let exe = game_dir.join(exe_name);
     logf(&format!("listo: {}", exe.display()));
     Ok(exe)
 }

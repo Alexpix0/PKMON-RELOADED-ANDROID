@@ -232,6 +232,14 @@ impl InstanceList {
         self.chunks.get(idx).unwrap_or_else(|| panic!("Invalid instance handle to InstanceList::get(): {}", idx))
     }
 
+    pub fn try_get(&self, idx: usize) -> Option<&Instance> {
+        self.chunks.get(idx)
+    }
+
+    pub fn len(&self) -> usize {
+        self.draw_order.len()
+    }
+
     pub fn get_by_instid(&self, instance_index: ID) -> Option<usize> {
         // gm8 will check the entire instance list if the first one doesn't match
         // instances shouldn't have matching ids anyway so eh it's faster to short circuit

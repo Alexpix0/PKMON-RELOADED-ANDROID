@@ -13,7 +13,8 @@ use std::{
     path::PathBuf,
     ptr,
 };
-use gl::types::*;
+use super::gl;
+use super::gl::types::*;
 
 pub struct ShaderCache;
 

@@ -2343,9 +2343,9 @@ impl Game {
 
         // Live Time Rewind: step back or record current frame
         if rewind::is_rewind_requested() {
-            self.rewind_manager.rewind_step(self);
+            self.rewind_manager.rewind_step(&self.room.instance_list);
         } else {
-            self.rewind_manager.record_frame(self);
+            self.rewind_manager.record_frame(&self.room.instance_list);
         }
 
         // Threaded Game Loop: publish immutable RenderStateSnapshot to Lock-Free SPSC queue for 90/120 Hz AMOLED interpolation

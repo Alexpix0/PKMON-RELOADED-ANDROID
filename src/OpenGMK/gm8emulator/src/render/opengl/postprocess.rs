@@ -5,7 +5,8 @@
 //! 2. Retro LCD / GBA Subpixel Grid with authentic color gamut correction.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use gl::types::*;
+use super::gl;
+use super::gl::types::*;
 
 pub static BLOOM_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static LCD_FILTER_ENABLED: AtomicBool = AtomicBool::new(false);

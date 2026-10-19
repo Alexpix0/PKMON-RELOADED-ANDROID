@@ -79,15 +79,15 @@ impl RewindManager {
     }
 
     /// Records the current state of active room instances into the circular history buffer.
-    pub fn record_frame(&mut self, game: &crate::game::Game) {
+    pub fn record_frame(&mut self, instance_list: &crate::instancelist::InstanceList) {
         if self.frames.len() >= MAX_REWIND_FRAMES {
             self.frames.pop_front();
         }
 
         let mut instance_states = Vec::new();
-        let mut iter = game.room.instance_list.iter_by_drawing();
-        while let Some(handle) = iter.next(&game.room.instance_list) {
-            let inst = game.room.instance_list.get(handle);
+        let mut iter = instance_list.iter_by_drawing();
+        while let Some(handle) = iter.next(instance_list) {
+            let inst = instance_list.get(handle);
             instance_states.push(InstanceRewindState {
                 handle,
                 x: inst.x.get().into_inner(),
@@ -105,11 +105,10 @@ impl RewindManager {
     }
 
     /// Rewinds one frame into the past, restoring entity positions.
-    pub fn rewind_step(&mut self, game: &mut crate::game::Game) -> bool {
+    pub fn rewind_step(&mut self, instance_list: &crate::instancelist::InstanceList) -> bool {
         if let Some(frame) = self.frames.pop_back() {
             for state in frame.instances {
-                if state.handle < game.room.instance_list.len() {
-                    let inst = game.room.instance_list.get(state.handle);
+                if let Some(inst) = instance_list.try_get(state.handle) {
                     inst.x.set(Real::from(state.x));
                     inst.y.set(Real::from(state.y));
                     inst.speed.set(Real::from(state.speed));

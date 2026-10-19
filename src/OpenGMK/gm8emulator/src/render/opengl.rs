@@ -1811,6 +1811,119 @@ fn push_modern_movement(out: &mut Vec<f32>, ww: f32, wh: f32, cx: f32, cy: f32, 
 }
 
 #[cfg(target_os = "android")]
+struct FrametimeTelemetry {
+    samples: [f32; 60],
+    idx: usize,
+    count: usize,
+    last_instant: Option<std::time::Instant>,
+}
+
+#[cfg(target_os = "android")]
+static TELEMETRY: std::sync::Mutex<FrametimeTelemetry> = std::sync::Mutex::new(FrametimeTelemetry {
+    samples: [16.66f32; 60],
+    idx: 0,
+    count: 0,
+    last_instant: None,
+});
+
+#[cfg(target_os = "android")]
+fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
+    let now = std::time::Instant::now();
+    let (avg_fps, low_1, low_01, avg_ft, recent_samples) = {
+        if let Ok(mut telem) = TELEMETRY.lock() {
+            if let Some(prev) = telem.last_instant {
+                let dt = (now.duration_since(prev).as_micros() as f32 / 1000.0f32).clamp(1.0f32, 100.0f32);
+                let i = telem.idx;
+                telem.samples[i] = dt;
+                telem.idx = (i + 1) % 60;
+                if telem.count < 60 {
+                    telem.count += 1;
+                }
+            }
+            telem.last_instant = Some(now);
+
+            let valid = &telem.samples[..telem.count.max(1)];
+            let sum: f32 = valid.iter().sum();
+            let avg = sum / (valid.len() as f32);
+            let fps = 1000.0f32 / avg.max(1.0f32);
+
+            let mut sorted = valid.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let p99_idx = ((sorted.len() as f32 * 0.99f32) as usize).min(sorted.len() - 1);
+            let p01_idx = sorted.len() - 1;
+            let l1 = 1000.0f32 / sorted[p99_idx].max(1.0f32);
+            let l01 = 1000.0f32 / sorted[p01_idx].max(1.0f32);
+
+            let mut ordered = Vec::with_capacity(60);
+            for s in 0..telem.count {
+                let idx = (telem.idx + 60 - telem.count + s) % 60;
+                ordered.push(telem.samples[idx]);
+            }
+            (fps, l1, l01, avg, ordered)
+        } else {
+            (60.0f32, 58.0f32, 50.0f32, 16.66f32, vec![16.66f32; 60])
+        }
+    };
+
+    let px = (wh * 0.013f32).clamp(6.0f32, 13.0f32);
+    let box_w = (ww * 0.30f32).clamp(210.0f32, 340.0f32);
+    let box_h = (wh * 0.16f32).clamp(75.0f32, 120.0f32);
+    let x0 = ww * 0.02f32;
+    let y0 = wh * 0.02f32;
+    let x1 = x0 + box_w;
+    let y1 = y0 + box_h;
+
+    // Dark HUD panel background and cyan border
+    let bg_col = [0.04f32, 0.06f32, 0.09f32, 0.88f32];
+    let border_col = [0.18f32, 0.45f32, 0.80f32, 0.92f32];
+    push_quad(verts, ww, wh, x0 - 2.0f32, y0 - 2.0f32, x1 + 2.0f32, y1 + 2.0f32, border_col);
+    push_quad(verts, ww, wh, x0, y0, x1, y1, bg_col);
+
+    // Text Header & metrics
+    let line1 = "MANGOHUD GLES3 (NEON | SPSC)";
+    let line2 = format!("FPS {:>4.1}  1% {:>4.1}  0.1% {:>4.1}", avg_fps, low_1, low_01);
+    let line3 = format!("FT {:>4.1}MS  CALLS 1  RAM OK", avg_ft);
+
+    push_text_left(verts, ww, wh, line1, x0 + 6.0f32, y0 + px * 1.5f32, px * 0.75f32, [0.35, 0.75, 1.0, 1.0]);
+    push_text_left(verts, ww, wh, &line2, x0 + 6.0f32, y0 + px * 3.3f32, px * 0.80f32, [0.35, 1.0, 0.45, 1.0]);
+    push_text_left(verts, ww, wh, &line3, x0 + 6.0f32, y0 + px * 5.0f32, px * 0.75f32, [0.88, 0.88, 0.92, 1.0]);
+
+    // Live Frametime Graph
+    let graph_x = x0 + 6.0f32;
+    let graph_y = y0 + px * 6.5f32;
+    let graph_w = box_w - 12.0f32;
+    let graph_h = y1 - graph_y - 4.0f32;
+
+    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.05, 0.95]);
+
+    // 16.66 ms reference line (60 FPS green/cyan line)
+    let ref60_y = graph_y + graph_h * (1.0f32 - (16.66f32 / 33.33f32).clamp(0.0f32, 1.0f32));
+    push_quad(verts, ww, wh, graph_x, ref60_y - 0.5f32, graph_x + graph_w, ref60_y + 0.5f32, [0.2, 0.7, 0.9, 0.6]);
+
+    // 8.33 ms reference line (120 FPS magenta line)
+    let ref120_y = graph_y + graph_h * (1.0f32 - (8.33f32 / 33.33f32).clamp(0.0f32, 1.0f32));
+    push_quad(verts, ww, wh, graph_x, ref120_y - 0.5f32, graph_x + graph_w, ref120_y + 0.5f32, [0.6, 0.3, 0.8, 0.5]);
+
+    // Render bars for recent frametime samples
+    let bar_w = (graph_w / 60.0f32).max(1.0f32);
+    for (i, &sample_ft) in recent_samples.iter().enumerate() {
+        let norm = (sample_ft / 33.33f32).clamp(0.05f32, 1.0f32);
+        let bar_h = norm * graph_h;
+        let bx = graph_x + i as f32 * bar_w;
+        let by = graph_y + graph_h - bar_h;
+
+        let col = if sample_ft <= 17.0f32 {
+            [0.25, 0.85, 0.35, 0.90] // Green: < 16.6ms
+        } else if sample_ft <= 33.3f32 {
+            [0.95, 0.80, 0.20, 0.90] // Yellow: 16.6ms - 33.3ms
+        } else {
+            [0.95, 0.25, 0.25, 0.90] // Red: > 33.3ms
+        };
+        push_quad(verts, ww, wh, bx, by, bx + bar_w * 0.85f32, graph_y + graph_h, col);
+    }
+}
+
+#[cfg(target_os = "android")]
 impl RendererImpl {
     /// Builds (once) the tiny program used to draw the touch controls over the frame.
     fn overlay_program(&mut self) -> Overlay {
@@ -1896,116 +2009,6 @@ impl RendererImpl {
             fields
         }
     }
-
-struct FrametimeTelemetry {
-    samples: [f32; 60],
-    idx: usize,
-    count: usize,
-    last_instant: Option<std::time::Instant>,
-}
-
-static TELEMETRY: std::sync::Mutex<FrametimeTelemetry> = std::sync::Mutex::new(FrametimeTelemetry {
-    samples: [16.66; 60],
-    idx: 0,
-    count: 0,
-    last_instant: None,
-});
-
-fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
-    let now = std::time::Instant::now();
-    let (avg_fps, low_1, low_01, avg_ft, recent_samples) = {
-        if let Ok(mut telem) = TELEMETRY.lock() {
-            if let Some(prev) = telem.last_instant {
-                let dt = (now.duration_since(prev).as_micros() as f32 / 1000.0).clamp(1.0, 100.0);
-                let i = telem.idx;
-                telem.samples[i] = dt;
-                telem.idx = (i + 1) % 60;
-                if telem.count < 60 {
-                    telem.count += 1;
-                }
-            }
-            telem.last_instant = Some(now);
-
-            let valid = &telem.samples[..telem.count.max(1)];
-            let sum: f32 = valid.iter().sum();
-            let avg = sum / valid.len() as f32;
-            let fps = 1000.0 / avg.max(1.0);
-
-            let mut sorted = valid.to_vec();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let p99_idx = ((sorted.len() as f32 * 0.99) as usize).min(sorted.len() - 1);
-            let p01_idx = sorted.len() - 1;
-            let l1 = 1000.0 / sorted[p99_idx].max(1.0);
-            let l01 = 1000.0 / sorted[p01_idx].max(1.0);
-
-            let mut ordered = Vec::with_capacity(60);
-            for s in 0..telem.count {
-                let idx = (telem.idx + 60 - telem.count + s) % 60;
-                ordered.push(telem.samples[idx]);
-            }
-            (fps, l1, l01, avg, ordered)
-        } else {
-            (60.0, 58.0, 50.0, 16.66, vec![16.66; 60])
-        }
-    };
-
-    let px = (wh * 0.013).clamp(6.0, 13.0);
-    let box_w = (ww * 0.30).clamp(210.0, 340.0);
-    let box_h = (wh * 0.16).clamp(75.0, 120.0);
-    let x0 = ww * 0.02;
-    let y0 = wh * 0.02;
-    let x1 = x0 + box_w;
-    let y1 = y0 + box_h;
-
-    // Dark HUD panel background and cyan border
-    let bg_col = [0.04, 0.06, 0.09, 0.88];
-    let border_col = [0.18, 0.45, 0.80, 0.92];
-    push_quad(verts, ww, wh, x0 - 2.0, y0 - 2.0, x1 + 2.0, y1 + 2.0, border_col);
-    push_quad(verts, ww, wh, x0, y0, x1, y1, bg_col);
-
-    // Text Header & metrics
-    let line1 = "MANGOHUD GLES3 (NEON | SPSC)";
-    let line2 = format!("FPS {:>4.1}  1% {:>4.1}  0.1% {:>4.1}", avg_fps, low_1, low_01);
-    let line3 = format!("FT {:>4.1}MS  CALLS 1  RAM OK", avg_ft);
-
-    push_text_left(verts, ww, wh, line1, x0 + 6.0, y0 + px * 1.5, px * 0.75, [0.35, 0.75, 1.0, 1.0]);
-    push_text_left(verts, ww, wh, &line2, x0 + 6.0, y0 + px * 3.3, px * 0.80, [0.35, 1.0, 0.45, 1.0]);
-    push_text_left(verts, ww, wh, &line3, x0 + 6.0, y0 + px * 5.0, px * 0.75, [0.88, 0.88, 0.92, 1.0]);
-
-    // Live Frametime Graph
-    let graph_x = x0 + 6.0;
-    let graph_y = y0 + px * 6.5;
-    let graph_w = box_w - 12.0;
-    let graph_h = y1 - graph_y - 4.0;
-
-    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.05, 0.95]);
-
-    // 16.66 ms reference line (60 FPS green/cyan line)
-    let ref60_y = graph_y + graph_h * (1.0 - (16.66 / 33.33).clamp(0.0, 1.0));
-    push_quad(verts, ww, wh, graph_x, ref60_y - 0.5, graph_x + graph_w, ref60_y + 0.5, [0.2, 0.7, 0.9, 0.6]);
-
-    // 8.33 ms reference line (120 FPS magenta line)
-    let ref120_y = graph_y + graph_h * (1.0 - (8.33 / 33.33).clamp(0.0, 1.0));
-    push_quad(verts, ww, wh, graph_x, ref120_y - 0.5, graph_x + graph_w, ref120_y + 0.5, [0.6, 0.3, 0.8, 0.5]);
-
-    // Render bars for recent frametime samples
-    let bar_w = (graph_w / 60.0).max(1.0);
-    for (i, &sample_ft) in recent_samples.iter().enumerate() {
-        let norm = (sample_ft / 33.33).clamp(0.05, 1.0);
-        let bar_h = norm * graph_h;
-        let bx = graph_x + i as f32 * bar_w;
-        let by = graph_y + graph_h - bar_h;
-
-        let col = if sample_ft <= 17.0 {
-            [0.25, 0.85, 0.35, 0.90] // Green: < 16.6ms
-        } else if sample_ft <= 33.3 {
-            [0.95, 0.80, 0.20, 0.90] // Yellow: 16.6ms - 33.3ms
-        } else {
-            [0.95, 0.25, 0.25, 0.90] // Red: > 33.3ms
-        };
-        push_quad(verts, ww, wh, bx, by, bx + bar_w * 0.85, graph_y + graph_h, col);
-    }
-}
 
     /// Draws the on-screen touch controls over the presented frame with its own GL state, so the
     /// emulator's render state is never disturbed.
@@ -2263,9 +2266,9 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
 
         // Active In-Game Toast notification overlay
         if let Some(msg) = touch_controls::get_active_toast() {
-            let px = (wh * 0.022).clamp(10.0, 24.0);
-            let toast_w = (msg.len() as f32 * px * 3.5).min(ww * 0.85);
-            let toast_h = px * 3.2;
+            let px = (wh * 0.022f32).clamp(10.0f32, 24.0f32);
+            let toast_w = (msg.len() as f32 * px * 3.5f32).min(ww * 0.85f32);
+            let toast_h = px * 3.2f32;
             let tx0 = (ww - toast_w) / 2.0;
             let ty0 = wh * 0.08;
             let bg_col = [0.08, 0.10, 0.14, 0.92];
