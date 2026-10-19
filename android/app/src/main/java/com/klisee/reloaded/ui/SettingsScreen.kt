@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.VideogameAsset
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.DirectionsBike
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -100,6 +101,7 @@ fun SettingsScreen(
     onLog: () -> Unit,
     onAbout: () -> Unit,
     onControls: () -> Unit,
+    onTouchSettings: () -> Unit = {},
     onMySaves: () -> Unit,
     onUpdateFound: (Update.Release) -> Unit,
     onThemeChange: (String) -> Unit = {},
@@ -540,11 +542,19 @@ fun SettingsScreen(
 
             SettingsGroup("Mando y Controles") {
                 NavRow(
-                    icon = Icons.Filled.SportsEsports,
-                    title = "Configuración de Controles",
-                    subtitle = "Personaliza botones en pantalla, opacidad, escala y mandos físicos",
-                    items = 3,
+                    icon = Icons.Filled.Tune,
+                    title = "Controles táctiles",
+                    subtitle = "Estilo (Moderno/Clásico), movimiento (Joystick/Cruceta), opacidad y editor",
+                    items = 4,
                     index = 0,
+                    onClick = onTouchSettings,
+                )
+                NavRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Configuración de Mando Físico",
+                    subtitle = "Mapeo de botones de mandos Bluetooth/USB y prueba de entrada",
+                    items = 4,
+                    index = 1,
                     onClick = onControls,
                 )
                 SwitchRow(
@@ -552,8 +562,8 @@ fun SettingsScreen(
                     title = "Autofire / Disparo continuo rápido (15 pulsaciones/s)",
                     subtitle = "Mantén pulsado Z o X para avanzar textos automáticamente o atacar en ráfagas",
                     checked = autofireEnabled,
-                    items = 3,
-                    index = 1,
+                    items = 4,
+                    index = 2,
                     onCheckedChange = {
                         autofireEnabled = it
                         prefs.autofireEnabled = it
@@ -565,8 +575,8 @@ fun SettingsScreen(
                     title = "D-Pad Flotante Dinámico",
                     subtitle = "El joystick aparece dinámicamente donde apoyes el pulgar izquierdo en la pantalla",
                     checked = dynamicDpad,
-                    items = 3,
-                    index = 2,
+                    items = 4,
+                    index = 3,
                     onCheckedChange = {
                         dynamicDpad = it
                         prefs.dynamicDpad = it

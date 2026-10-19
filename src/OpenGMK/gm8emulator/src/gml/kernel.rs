@@ -6951,9 +6951,20 @@ impl Game {
     }
 
     pub fn show_image(&mut self, args: &[Value]) -> gml::Result<Value> {
-        let (fname, _, _) = expect_args!(args, [string, int, int])?;
-        // Like `show_info`: the image window is not drawn yet, but say what was asked for.
-        eprintln!("[info] show_image '{}' (este port aun no dibuja la ventana de imagen)", fname);
+        let (fname, _x, _y) = expect_args!(args, [string, int, int])?;
+        let image = match file::load_image(file::to_path(&fname).as_ref()) {
+            Ok(im) => im,
+            Err(e) => {
+                eprintln!("[info] no pude abrir la imagen '{}': {}", fname, e);
+                return Ok(Default::default())
+            },
+        };
+        let (width, height) = (image.width(), image.height());
+        let sprite = self
+            .renderer
+            .upload_sprite(image.into_raw().into_boxed_slice(), width as _, height as _, 0, 0)
+            .map_err(|e| gml::Error::FunctionError("show_image".into(), e.into()))?;
+        self.show_info_modal(crate::game::info_window::InfoModal::Image { sprite, width, height })?;
         Ok(Default::default())
     }
 
@@ -6984,9 +6995,29 @@ impl Game {
 
     pub fn show_info(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
-        // GM8 shows the file loaded by `load_info` in its own info window, which this port does not
-        // have yet; the content is logged so the omission is visible instead of silent.
-        eprintln!("[info] show_info (este port aun no dibuja la ventana de informacion)");
+        // GM8 shows whatever `load_info` left in the game's information, and waits for the player to
+        // close it. The window draws here with the game renderer.
+        let version = if self.gm_version == Version::GameMaker8_1 { "8.1" } else { "8.0" };
+        if let Some(font) = self.assets.fonts.get(self.draw_font_id as usize).and_then(|f| f.as_deref()) {
+            let measured = self.get_string_size(self.ansi_string("Ag"), None, None).1;
+            eprintln!(
+                "[info] ventana: GM{} enc={} font_enc={} size={} tallest={} measured={}",
+                version,
+                self.encoding.name(),
+                font.get_encoding(self.encoding).name(),
+                font.size,
+                font.tallest_char_height,
+                measured
+            );
+        }
+        match self.info_text.clone() {
+            Some(text) => {
+                let utf8 = text.decode_utf8();
+                let doc = crate::game::info_window::parse_rtf(&utf8, crate::game::info_window::INK);
+                self.show_info_modal(crate::game::info_window::InfoModal::Text(doc))?;
+            },
+            None => eprintln!("[info] show_info sin texto cargado"),
+        }
         Ok(Default::default())
     }
 
@@ -6996,7 +7027,11 @@ impl Game {
         // unreadable file shows up in the log.
         let path = file::to_path(&fname);
         match std::fs::read_to_string(path.as_ref()) {
-            Ok(text) => eprintln!("[info] cargado '{}' ({} caracteres)", fname, text.len()),
+            Ok(text) => {
+                eprintln!("[info] cargado '{}' ({} caracteres)", fname, text.len());
+                // Kept raw: `show_info` parses the RTF (colours included) when the window opens.
+                self.info_text = Some(text.into());
+            },
             Err(e) => eprintln!("[info] no pude leer '{}': {}", fname, e),
         }
         Ok(Default::default())

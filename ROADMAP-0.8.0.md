@@ -514,4 +514,45 @@ Auditoría detallada de los archivos del motor en `src/OpenGMK/gm8emulator/src/`
 - **Problema:** El módulo de actualizaciones automáticas apuntaba al repositorio upstream `Klisee/pokemon-reloaded-android` en lugar del repositorio oficial activo `Alexpix0/PKMON-RELOADED-ANDROID`, impidiendo que los jugadores recibieran las notificaciones de las versiones 0.7.x y 0.8.x.
 - **Solución:** Se reconfiguró la constante `REPO` y el enlace de bienvenida al repositorio oficial `Alexpix0/PKMON-RELOADED-ANDROID`.
 
+---
+
+## 14. 🎮 Fusión Mayor de Controles Oficiales y Estabilidad (v0.8.6 EX)
+
+### 14.1 Integración Oficial v0.3.1 (`f3194f0`)
+- **Ventana de información del juego y visor de imágenes modal (`game/info_window.rs`)**:
+  - Parser nativo GameMaker RTF con soporte de secuencias de color, formato de párrafos, auto-wrap y scroll táctil.
+  - Blit a resolución nativa de pantalla vía superficie offscreen (`present_surface`) para visualización cristalina de ayudas e infografías de crianza y grupos de huevo.
+  - Implementación completa de `show_info`, `show_image` y `load_info` en el kernel GML.
+- **Tolerancia a variables sin inicializar (`gml/runtime.rs`)**:
+  - Lectura segura retornando `0` por defecto en variables globales y locales no inicializadas, igualando el comportamiento del motor original GM8 y resolviendo de raíz el cierre forzado en combates dobles.
+- **Navegación inteligente en menús y mochila (`touch_navigation.rs`)**:
+  - Detección contextual de salas modulares para ocultar botones táctiles innecesarios y evitar toques fantasma.
+- **Selector de campo y Zona Safari (`field_controls.rs`)**:
+  - Integración de los botones 5 y 7 (`sel_world`) en el mundo exterior con dibujo corregido del dígito 7.
+- **Aprovechamiento total de pantalla y recorte de notch**:
+  - Soporte `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` en `GameActivity.kt`.
+
+### 14.2 Integración Oficial v0.3.5 (`d885806`)
+- **Nuevo ecosistema de controles táctiles rediseñados (por LixarXDX)**:
+  - 33 nuevos recursos gráficos de alta resolución para botones de acción, atajos y nuevas habilidades de combate (`battle__a`, `battle__e`, `battle__m`).
+  - **Selector de movimiento:** Conmutación instantánea entre Joystick analógico dinámico y Cruceta D-Pad tradicional de 4 direcciones.
+  - **Estilos visuales:** Modos Moderno (botones con feedback visual) y Clásico (botones transparentes tradicionales).
+  - **Suite completa de edición en vivo:**
+    - `TouchSettingsScreen`: Panel maestro de ajustes táctiles integrado en la interfaz de ajustes.
+    - `TouchEditorActivity` / `TouchEditorScreen`: Editor táctil interactivo en tiempo real con drag-and-drop para mover y escalar cada control libremente.
+    - `TouchAppearanceActivity` / `TouchAppearanceScreen`: Personalizador de colores, opacidades y sombreados.
+    - `TouchAssetsActivity` / `TouchAssetsScreen`: Gestor de paquetes de sprites y texturas personalizadas.
+  - **Respuesta háptica optimizada (`TouchFeedback.kt`)**:
+    - Disparador JNI de vibración de ultra baja latencia con pulsos adaptativos.
+  - **Gestión de skins en GPU (`touch_skin.rs`)**:
+    - Atlas packing con 96 ranuras para texturas táctiles, previniendo sobrecarga en la memoria VRAM.
+
+### 14.3 Preservación Total del Rendimiento y Funciones 0.8.x
+- Caché $O(1)$ de máscaras de colisión y vectorización ARM `sin_cos`.
+- Modo de rendimiento sostenido (*Sustained Performance Mode*) y limitador térmico.
+- Menú radial rápido estilo Drastic (bicicleta, caña, bezels y guardado rápido).
+- Biseles estéticos negros para pantallas OLED en formato 4:3.
+- Coerción defensiva `Float`/`Int` en `Preferences.kt` para máxima compatibilidad con configuraciones previas.
+
+
 

@@ -1,12 +1,10 @@
 package com.klisee.reloaded
 
 import android.content.Context
+import androidx.core.util.AtomicFile
 import java.io.File
+import java.io.IOException
 
-/**
- * The launcher's own settings. The game keeps its separate options screen for in-game things; this
- * only holds what the launcher itself can honour.
- */
 class Preferences(context: Context) {
     private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
 
@@ -44,58 +42,70 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("stickEnabled", value).apply()
         }
 
-    /** On-screen controls opacity in percentage (20 to 100, default 70). */
-    var touchOpacity: Int
-        get() = prefs.getInt("touchOpacity", 70)
+    /** How opaque the control artwork is drawn. 1 is solid; lower lets the game show through. */
+    var touchOpacity: Float
+        get() = try {
+            prefs.getFloat("touchOpacity", 0.7f)
+        } catch (_: ClassCastException) {
+            prefs.getInt("touchOpacity", 70) / 100f
+        }
         set(value) {
-            prefs.edit().putInt("touchOpacity", value).apply()
+            prefs.edit().putFloat("touchOpacity", value).apply()
         }
 
-    /** On-screen controls scale in percentage (60 to 140, default 100). */
-    var touchScale: Int
-        get() = prefs.getInt("touchScale", 100)
+    /** One-shot flag: the classic overlay goes back to its cruceta. */
+    var touchPadMigration: Boolean
+        get() = prefs.getBoolean("touchPadMigration", false)
         set(value) {
-            prefs.edit().putInt("touchScale", value).apply()
+            prefs.edit().putBoolean("touchPadMigration", value).apply()
         }
 
-    /** On-screen controls horizontal margin / offset (0 to 15%, default 0). */
-    var touchMarginX: Int
-        get() = prefs.getInt("touchMarginX", 0)
+    /** Which overlay the game draws: the new one, the classic one, or none. */
+    var touchStyle: TouchOverlayStyle
+        get() = TouchOverlayStyle.from(prefs.getString("touchStyle", null))
         set(value) {
-            prefs.edit().putInt("touchMarginX", value).apply()
+            prefs.edit().putString("touchStyle", value.id).apply()
         }
 
-    /** On-screen controls vertical margin / offset (0 to 15%, default 0). */
-    var touchMarginY: Int
-        get() = prefs.getInt("touchMarginY", 0)
+    /** Whether the arrow keys are driven by the joystick or the D-pad. */
+    var moveMode: MoveMode
+        get() = MoveMode.from(prefs.getString("moveMode", null))
         set(value) {
-            prefs.edit().putInt("touchMarginY", value).apply()
+            prefs.edit().putString("moveMode", value.id).apply()
         }
 
-    /** Whether haptic feedback (vibration) is triggered on touch button presses. */
-    var touchHaptics: Boolean
-        get() = prefs.getBoolean("touchHaptics", true)
+    /** The overall size of the new overlay's controls. */
+    var touchScale: Float
+        get() = try {
+            prefs.getFloat("touchScale", 1f)
+        } catch (_: ClassCastException) {
+            prefs.getInt("touchScale", 100) / 100f
+        }
         set(value) {
-            prefs.edit().putBoolean("touchHaptics", value).apply()
+            prefs.edit().putFloat("touchScale", value).apply()
         }
 
-    /** Joystick deadzone in percentage (10 to 60, default 35). */
-    var touchDeadzone: Int
-        get() = prefs.getInt("touchDeadzone", 35)
+    /** Where the player moved and resized each control, as `name=cx,cy,scale`. Empty means defaults. */
+    var touchLayout: Map<String, Placement>
+        get() = prefs.getStringSet("touchLayout", emptySet()).orEmpty().mapNotNull { entry ->
+            val parts = entry.split('=')
+            if (parts.size != 2) return@mapNotNull null
+            val numbers = parts[1].split(',').mapNotNull { it.toFloatOrNull() }
+            if (numbers.size < 2) return@mapNotNull null
+            parts[0] to Placement(numbers[0], numbers[1], numbers.getOrElse(2) { 1f })
+        }.toMap()
         set(value) {
-            prefs.edit().putInt("touchDeadzone", value).apply()
+            prefs.edit()
+                .putStringSet("touchLayout", value.map { "${it.key}=${it.value.cx},${it.value.cy},${it.value.scale}" }.toSet())
+                .apply()
         }
 
-    /** Whether to show the top 1-6 party/shortcut buttons on screen. */
-    var showNumKeys: Boolean
-        get() = prefs.getBoolean("showNumKeys", true)
-        set(value) {
-            prefs.edit().putBoolean("showNumKeys", value).apply()
-        }
-
-    /** Mirrors the current controls into the file the emulator reads at startup. */
+    /** Mirrors the current pad controls into the file the emulator reads at startup. */
     fun writeControls(filesDir: File, padConnected: Boolean) =
-        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected, touchOpacity, touchScale, touchMarginX, touchMarginY, touchHaptics, touchDeadzone, showNumKeys)
+        writeControlsFile(filesDir, controlBindings, stickEnabled, padConnected)
+
+    /** Mirrors the touch overlay into the file the emulator reads at startup. */
+    fun writeTouch(filesDir: File) = writeTouchFile(filesDir, touchStyle, moveMode, touchScale, touchOpacity, touchLayout)
 
     /** Keep the shape the game was drawn for, with bands at the sides, instead of filling the screen. */
     var keepAspect: Boolean
@@ -377,6 +387,99 @@ class Preferences(context: Context) {
                 turboMultiplier = 3.0f
                 batterySaver = false
             }
+        }
+    }
+
+
+    // --- Controles dinámicos (edición Controles) ---------------------------------------------
+
+    /** Opacity of the classic overlay, as a percentage (5..100). */
+    var touchOpacityPercent: Int
+        get() = kotlin.math.round(touchOpacity * 100f).toInt()
+        set(value) {
+            touchOpacity = value.coerceIn(5, 100) / 100f
+        }
+
+    fun touchLayouts(): Map<String, TouchPlacement> {
+        val values = TouchLayouts.parse(prefs.getString("touchLayoutV1", TouchLayouts.HEADER).orEmpty())
+        if (prefs.getBoolean("battleTopLayoutV1", false)) return values
+        // One-time: in battle, the three buttons on the right sat on top of the party's status bars.
+        // They are lined up with the three on the left; only the untouched old default moves.
+        val migrated = values.toMutableMap()
+        var changed = false
+        for (id in listOf("t", "l", "p")) {
+            val key = "battle/$id"
+            val placement = migrated[key] ?: continue
+            if (kotlin.math.abs(placement.y - 0.050f) < 0.001f) {
+                migrated[key] = placement.copy(y = 0.180f)
+                changed = true
+            }
+        }
+        prefs.edit().putBoolean("battleTopLayoutV1", true).apply()
+        if (changed) prefs.edit().putString("touchLayoutV1", TouchLayouts.encode(migrated)).apply()
+        return migrated
+    }
+
+    /** Called on an IO dispatcher by Save and exit; a failed save is reported to the editor. */
+    fun saveTouchLayouts(values: Map<String, TouchPlacement>, filesDir: File) {
+        val text = TouchLayouts.encode(values)
+        if (!prefs.edit().putString("touchLayoutV1", text).commit()) {
+            throw IOException("No se pudo guardar la configuración. Inténtalo nuevamente.")
+        }
+        writeTouchLayoutText(filesDir, text)
+    }
+
+    fun writeTouchLayouts(filesDir: File) = runCatching {
+        writeTouchLayoutText(filesDir, TouchLayouts.encode(touchLayouts()))
+    }
+
+    var touchAppearance: TouchAppearance
+        get() = TouchAppearance.parse(prefs.getString("touchAppearanceV1", "").orEmpty())
+        set(value) {
+            prefs.edit().putString("touchAppearanceV1", value.encode()).apply()
+        }
+
+    fun writeTouchAppearance(filesDir: File) = runCatching {
+        writeAtomicText(File(filesDir, "touch-appearance.conf"), touchAppearance.encode())
+    }
+
+    val touchSprites: Map<String, String>
+        get() = TouchSprites.parse(prefs.getString("touchSpritesV1", "{}").orEmpty())
+
+    fun saveTouchSprites(values: Map<String, String>) {
+        if (!prefs.edit().putString("touchSpritesV1", TouchSprites.encode(values)).commit()) {
+            throw IOException("No se pudieron guardar los sprites.")
+        }
+    }
+
+    fun saveTouchConfiguration(
+        layouts: Map<String, TouchPlacement>,
+        appearance: TouchAppearance,
+        opacity: Int,
+        sprites: Map<String, String>,
+    ) {
+        if (!prefs.edit().putString("touchLayoutV1", TouchLayouts.encode(layouts))
+                .putString("touchAppearanceV1", appearance.encode())
+                .putFloat("touchOpacity", opacity.coerceIn(5, 100) / 100f)
+                .putString("touchSpritesV1", TouchSprites.encode(sprites)).commit()
+        ) {
+            throw IOException("No se pudo guardar el paquete de controles.")
+        }
+    }
+
+    private fun writeTouchLayoutText(filesDir: File, text: String) {
+        writeAtomicText(File(filesDir, "touch-layout.conf"), text)
+    }
+
+    private fun writeAtomicText(target: File, text: String) {
+        val file = AtomicFile(target)
+        val stream = file.startWrite()
+        try {
+            stream.write(text.toByteArray(Charsets.UTF_8))
+            file.finishWrite(stream)
+        } catch (error: Exception) {
+            file.failWrite(stream)
+            throw error
         }
     }
 }

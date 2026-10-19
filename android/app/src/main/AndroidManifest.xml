@@ -25,6 +25,11 @@
             </intent-filter>
         </activity>
 
+        <!-- The classic (dynamic) controls: positions editor, appearance and sprite packs. -->
+        <activity android:name=".TouchEditorActivity" android:exported="false" android:screenOrientation="sensorLandscape" />
+        <activity android:name=".TouchAppearanceActivity" android:exported="false" />
+        <activity android:name=".TouchAssetsActivity" android:exported="false" />
+
         <!-- The Rust emulator. It takes the native window itself (android_main); the Kotlin
              subclass only hides the system bars, which cannot be done from the native side. -->
         <activity
@@ -33,6 +38,7 @@
             android:process=":game"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|uiMode"
             android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustNothing|stateAlwaysHidden"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
             <meta-data
                 android:name="android.app.lib_name"

@@ -408,6 +408,9 @@ pub trait RendererTrait {
     );
     fn flush_queue(&mut self);
     fn present(&mut self, window_width: u32, window_height: u32, scaling: Scaling);
+    /// Presents one surface, stretched over the whole window. Used by the game's information window,
+    /// which is drawn at window resolution instead of the game's small framebuffer.
+    fn present_surface(&mut self, surface: AtlasRef, window_width: u32, window_height: u32);
     fn draw_stored(&mut self, target_x: i32, target_y: i32, width: u32, height: u32);
     fn stored_size(&self) -> (u32, u32);
     fn finish(&mut self, window_width: u32, window_height: u32, clear_colour: Colour);
@@ -1276,6 +1279,10 @@ impl Renderer {
 
     pub fn present(&mut self, window_width: u32, window_height: u32, scaling: Scaling) {
         self.0.present(window_width, window_height, scaling)
+    }
+
+    pub fn present_surface(&mut self, surface: AtlasRef, window_width: u32, window_height: u32) {
+        self.0.present_surface(surface, window_width, window_height)
     }
 
     pub fn draw_stored(&mut self, target_x: i32, target_y: i32, width: u32, height: u32) {

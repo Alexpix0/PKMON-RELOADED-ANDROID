@@ -692,34 +692,21 @@ impl Game {
                             Ok(Default::default())
                         }
                     },
-                    Target::Global => match self.globals.fields.get(&accessor.index).and_then(|x| x.get(array_index)) {
-                        Some(i) => Ok(i),
-                        None => {
-                            if self.uninit_fields_are_zero {
-                                Ok(Default::default())
-                            } else {
-                                return Err(Error::UninitializedVariable(
-                                    self.compiler.get_field_name(accessor.index).unwrap(),
-                                    array_index,
-                                ))
-                            }
-                        },
-                    },
-                    Target::Local => {
-                        match context.locals.fields.get(&accessor.index).and_then(|x| x.get(array_index)) {
-                            Some(i) => Ok(i),
-                            None => {
-                                if self.uninit_fields_are_zero {
-                                    Ok(Default::default())
-                                } else {
-                                    return Err(Error::UninitializedVariable(
-                                        self.compiler.get_field_name(accessor.index).unwrap(),
-                                        array_index,
-                                    ))
-                                }
-                            },
-                        }
-                    },
+                    // Tolerance: an uninitialized global or local reads as 0, the way GM8 behaves in
+                    // practice. A double battle can reach one before the game's own script has set
+                    // it, and raising an error there closed a battle the original plays through.
+                    Target::Global => Ok(self
+                        .globals
+                        .fields
+                        .get(&accessor.index)
+                        .and_then(|x| x.get(array_index))
+                        .unwrap_or_default()),
+                    Target::Local => Ok(context
+                        .locals
+                        .fields
+                        .get(&accessor.index)
+                        .and_then(|x| x.get(array_index))
+                        .unwrap_or_default()),
                 }
             },
             Node::Variable { accessor } => {
@@ -729,7 +716,7 @@ impl Game {
                     // Leer una variable built-in (x, y, image_index...) sobre algo que no existe
                     // devuelve 0 en GM8, igual que un campo de usuario: devolver el error terminaba la
                     // partida (p. ej. "uninitialized variable x" en la sala 191 al desobedecer un
-                    // Pokemon). Los casos Global/Local siguen avisando si el ajuste del juego lo pide.
+                    // Pokemon). Global/Local sin inicializar tambien devuelven 0, por lo mismo.
                     Target::Single(None) => Ok(Default::default()),
                     Target::Single(Some(instance)) => {
                         self.get_instance_var(instance, &accessor.var, array_index, context)
@@ -751,44 +738,18 @@ impl Game {
                             Ok(Default::default())
                         }
                     },
-                    Target::Global => match self.globals.vars.get(&accessor.var).and_then(|x| x.get(array_index)) {
-                        Some(i) => Ok(i),
-                        None => {
-                            if self.uninit_fields_are_zero {
-                                Ok(Default::default())
-                            } else {
-                                return Err(Error::UninitializedVariable(
-                                    String::from(
-                                        mappings::INSTANCE_VARIABLES
-                                            .iter()
-                                            .find(|(_, x)| x == &accessor.var)
-                                            .unwrap()
-                                            .0,
-                                    ),
-                                    array_index,
-                                ))
-                            }
-                        },
-                    },
-                    Target::Local => match context.locals.vars.get(&accessor.var).and_then(|x| x.get(array_index)) {
-                        Some(i) => Ok(i),
-                        None => {
-                            if self.uninit_fields_are_zero {
-                                Ok(Default::default())
-                            } else {
-                                return Err(Error::UninitializedVariable(
-                                    String::from(
-                                        mappings::INSTANCE_VARIABLES
-                                            .iter()
-                                            .find(|(_, x)| x == &accessor.var)
-                                            .unwrap()
-                                            .0,
-                                    ),
-                                    array_index,
-                                ))
-                            }
-                        },
-                    },
+                    Target::Global => Ok(self
+                        .globals
+                        .vars
+                        .get(&accessor.var)
+                        .and_then(|x| x.get(array_index))
+                        .unwrap_or_default()),
+                    Target::Local => Ok(context
+                        .locals
+                        .vars
+                        .get(&accessor.var)
+                        .and_then(|x| x.get(array_index))
+                        .unwrap_or_default()),
                 }
             },
             Node::Binary { left, right, operator, type_unsafe } => {

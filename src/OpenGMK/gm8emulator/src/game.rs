@@ -5,6 +5,7 @@ pub mod events;
 pub mod external;
 pub mod gm_save;
 pub mod includedfile;
+pub mod info_window;
 pub mod model;
 pub mod movement;
 pub mod particle;
@@ -204,6 +205,10 @@ pub struct Game {
     pub error_last: gml::String,
     pub keyboard_string: gml::String,
     pub keyboard_lastchar: gml::String,
+    /// The help text `load_info` read (the raw RTF), kept for `show_info` to parse.
+    pub info_text: Option<gml::String>,
+    /// Window-sized offscreen surface the information window draws into, reused between openings.
+    pub info_surface: Option<(u32, u32, crate::render::atlas::AtlasRef)>,
 
     pub game_id: i32,
     pub program_directory: gml::String,
@@ -1413,6 +1418,8 @@ impl Game {
             error_last: "".to_string().into(),
             keyboard_string: "".to_string().into(),
             keyboard_lastchar: "".to_string().into(),
+            info_text: None,
+            info_surface: None,
             audio,
             window,
             window_border,
@@ -1936,6 +1943,9 @@ impl Game {
     /// one.
     #[cfg(target_os = "android")]
     pub(crate) fn sync_overlay(&self) {
+        // The touch overlay tells taps from drags in the bag by knowing which room/modal it is in.
+        let room_name = self.assets.rooms.get_asset(self.room.id).map(|r| r.name.to_string().to_ascii_lowercase()).unwrap_or_default();
+        crate::touch_navigation::report(self.room.id, self.modal_system(), room_name.contains("mochila") || room_name.contains("bagroom"));
         crate::touch_controls::set_room(self.room.id);
         crate::touch_controls::set_dialogue(self.dialogue_open());
         crate::touch_controls::set_box_open(self.inside_box());

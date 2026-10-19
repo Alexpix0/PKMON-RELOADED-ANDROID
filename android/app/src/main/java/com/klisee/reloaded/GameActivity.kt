@@ -27,18 +27,24 @@ private const val TAG = "GameActivity"
  * subclassed to hide the system bars, support display cutout and honour the launcher's screen setting.
  */
 class GameActivity : NativeActivity() {
+    private val touchFeedback by lazy { TouchFeedback(this) }
+    private val touchPreferences by lazy { Preferences(this) }
 
     private var imeAnchor: EditText? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Draw behind the notch/camera hole. Without this the system insets the window on the short
+        // edge and the game is left with a black band beside it instead of filling the screen.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val attrs = window.attributes
+            attrs.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            window.attributes = attrs
+        }
         super.onCreate(savedInstanceState)
         instance = this
         if (Preferences(applicationContext).keepScreenOn) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            window.attributes.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
@@ -193,6 +199,17 @@ class GameActivity : NativeActivity() {
         }
 
         private var instance: GameActivity? = null
+
+        /** Called from the engine when a touch control is pressed, to make it vibrate. */
+        @JvmStatic
+        fun touchControlPressed() {
+            val activity = instance ?: return
+            activity.runOnUiThread {
+                if (!activity.isFinishing && !activity.isDestroyed && activity.hasWindowFocus()) {
+                    activity.touchFeedback.press(activity.window.decorView, activity.touchPreferences.touchAppearance)
+                }
+            }
+        }
 
         /**
          * Called from the engine over JNI (it only holds the Application context, so it goes through

@@ -3,7 +3,11 @@ name: Compilar APK
 on:
   push:
     branches: [ "**" ]
+    tags: [ "**" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -56,6 +60,13 @@ jobs:
       - name: Subir APK como artefacto descargable
         uses: actions/upload-artifact@v4
         with:
-          name: pokemon-reloaded-0.8.2-release
+          name: pokemon-reloaded-0.8.6-release
           path: android/app/build/outputs/apk/release/*.apk
+
+      - name: Publicar GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
 
