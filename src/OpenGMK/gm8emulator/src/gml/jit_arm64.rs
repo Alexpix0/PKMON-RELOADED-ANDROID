@@ -96,15 +96,12 @@ impl ExecutableBuffer {
             // 1. Flush data cache and invalidate instruction cache for this memory region
             #[cfg(target_arch = "aarch64")]
             {
-                let start = self.ptr as usize;
-                let end = start + self.size;
-                // Linux clear_cache syscall
-                libc::syscall(
-                    libc::SYS_cacheflush,
-                    start,
-                    end,
-                    0,
-                );
+                extern "C" {
+                    fn __clear_cache(start: *mut libc::c_void, end: *mut libc::c_void);
+                }
+                let start = self.ptr as *mut libc::c_void;
+                let end = (self.ptr as usize + self.size) as *mut libc::c_void;
+                __clear_cache(start, end);
             }
 
             // 2. Transition from PROT_READ | PROT_WRITE to PROT_READ | PROT_EXEC

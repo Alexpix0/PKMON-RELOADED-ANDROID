@@ -86,10 +86,11 @@ pub fn unlock_achievement(id: &str) {
     }
 
     if let Ok(mut mgr) = GLOBAL_ACHIEVEMENTS.lock() {
+        let mut new_banner = None;
         for ach in mgr.achievements.iter_mut() {
             if ach.id == id && !ach.unlocked {
                 ach.unlocked = true;
-                mgr.pending_banners.push(ActiveBanner {
+                new_banner = Some(ActiveBanner {
                     title: ach.title,
                     description: ach.description,
                     timer_frames: 180, // 3 seconds at 60 FPS
@@ -97,6 +98,9 @@ pub fn unlock_achievement(id: &str) {
                 });
                 break;
             }
+        }
+        if let Some(banner) = new_banner {
+            mgr.pending_banners.push(banner);
         }
     }
 }
