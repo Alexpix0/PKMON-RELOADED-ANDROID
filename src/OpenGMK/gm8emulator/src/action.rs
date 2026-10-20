@@ -122,6 +122,16 @@ impl std::fmt::Debug for GmlBody {
 }
 
 impl Tree {
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Turn a list of gm8exe CodeActions into an Action tree.
     pub fn from_list(list: &[CodeAction], compiler: &mut Compiler) -> Result<Self, String> {
         let mut output = Vec::new();

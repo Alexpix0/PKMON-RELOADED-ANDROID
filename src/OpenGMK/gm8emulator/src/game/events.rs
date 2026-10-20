@@ -22,14 +22,32 @@ impl Game {
             while let Some(instance) = iter.next(&self.room.instance_list) {
                 if crate::touch_controls::active_static_partition_enabled() && event_id == gml::ev::STEP {
                     let inst = self.room.instance_list.get(instance);
-                    if inst.speed.get() == 0.into()
-                        && inst.hspeed.get() == 0.into()
-                        && inst.vspeed.get() == 0.into()
-                        && inst.gravity.get() == 0.into()
-                        && !inst.timeline_running.get()
-                    {
-                        let has_alarms = inst.alarms.borrow().values().any(|&a| a >= 0);
-                        if !has_alarms {
+                    // Regla de Inmunidad Estricta para Controladores y Entidades Críticas (Infinix Hot 20i Blindaje):
+                    // NUNCA omitir si:
+                    // 1. Es invisible (!visible)
+                    // 2. No tiene sprite asignado (sprite_index < 0)
+                    // 3. No es sólida (!solid)
+                    // 4. Tiene movimiento, aceleración o timeline activa
+                    // 5. Tiene alarmas activas
+                    let is_immune = !inst.visible.get()
+                        || inst.sprite_index.get() < 0
+                        || !inst.solid.get()
+                        || inst.speed.get() != 0.into()
+                        || inst.hspeed.get() != 0.into()
+                        || inst.vspeed.get() != 0.into()
+                        || inst.gravity.get() != 0.into()
+                        || inst.timeline_running.get()
+                        || inst.alarms.borrow().values().any(|&a| a >= 0);
+
+                    if !is_immune {
+                        // Es un objeto sólido con sprite visible e inmóvil.
+                        // Solo se omite si NO tiene código ejecutable registrado en ev::STEP
+                        let has_step_code = self.assets.objects.get_asset(object_id).map_or(false, |obj| {
+                            obj.events.get(gml::ev::STEP).map_or(false, |subs| {
+                                subs.values().any(|tree| !tree.borrow().is_empty())
+                            })
+                        });
+                        if !has_step_code {
                             continue;
                         }
                     }

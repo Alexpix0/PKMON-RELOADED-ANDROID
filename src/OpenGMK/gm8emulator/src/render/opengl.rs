@@ -519,9 +519,22 @@ impl RendererImpl {
             native_gl::PlatformImpl::clean_function_loader();
 
             // debug print
-            let ver_str = CStr::from_ptr(gl.GetString(gl::VERSION).cast()).to_str().unwrap();
-            let vendor_str = CStr::from_ptr(gl.GetString(gl::VENDOR).cast()).to_str().unwrap();
-            eprintln!("creating graphics context\n  > GL_VERSION: \"{}\"\n  > GL_VENDOR: \"{}\"", ver_str, vendor_str);
+            let ver_str = CStr::from_ptr(gl.GetString(gl::VERSION).cast()).to_str().unwrap_or("");
+            let vendor_str = CStr::from_ptr(gl.GetString(gl::VENDOR).cast()).to_str().unwrap_or("");
+            let renderer_ptr = gl.GetString(gl::RENDERER);
+            let renderer_str = if !renderer_ptr.is_null() {
+                CStr::from_ptr(renderer_ptr.cast()).to_str().unwrap_or("")
+            } else {
+                ""
+            };
+            eprintln!("creating graphics context\n  > GL_VERSION: \"{}\"\n  > GL_VENDOR: \"{}\"\n  > GL_RENDERER: \"{}\"", ver_str, vendor_str, renderer_str);
+
+            if renderer_str.contains("PowerVR") || vendor_str.contains("Imagination") {
+                eprintln!("[gpu] GPU IMG PowerVR Rogue detectada (Infinix Hot 20i / Helio G25). Aplicando perfil seguro a prueba de fallos.");
+                crate::touch_controls::set_mali_earlyz(false);
+                crate::touch_controls::set_gpu_wakeup(false);
+                crate::touch_controls::set_active_static_partition(false);
+            }
 
             let mut v_maj: GLint = 0;
             let mut v_min: GLint = 0;

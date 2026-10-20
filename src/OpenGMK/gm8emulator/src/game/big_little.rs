@@ -22,10 +22,13 @@ pub fn set_big_little_affinity_enabled(enabled: bool) {
 pub struct CpuTopology {
     pub big_cores: Vec<usize>,
     pub little_cores: Vec<usize>,
+    pub is_free_scheduler: bool,
 }
 
 impl CpuTopology {
     /// Discovers system CPU topology on Linux/Android.
+    /// Handles asymmetric Big.LITTLE (A7x vs A5x) as well as homogeneous
+    /// multi-gear Cortex-A53/A55 architectures (like MediaTek Helio G25: 4x 2.0 GHz + 4x 1.5 GHz).
     pub fn discover() -> Self {
         let mut cores_with_freq = Vec::new();
 
@@ -42,38 +45,60 @@ impl CpuTopology {
         }
 
         if cores_with_freq.is_empty() {
-            // Default assumption if sysfs is blocked by OEM sandbox:
-            // Octa-core: 0-3 Little (A55), 4-7 Big (A75/A76/X)
+            // Sysfs cpufreq inaccessible or blocked by OEM sandbox:
+            // Operate in free Linux scheduler mode to avoid erratic affinity pinning
             return Self {
-                big_cores: vec![4, 5, 6, 7],
-                little_cores: vec![0, 1, 2, 3],
+                big_cores: Vec::new(),
+                little_cores: Vec::new(),
+                is_free_scheduler: true,
             };
         }
 
-        // Sort by frequency ascending to find median split
-        cores_with_freq.sort_by_key(|&(_, freq)| freq);
-        let median_freq = cores_with_freq[cores_with_freq.len() / 2].1;
+        let min_freq = cores_with_freq.iter().map(|&(_, f)| f).min().unwrap_or(0);
+        let max_freq = cores_with_freq.iter().map(|&(_, f)| f).max().unwrap_or(0);
+
+        // If all cores have identical or nearly identical frequencies (<5% difference),
+        // we have a single-frequency homogeneous cluster: operate in free scheduler mode.
+        if min_freq == 0 || max_freq == 0 || max_freq <= min_freq || (max_freq - min_freq) < (min_freq / 20) {
+            return Self {
+                big_cores: Vec::new(),
+                little_cores: Vec::new(),
+                is_free_scheduler: true,
+            };
+        }
+
+        // Midpoint threshold between frequency clusters (e.g., 1.5 GHz & 2.0 GHz -> 1.75 GHz)
+        let threshold = min_freq + (max_freq - min_freq) / 2;
 
         let mut big = Vec::new();
         let mut little = Vec::new();
 
         for (id, freq) in cores_with_freq {
-            if freq >= median_freq {
+            if freq > threshold {
                 big.push(id);
             } else {
                 little.push(id);
             }
         }
 
-        Self {
-            big_cores: if big.is_empty() { vec![0] } else { big },
-            little_cores: if little.is_empty() { vec![0] } else { little },
+        if big.is_empty() || little.is_empty() {
+            Self {
+                big_cores: Vec::new(),
+                little_cores: Vec::new(),
+                is_free_scheduler: true,
+            }
+        } else {
+            Self {
+                big_cores: big,
+                little_cores: little,
+                is_free_scheduler: false,
+            }
         }
     }
 
     /// Pins the current calling thread to high-performance Big cores.
     pub fn pin_current_thread_to_big(&self) {
-        if !is_big_little_affinity_enabled() || self.big_cores.is_empty() {
+        if self.is_free_scheduler || !is_big_little_affinity_enabled() || self.big_cores.is_empty() {
             return;
         }
         self.apply_affinity(&self.big_cores);
@@ -81,7 +106,7 @@ impl CpuTopology {
 
     /// Pins the current calling thread to energy-efficient LITTLE cores.
     pub fn pin_current_thread_to_little(&self) {
-        if !is_big_little_affinity_enabled() || self.little_cores.is_empty() {
+        if self.is_free_scheduler || !is_big_little_affinity_enabled() || self.little_cores.is_empty() {
             return;
         }
         self.apply_affinity(&self.little_cores);

@@ -2239,13 +2239,13 @@ pub fn tick_movement_step(is_moving: bool) {
 // Opciones Maestras de v0.9.0 (Opcionales en Ajustes)
 
 static EXTREME_COMBAT: AtomicBool = AtomicBool::new(false);
-static MALI_EARLYZ: AtomicBool = AtomicBool::new(true);
-static GPU_WAKEUP: AtomicBool = AtomicBool::new(true);
+static MALI_EARLYZ: AtomicBool = AtomicBool::new(false);
+static GPU_WAKEUP: AtomicBool = AtomicBool::new(false);
 static SMART_PREROLL_SKIP: AtomicBool = AtomicBool::new(false);
 static ADAPTIVE_LTPO: AtomicBool = AtomicBool::new(false);
 static PIP_MODE: AtomicBool = AtomicBool::new(false);
 static LIVE_ACTIVITY: AtomicBool = AtomicBool::new(false);
-static ACTIVE_STATIC_PARTITION: AtomicBool = AtomicBool::new(true);
+static ACTIVE_STATIC_PARTITION: AtomicBool = AtomicBool::new(false);
 static MEGA_ATLAS: AtomicBool = AtomicBool::new(false);
 
 pub fn extreme_combat_enabled() -> bool { EXTREME_COMBAT.load(Ordering::Relaxed) }

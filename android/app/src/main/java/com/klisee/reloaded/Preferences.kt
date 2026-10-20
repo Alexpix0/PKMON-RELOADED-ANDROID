@@ -364,14 +364,14 @@ class Preferences(context: Context) {
 
     /** Alpha-Test Early-Z FPK para GPUs ARM Mali */
     var maliEarlyZ: Boolean
-        get() = prefs.getBoolean("maliEarlyZ", true)
+        get() = prefs.getBoolean("maliEarlyZ", false)
         set(value) {
             prefs.edit().putBoolean("maliEarlyZ", value).apply()
         }
 
     /** Despertador de Frecuencia GPU (Bypass downclock MediaTek) */
     var gpuWakeup: Boolean
-        get() = prefs.getBoolean("gpuWakeup", true)
+        get() = prefs.getBoolean("gpuWakeup", false)
         set(value) {
             prefs.edit().putBoolean("gpuWakeup", value).apply()
         }
@@ -406,7 +406,7 @@ class Preferences(context: Context) {
 
     /** Partición de Instancias Activas vs Estáticas */
     var activeStaticPartition: Boolean
-        get() = prefs.getBoolean("activeStaticPartition", true)
+        get() = prefs.getBoolean("activeStaticPartition", false)
         set(value) {
             prefs.edit().putBoolean("activeStaticPartition", value).apply()
         }

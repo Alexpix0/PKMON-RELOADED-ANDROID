@@ -69,7 +69,7 @@ impl ShaderCache {
             if p.is_null() { "unknown_version" } else { std::ffi::CStr::from_ptr(p.cast()).to_str().unwrap_or("unknown") }
         };
 
-        let app_version = "0.9.0";
+        let app_version = "0.9.1";
         let hash = Self::compute_hash(&[name, renderer, version, app_version, vertex_source, fragment_source]);
         let cache_file = Self::cache_dir().join(format!("prog_{}_{:016x}.bin", name, hash));
 

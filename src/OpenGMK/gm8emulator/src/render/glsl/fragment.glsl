@@ -82,8 +82,8 @@ void main() {
         float f = clamp((fog_end - fog_z) / (fog_end - fog_begin), 0.0, 1.0);
         colour.rgb = mix(fog_colour.rgb, colour.rgb, f);
     }
-    // Alpha test & ARM Mali Forward Pixel Kill (FPK) early rejection
-    if ((alpha_test && colour.a <= 0.0) || colour.a < 0.05) {
+    // Alpha test (PowerVR Rogue HSR safe: strictly discard only when alpha_test is active and colour.a <= 0.0)
+    if (alpha_test && colour.a <= 0.0) {
         discard;
     }
     out_colour = colour;
