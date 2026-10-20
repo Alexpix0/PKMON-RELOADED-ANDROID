@@ -1,10 +1,16 @@
 package com.klisee.reloaded.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
@@ -49,14 +55,14 @@ fun UpdateDialog(
                     )
                 }
                 if (release.body.isNotEmpty() && !busy) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .androidx.compose.foundation.layout.heightIn(max = 180.dp)
-                            .androidx.compose.foundation.verticalScroll(androidx.compose.foundation.rememberScrollState())
-                            .androidx.compose.foundation.background(
+                            .heightIn(max = 180.dp)
+                            .verticalScroll(rememberScrollState())
+                            .background(
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                RoundedCornerShape(8.dp)
                             )
                             .padding(8.dp)
                     ) {
