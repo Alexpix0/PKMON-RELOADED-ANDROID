@@ -776,6 +776,7 @@ pub fn apply_user_profile(p: u8) {
 /// A touch on an on-screen control presses the key that control maps to; any other touch is
 /// forwarded to the game as a mouse, exactly as before.
 fn pointer_down(id: i32, x: f32, y: f32) {
+    crate::touch_controls::report_user_interaction();
     // The first touch after using a pad only brings the controls back. It must not also land in the
     // game as a click, or reaching for the on-screen buttons would act on whatever is under them.
     if crate::touch_controls::pad_active() {
