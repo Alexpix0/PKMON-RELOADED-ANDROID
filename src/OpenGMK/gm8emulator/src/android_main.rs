@@ -1604,7 +1604,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.9.1\n\
+             Version: 0.9.2\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

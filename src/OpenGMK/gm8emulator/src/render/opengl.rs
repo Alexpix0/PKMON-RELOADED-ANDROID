@@ -3379,7 +3379,7 @@ impl RendererTrait for RendererImpl {
 
         self.set_texture_repeat(false);
 
-        // Fast-path for non-rotated sprites & Frustum Culling (60 FPS Battle Optimization)
+        // Fast-path trigonometric evaluation for non-rotated sprites (angle == 0.0)
         let is_straight = angle.abs() < 0.0001;
         let (angle_sin, angle_cos) = if is_straight {
             (0.0, 1.0)
@@ -3399,15 +3399,6 @@ impl RendererTrait for RendererImpl {
         };
         let right: f64 = left + width;
         let bottom: f64 = top + height;
-
-        // Bounding box frustum culling: discard particles/sprites outside visible area
-        if is_straight {
-            let fb_w = self.framebuffer.width as f64;
-            let fb_h = self.framebuffer.height as f64;
-            if (x + right) < -32.0 || (x + left) > (fb_w + 32.0) || (y + bottom) < -32.0 || (y + top) > (fb_h + 32.0) {
-                return;
-            }
-        }
 
         // get texture corners.
         // A negative part_w/part_h means the part is mirrored: its size is still |part_w|/|part_h|,
