@@ -426,14 +426,64 @@ pub fn effective_shape(index: usize) -> Shape {
     scale_shape(shape, ui_scale())
 }
 
+pub fn parse_key(name: &str) -> Option<Key> {
+    let upper = name.trim().to_ascii_uppercase();
+    if upper.len() == 1 {
+        let b = upper.as_bytes()[0];
+        if b >= b'A' && b <= b'Z' {
+            return match b {
+                b'A' => Some(Key::A), b'B' => Some(Key::B), b'C' => Some(Key::C), b'D' => Some(Key::D),
+                b'E' => Some(Key::E), b'F' => Some(Key::F), b'G' => Some(Key::G), b'H' => Some(Key::H),
+                b'I' => Some(Key::I), b'J' => Some(Key::J), b'K' => Some(Key::K), b'L' => Some(Key::L),
+                b'M' => Some(Key::M), b'N' => Some(Key::N), b'O' => Some(Key::O), b'P' => Some(Key::P),
+                b'Q' => Some(Key::Q), b'R' => Some(Key::R), b'S' => Some(Key::S), b'T' => Some(Key::T),
+                b'U' => Some(Key::U), b'V' => Some(Key::V), b'W' => Some(Key::W), b'X' => Some(Key::X),
+                b'Y' => Some(Key::Y), b'Z' => Some(Key::Z), _ => None,
+            };
+        }
+        if b >= b'0' && b <= b'9' {
+            return match b {
+                b'0' => Some(Key::Alpha0), b'1' => Some(Key::Alpha1), b'2' => Some(Key::Alpha2),
+                b'3' => Some(Key::Alpha3), b'4' => Some(Key::Alpha4), b'5' => Some(Key::Alpha5),
+                b'6' => Some(Key::Alpha6), b'7' => Some(Key::Alpha7), b'8' => Some(Key::Alpha8),
+                b'9' => Some(Key::Alpha9), _ => None,
+            };
+        }
+    }
+    match upper.as_str() {
+        "RETURN" | "ENTER" | "OK" => Some(Key::Return),
+        "SPACE" | "ESPACIO" | "PKM" => Some(Key::Space),
+        "ESCAPE" | "ESC" => Some(Key::Escape),
+        "TAB" | "TABULADOR" => Some(Key::Tab),
+        "BACKSPACE" | "RETROCESO" | "DEL" => Some(Key::Backspace),
+        "UP" | "ARRIBA" => Some(Key::UpArrow),
+        "DOWN" | "ABAJO" => Some(Key::DownArrow),
+        "LEFT" | "IZQUIERDA" => Some(Key::LeftArrow),
+        "RIGHT" | "DERECHA" => Some(Key::RightArrow),
+        "SHIFT" | "LSHIFT" | "LEFTSHIFT" => Some(Key::LeftShift),
+        "RSHIFT" | "RIGHTSHIFT" => Some(Key::RightShift),
+        "CTRL" | "LCTRL" | "LEFTCONTROL" => Some(Key::LeftControl),
+        "RCTRL" | "RIGHTCONTROL" => Some(Key::RightControl),
+        "ALT" | "LALT" | "LEFTALT" => Some(Key::LeftAlt),
+        "RALT" | "RIGHTALT" => Some(Key::RightAlt),
+        "F1" => Some(Key::F1), "F2" => Some(Key::F2), "F3" => Some(Key::F3),
+        "F4" => Some(Key::F4), "F5" => Some(Key::F5), "F6" => Some(Key::F6),
+        "F7" => Some(Key::F7), "F8" => Some(Key::F8), "F9" => Some(Key::F9),
+        "F10" => Some(Key::F10), "F11" => Some(Key::F11), "F12" => Some(Key::F12),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
-struct LayoutOverride {
-    context: u8,
-    name: &'static str,
-    x: f32,
-    y: f32,
-    scale: f32,
-    visible: bool,
+pub struct LayoutOverride {
+    pub context: u8,
+    pub name: &'static str,
+    pub x: f32,
+    pub y: f32,
+    pub scale: f32,
+    pub visible: bool,
+    pub custom_key: Option<Key>,
+    pub custom_label: Option<&'static str>,
 }
 
 static CLASSIC_LAYOUT: Mutex<Vec<LayoutOverride>> = Mutex::new(Vec::new());
@@ -445,7 +495,7 @@ pub fn load_layout(text: &str) {
     if text.len() <= 65536 && text.lines().next() == Some("touch-layout-v1") {
         for line in text.lines().skip(1) {
             let fields: Vec<_> = line.split_whitespace().collect();
-            if fields.len() != 6 { continue }
+            if fields.len() < 6 { continue }
             let context = match fields[0] {
                 "world" => WORLD, "battle" => BATTLE, "dialog" => DIALOG, "character" => CHARACTER, "choice" => CHOICE, "safari" => SAFARI, "menu_nav" => MENU_NAV, _ => continue,
             };
@@ -457,11 +507,29 @@ pub fn load_layout(text: &str) {
             let (Ok(x), Ok(y), Ok(scale)) = (fields[2].parse::<f32>(), fields[3].parse::<f32>(), fields[4].parse::<f32>()) else { continue };
             if !x.is_finite() || !y.is_finite() || !scale.is_finite() { continue }
             let visible = match fields[5] { "1" => true, "0" => false, _ => continue };
+            let (custom_key, custom_label) = if fields.len() >= 7 && fields[6] != "-" {
+                let k = parse_key(fields[6]);
+                let l = Box::leak(fields[6].to_string().into_boxed_str()) as &'static str;
+                (k, Some(l))
+            } else {
+                (None, None)
+            };
             entries.retain(|e| e.context != context || e.name != name);
-            entries.push(LayoutOverride { context, name, x: x.clamp(0.0, 1.0), y: y.clamp(0.0, 1.0), scale: scale.clamp(0.5, 2.0), visible });
+            entries.push(LayoutOverride { context, name, x: x.clamp(0.0, 1.0), y: y.clamp(0.0, 1.0), scale: scale.clamp(0.5, 2.0), visible, custom_key, custom_label });
         }
     }
     *CLASSIC_LAYOUT.lock().unwrap() = entries;
+}
+
+pub fn control_key(index: usize) -> Key {
+    let name = controls()[index].name;
+    layout_override(name)
+        .and_then(|e| e.custom_key)
+        .unwrap_or_else(|| controls()[index].key)
+}
+
+pub fn control_custom_label(name: &str) -> Option<&'static str> {
+    layout_override(name).and_then(|e| e.custom_label)
 }
 
 fn layout_override(name: &str) -> Option<LayoutOverride> {
@@ -493,7 +561,7 @@ fn profile_default(name: &str, context: u8) -> Option<LayoutOverride> {
         (BATTLE, "s") => ("s", 0.700, 0.650),
         _ => return None,
     };
-    Some(LayoutOverride {context, name, x, y, scale: 1.0, visible: true})
+    Some(LayoutOverride {context, name, x, y, scale: 1.0, visible: true, custom_key: None, custom_label: None})
 }
 
 
@@ -531,7 +599,7 @@ pub fn set_viewport(x: f32, y: f32, w: f32, h: f32) {
     *VIEWPORT.lock().unwrap() = (x, y, w, h);
 }
 
-fn viewport() -> (f32, f32, f32, f32) {
+pub fn viewport() -> (f32, f32, f32, f32) {
     *VIEWPORT.lock().unwrap()
 }
 
@@ -1380,7 +1448,7 @@ pub fn expire_context_grace() {
 /// Different visible controls may share a key after adding buttons to another profile.
 pub fn control_keys(index: usize) -> [Option<Key>; 2] {
     if controls()[index].name == COMBO_BUTTON_NAME { [Some(Key::LeftControl),Some(Key::P)] }
-    else { [Some(controls()[index].key),None] }
+    else { [Some(control_key(index)),None] }
 }
 pub fn key_held_by_buttons(key: Key) -> bool {
     (0..controls().len()).any(|i| is_pressed(i) && control_keys(i).contains(&Some(key)))

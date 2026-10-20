@@ -9,9 +9,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.Saver
@@ -32,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.klisee.reloaded.*
 import java.io.File
 import kotlin.math.hypot
@@ -53,15 +65,17 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
     val controls = remember(profile, values) { TouchLayouts.controlsFor(profile, values) }
     var selectedId by rememberSaveable { mutableStateOf("joystick") }
     val selected = controls.firstOrNull { it.id == selectedId } ?: controls.firstOrNull()
+    var opacityPercent by rememberSaveable { mutableStateOf(prefs.touchOpacityPercent.coerceIn(15, 100)) }
+
     var profileMenu by remember { mutableStateOf(false) }
     var controlMenu by remember { mutableStateOf(false) }
-    var addMenu by remember { mutableStateOf(false) }
+    var keyPickerMode by remember { mutableStateOf<String?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val dirty = TouchLayouts.encode(values) != savedText
+    val dirty = TouchLayouts.encode(values) != savedText || opacityPercent != prefs.touchOpacityPercent
 
     fun update(spec: TouchControlSpec, placement: TouchPlacement) {
         val key = TouchLayouts.key(profile, spec)
@@ -74,7 +88,10 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
         val snapshot = values
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { prefs.saveTouchLayouts(snapshot, filesDir) }
+                withContext(Dispatchers.IO) {
+                    prefs.touchOpacityPercent = opacityPercent
+                    prefs.saveTouchLayouts(snapshot, filesDir)
+                }
                 savedText = TouchLayouts.encode(snapshot)
                 onExit()
             } catch (failure: Exception) {
@@ -111,7 +128,7 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                     val previewWidth = minOf(maxWidth, maxHeight * gameAspect)
                     ControlPreview(
                         profile = profile, values = values, selectedId = selected?.id, enabled = !saving,
-                        keepAspect = prefs.keepAspect, opacity = prefs.touchOpacityPercent / 100f, appearance = prefs.touchAppearance,
+                        keepAspect = prefs.keepAspect, opacity = opacityPercent / 100f, appearance = prefs.touchAppearance,
                         onSelect = { selectedId = it }, onChange = { spec, value -> update(spec, value) },
                         modifier = Modifier.width(previewWidth).aspectRatio(gameAspect)
                             .clip(RoundedCornerShape(16.dp)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
@@ -124,72 +141,178 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                     color = MaterialTheme.colorScheme.primary)
             }
 
-            Surface(Modifier.width(224.dp).fillMaxHeight(), shape = RoundedCornerShape(20.dp),
+            Surface(Modifier.width(260.dp).fillMaxHeight(), shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Personalizar controles", style = MaterialTheme.typography.titleMedium)
-                        if (profile != TouchProfile.MENU) Box {
-                            val candidates = TouchLayouts.availableFor(profile).filter { !it.joystick &&
-                                (it !in controls || !TouchLayouts.placement(values, profile, it).visible) }
-                            OutlinedButton(onClick = { addMenu = true }, enabled = !saving && candidates.isNotEmpty(),
-                                modifier = Modifier.fillMaxWidth().testTag("add-control")) { Text("Agregar botón") }
-                            DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, modifier = Modifier.heightIn(max = 240.dp)) {
-                                for (spec in candidates) DropdownMenuItem(text = { Text(spec.title) },
-                                    modifier = Modifier.testTag("add-${spec.id}"), onClick = {
-                                        val p = if (spec in controls) TouchLayouts.placement(values, profile, spec).copy(visible = true)
-                                            else TouchPlacement(.5f, .5f)
-                                        values = values + (TouchLayouts.key(profile, spec) to p)
-                                        selectedId = spec.id; addMenu = false
-                                    })
+
+                        // Botón Agregar nuevo botón
+                        if (profile != TouchProfile.MENU) {
+                            Button(
+                                onClick = { keyPickerMode = "add" },
+                                enabled = !saving,
+                                modifier = Modifier.fillMaxWidth().testTag("add-control"),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Agregar nuevo botón")
                             }
                         }
+
                         if (selected == null) {
                             Text("Sin controles para editar en este perfil.", style = MaterialTheme.typography.bodyMedium)
                         } else {
                             val placement = TouchLayouts.placement(values, profile, selected)
+
+                            // Selector de botón actual con tecla asignada
+                            Text("Botón seleccionado:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Box {
-                                OutlinedButton(onClick = { controlMenu = true }, enabled = !saving,
-                                    modifier = Modifier.fillMaxWidth().testTag("control-picker")) { Text(selected.title) }
-                                DropdownMenu(expanded = controlMenu, onDismissRequest = { controlMenu = false },
-                                    modifier = Modifier.heightIn(max = 240.dp)) {
+                                val assignedLabel = placement.customKey ?: selected.label
+                                OutlinedButton(
+                                    onClick = { controlMenu = true },
+                                    enabled = !saving,
+                                    modifier = Modifier.fillMaxWidth().testTag("control-picker"),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "${selected.title} [${assignedLabel}]" + if (placement.visible) "" else " (oculto)",
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = controlMenu,
+                                    onDismissRequest = { controlMenu = false },
+                                    modifier = Modifier.heightIn(max = 280.dp)
+                                ) {
                                     for (spec in controls) {
-                                        val shown = TouchLayouts.placement(values, profile, spec).visible
-                                        DropdownMenuItem(text = { Text(spec.title + if (shown) "" else " · oculto") }, onClick = {
-                                            selectedId = spec.id
-                                            controlMenu = false
-                                        })
+                                        val p = TouchLayouts.placement(values, profile, spec)
+                                        val keyLabel = p.customKey ?: spec.label
+                                        DropdownMenuItem(
+                                            text = { Text("${spec.title} [$keyLabel]" + if (p.visible) "" else " · oculto") },
+                                            onClick = {
+                                                selectedId = spec.id
+                                                controlMenu = false
+                                            }
+                                        )
                                     }
                                 }
                             }
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Visible", style = MaterialTheme.typography.bodyMedium)
-                                Switch(checked = placement.visible, onCheckedChange = { update(selected, placement.copy(visible = it)) },
-                                    enabled = !saving, modifier = Modifier.testTag("control-visible").semantics {
-                                        contentDescription = "Mostrar ${selected.title} en ${profile.title}"
-                                    })
+
+                            // Botón Cambiar Tecla Asignada
+                            if (!selected.joystick) {
+                                OutlinedButton(
+                                    onClick = { keyPickerMode = "remap" },
+                                    enabled = !saving,
+                                    modifier = Modifier.fillMaxWidth().testTag("remap-key"),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Filled.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Tecla: ${placement.customKey ?: selected.label} (Cambiar)",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                }
                             }
+
+                            // Switch Visible
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Visible", style = MaterialTheme.typography.bodyMedium)
+                                Switch(
+                                    checked = placement.visible,
+                                    onCheckedChange = { update(selected, placement.copy(visible = it)) },
+                                    enabled = !saving,
+                                    modifier = Modifier.testTag("control-visible").semantics {
+                                        contentDescription = "Mostrar ${selected.title} en ${profile.title}"
+                                    }
+                                )
+                            }
+
+                            // Slider Tamaño (50% a 200%)
                             Text("Tamaño: ${(placement.scale * 100).roundToInt()} %", style = MaterialTheme.typography.bodyMedium)
-                            Slider(value = placement.scale, onValueChange = { update(selected, placement.copy(scale = it)) },
-                                valueRange = .5f..2f, steps = 29, enabled = !saving,
-                                modifier = Modifier.testTag("control-size").semantics { contentDescription = "Tamaño de ${selected.title}" })
-                            Text("Horizontal: ${(placement.x * 100).roundToInt()} %", style = MaterialTheme.typography.labelMedium)
-                            Slider(value = placement.x, onValueChange = { update(selected, placement.copy(x = it)) },
-                                valueRange = 0f..1f, enabled = !saving,
-                                modifier = Modifier.testTag("control-x").semantics { contentDescription = "Posición horizontal de ${selected.title}" })
-                            Text("Vertical: ${(placement.y * 100).roundToInt()} %", style = MaterialTheme.typography.labelMedium)
-                            Slider(value = placement.y, onValueChange = { update(selected, placement.copy(y = it)) },
-                                valueRange = 0f..1f, enabled = !saving,
-                                modifier = Modifier.testTag("control-y").semantics { contentDescription = "Posición vertical de ${selected.title}" })
-                            TextButton(onClick = { update(selected, TouchLayouts.original(selected, profile)) }, enabled = !saving) {
+                            Slider(
+                                value = placement.scale,
+                                onValueChange = { update(selected, placement.copy(scale = it)) },
+                                valueRange = .5f..2f,
+                                steps = 29,
+                                enabled = !saving,
+                                modifier = Modifier.testTag("control-size").semantics { contentDescription = "Tamaño de ${selected.title}" }
+                            )
+
+                            // Slider Opacidad (15% a 100%)
+                            Text("Opacidad: $opacityPercent %", style = MaterialTheme.typography.bodyMedium)
+                            Slider(
+                                value = opacityPercent.toFloat(),
+                                onValueChange = { opacityPercent = it.roundToInt() },
+                                valueRange = 15f..100f,
+                                steps = 17,
+                                enabled = !saving,
+                                modifier = Modifier.testTag("control-opacity")
+                            )
+
+                            // Sliders Horizontal y Vertical
+                            Text("Horizontal: ${(placement.x * 100).roundToInt()} %", style = MaterialTheme.typography.labelSmall)
+                            Slider(
+                                value = placement.x,
+                                onValueChange = { update(selected, placement.copy(x = it)) },
+                                valueRange = 0f..1f,
+                                enabled = !saving,
+                                modifier = Modifier.testTag("control-x").semantics { contentDescription = "Posición horizontal de ${selected.title}" }
+                            )
+                            Text("Vertical: ${(placement.y * 100).roundToInt()} %", style = MaterialTheme.typography.labelSmall)
+                            Slider(
+                                value = placement.y,
+                                onValueChange = { update(selected, placement.copy(y = it)) },
+                                valueRange = 0f..1f,
+                                enabled = !saving,
+                                modifier = Modifier.testTag("control-y").semantics { contentDescription = "Posición vertical de ${selected.title}" }
+                            )
+
+                            // Botón Eliminar o Ocultar botón
+                            val isAdded = TouchLayouts.added(profile, selected)
+                            TextButton(
+                                onClick = {
+                                    if (isAdded) {
+                                        values = values - TouchLayouts.key(profile, selected)
+                                    } else {
+                                        update(selected, placement.copy(visible = false))
+                                    }
+                                    selectedId = TouchLayouts.controlsFor(profile, values).firstOrNull()?.id.orEmpty()
+                                },
+                                enabled = !saving,
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.fillMaxWidth().testTag("remove-control")
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (isAdded) "Eliminar botón" else "Ocultar botón")
+                            }
+
+                            // Botón Restablecer este botón
+                            TextButton(
+                                onClick = { update(selected, TouchLayouts.original(selected, profile)) },
+                                enabled = !saving,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text("Restablecer este control")
                             }
-                            if (TouchLayouts.added(profile, selected)) TextButton(onClick = {
-                                values = values - TouchLayouts.key(profile, selected)
-                                selectedId = TouchLayouts.controlsFor(profile, values).firstOrNull()?.id.orEmpty()
-                            }, enabled = !saving, modifier = Modifier.testTag("remove-added-control")) { Text("Quitar de este perfil") }
-                            OutlinedButton(onClick = { confirmReset = true }, enabled = !saving, modifier = Modifier.fillMaxWidth()) {
+
+                            // Botón Restablecer este perfil
+                            OutlinedButton(
+                                onClick = { confirmReset = true },
+                                enabled = !saving,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
                                 Text("Restablecer perfil")
                             }
                         }
@@ -202,6 +325,42 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
         }
     }
     }
+
+    if (keyPickerMode != null) {
+        val currentKeyTag = if (keyPickerMode == "remap" && selected != null) {
+            TouchLayouts.placement(values, profile, selected).customKey ?: selected.label
+        } else null
+        KeySelectionDialog(
+            title = if (keyPickerMode == "add") "Agregar nuevo botón a ${profile.title}" else "Asignar tecla a ${selected?.title}",
+            currentKeyTag = currentKeyTag,
+            onKeySelected = { choice ->
+                if (keyPickerMode == "remap" && selected != null) {
+                    val p = TouchLayouts.placement(values, profile, selected)
+                    update(selected, p.copy(customKey = choice.keyTag))
+                } else if (keyPickerMode == "add") {
+                    val candidates = TouchLayouts.availableFor(profile).filter { !it.joystick }
+                    val targetSpec = candidates.firstOrNull { it.id.equals(choice.keyTag, ignoreCase = true) && it !in controls }
+                        ?: candidates.firstOrNull { it !in controls }
+                        ?: candidates.firstOrNull { !TouchLayouts.placement(values, profile, it).visible }
+                    if (targetSpec != null) {
+                        val p = TouchPlacement(0.5f, 0.5f, 1f, true, choice.keyTag)
+                        values = values + (TouchLayouts.key(profile, targetSpec) to p)
+                        selectedId = targetSpec.id
+                    }
+                }
+                keyPickerMode = null
+            },
+            onResetToDefault = if (keyPickerMode == "remap" && selected != null) {
+                {
+                    val p = TouchLayouts.placement(values, profile, selected)
+                    update(selected, p.copy(customKey = null))
+                    keyPickerMode = null
+                }
+            } else null,
+            onDismiss = { keyPickerMode = null }
+        )
+    }
+
     if (confirmReset) AlertDialog(onDismissRequest = { confirmReset = false },
         title = { Text("Restablecer ${profile.title}") },
         text = { Text("Se recuperarán las posiciones, tamaños y visibilidad originales de este perfil. Se quitarán los botones agregados a este perfil. Los otros perfiles se conservan. Pulsa Guardar y salir para aplicar los cambios.") },
@@ -216,12 +375,158 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
 }
 
 @Composable
+private fun KeySelectionDialog(
+    title: String,
+    currentKeyTag: String?,
+    onKeySelected: (PcKeyChoice) -> Unit,
+    onResetToDefault: (() -> Unit)? = null,
+    onDismiss: () -> Unit,
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Todas") }
+    var detectedKey by remember { mutableStateOf<PcKeyChoice?>(null) }
+
+    val categories = listOf("Todas", "Letras", "Números", "Funciones", "Especiales", "Flechas", "Mando")
+
+    val filteredKeys = remember(searchQuery, selectedCategory) {
+        val q = searchQuery.trim().lowercase()
+        if (q.isNotEmpty()) {
+            AVAILABLE_KEY_CHOICES.filter {
+                it.name.lowercase().contains(q) ||
+                it.keyTag.lowercase().contains(q) ||
+                it.category.lowercase().contains(q)
+            }
+        } else if (selectedCategory == "Todas") {
+            AVAILABLE_KEY_CHOICES
+        } else {
+            AVAILABLE_KEY_CHOICES.filter { it.category.startsWith(selectedCategory) }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.Keyboard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(text = title, style = MaterialTheme.typography.titleMedium)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Buscar tecla o botón (ej. Z, F5, Espacio, Shift)...") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Buscar") },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Limpiar")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                )
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Filled.SportsEsports, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = if (detectedKey != null) "Tecla detectada: ${detectedKey!!.name} (${detectedKey!!.keyTag})"
+                            else "O pulsa una tecla física o botón de mando para asignar",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (detectedKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                AndroidView(
+                    factory = { ctx -> PadProbe(ctx).apply { requestFocus() } },
+                    modifier = Modifier.fillMaxWidth().height(1.dp),
+                    update = { probe ->
+                        probe.onKey = { code ->
+                            val choice = keyChoiceForCode(code)
+                            detectedKey = choice
+                            onKeySelected(choice)
+                        }
+                        probe.requestFocus()
+                    }
+                )
+
+                if (searchQuery.isBlank()) {
+                    ScrollableTabRow(
+                        selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
+                        edgePadding = 0.dp,
+                    ) {
+                        categories.forEach { cat ->
+                            Tab(
+                                selected = selectedCategory == cat,
+                                onClick = { selectedCategory = cat },
+                                text = { Text(cat, style = MaterialTheme.typography.labelMedium) }
+                            )
+                        }
+                    }
+                }
+
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 74.dp),
+                    modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(filteredKeys) { choice ->
+                        val isSelected = currentKeyTag?.equals(choice.keyTag, ignoreCase = true) == true
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onKeySelected(choice) },
+                            label = {
+                                Text(
+                                    text = choice.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (onResetToDefault != null) {
+                TextButton(onClick = onResetToDefault) {
+                    Text("Tecla por defecto")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
 private fun ControlPreview(
     profile: TouchProfile, values: Map<String, TouchPlacement>, selectedId: String?, enabled: Boolean,
     keepAspect: Boolean, opacity: Float, appearance: TouchAppearance, onSelect: (String) -> Unit,
     onChange: (TouchControlSpec, TouchPlacement) -> Unit, modifier: Modifier = Modifier,
 ) {
-    val images = controlImages(appearance,profile=profile)
+    val images = controlImages(appearance, profile = profile)
     val specs = remember(profile, values) { TouchLayouts.controlsFor(profile, values) }
     val currentSpecs by rememberUpdatedState(specs)
     val currentValues by rememberUpdatedState(values)
@@ -249,8 +554,6 @@ private fun ControlPreview(
             detectTapGestures { point -> pick(point, size.width.toFloat(), size.height.toFloat())?.let { select(it.id) } }
         }.pointerInput(profile, keepAspect, enabled) {
             if (!enabled) return@pointerInput
-            // Keep the in-flight position inside the gesture. Several motion events can arrive
-            // before Compose recomposes; reading the last rendered value would lose their deltas.
             var dragging: TouchControlSpec? = null
             var dragPlacement: TouchPlacement? = null
             detectDragGestures(onDragStart = { point ->
@@ -280,29 +583,32 @@ private fun ControlPreview(
         for (i in 1..9) {
             drawLine(Color.White.copy(alpha = .035f), Offset(size.width * i / 10f, 0f), Offset(size.width * i / 10f, size.height))
         }
-        for (i in 1..5) drawLine(Color.White.copy(alpha = .035f), Offset(0f,size.height * i / 6f), Offset(size.width,size.height * i / 6f))
+        for (i in 1..5) drawLine(Color.White.copy(alpha = .035f), Offset(0f, size.height * i / 6f), Offset(size.width, size.height * i / 6f))
         for (spec in specs) {
             val p = TouchLayouts.placement(values, profile, spec)
             val selected = spec.id == selectedId
             if (!p.visible && !selected) continue
             val g = TouchLayouts.geometry(spec, p, size.width, size.height, keepAspect, TouchLayouts.added(profile, spec))
-            val center = Offset(g.x,g.y)
-            val alpha = if (!p.visible) .18f else if (spec.joystick || spec.asset == null && images["custom/"+spec.id] == null) 1f else opacity
+            val center = Offset(g.x, g.y)
+            val alpha = if (!p.visible) .18f else if (spec.joystick || spec.asset == null && images["custom/" + spec.id] == null) 1f else opacity
             fun sprite(name: String, half: Float) {
                 images[name]?.let { bitmap ->
-                    drawImage(bitmap, dstOffset = IntOffset((g.x-half).roundToInt(),(g.y-half).roundToInt()),
-                        dstSize = IntSize((half*2).roundToInt().coerceAtLeast(1),(half*2).roundToInt().coerceAtLeast(1)),
+                    drawImage(bitmap, dstOffset = IntOffset((g.x - half).roundToInt(), (g.y - half).roundToInt()),
+                        dstSize = IntSize((half * 2).roundToInt().coerceAtLeast(1), (half * 2).roundToInt().coerceAtLeast(1)),
                         alpha = alpha, filterQuality = FilterQuality.None)
                 }
             }
-            if(spec.joystick) {
+            if (spec.joystick) {
                 if (appearance.style == TouchStyle.MODERN && images["joystick-base.png"] != null) {
-                    sprite("joystick-base.png",g.radius*1.05f);sprite("joystick-knob.png",g.radius*.88f)
+                    sprite("joystick-base.png", g.radius * 1.05f)
+                    sprite("joystick-knob.png", g.radius * .88f)
                 } else drawModernMovement(g, alpha, paint, tint = appearance.tint)
+            } else {
+                val effectiveSpec = if (p.customKey != null) spec.copy(label = p.customKey) else spec
+                drawControl(effectiveSpec, g, appearance, images, alpha, paint)
             }
-            else drawControl(spec,g,appearance,images,alpha,paint)
-            if (selected) drawCircle(Color(0xFF63E0CA),g.radius + 3.dp.toPx(),center,style=Stroke(2.dp.toPx()))
-            if (!p.visible) drawLine(Color(0xFF63E0CA),center-Offset(g.radius,g.radius),center+Offset(g.radius,g.radius),2.dp.toPx())
+            if (selected) drawCircle(Color(0xFF63E0CA), g.radius + 3.dp.toPx(), center, style = Stroke(2.dp.toPx()))
+            if (!p.visible) drawLine(Color(0xFF63E0CA), center - Offset(g.radius, g.radius), center + Offset(g.radius, g.radius), 2.dp.toPx())
         }
     }
 }

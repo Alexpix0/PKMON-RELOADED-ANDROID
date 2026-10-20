@@ -602,7 +602,7 @@ fn control_key_down(index: usize) {
     if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
         crate::touch_controls::register_autofire(index);
     }
-    let key = crate::touch_controls::CONTROLS[index].key;
+    let key = crate::touch_controls::control_key(index);
     // On the character picker the overlay's arrows travel with the game's own selection, so the
     // buttons stay around the character the player is on rather than around the first one.
     match key {
@@ -630,7 +630,7 @@ fn control_key_up(index: usize) {
         }
         return
     }
-    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::CONTROLS[index].key });
+    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: crate::touch_controls::control_key(index) });
 }
 
 /// Pointers whose press was swallowed to bring the on-screen controls back, so that their release
@@ -1677,7 +1677,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.9.3\n\
+             Version: 0.9.4\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

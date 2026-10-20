@@ -25,7 +25,13 @@ data class TouchControlSpec(
     }
 }
 
-data class TouchPlacement(val x: Float, val y: Float, val scale: Float = 1f, val visible: Boolean = true)
+data class TouchPlacement(
+    val x: Float,
+    val y: Float,
+    val scale: Float = 1f,
+    val visible: Boolean = true,
+    val customKey: String? = null
+)
 data class TouchGeometry(val x: Float, val y: Float, val radius: Float, val halfWidth: Float = radius)
 
 object TouchLayouts {
@@ -69,7 +75,7 @@ object TouchLayouts {
     )
     fun key(profile: TouchProfile, spec: TouchControlSpec) = "${profile.id}/${spec.id}"
     fun availableFor(profile: TouchProfile) = if (profile == TouchProfile.MENU) emptyList() else
-        controls.filter { (!it.joystick || profile in it.profiles) && !(profile == TouchProfile.WORLD && it.id.startsWith("alpha")) && (it.id != "sel_world" || profile == TouchProfile.WORLD) && (it.id != "pkmn" || profile == TouchProfile.BATTLE) }
+        controls.filter { (!it.joystick || profile in it.profiles) && (it.id != "sel_world" || profile == TouchProfile.WORLD) && (it.id != "pkmn" || profile == TouchProfile.BATTLE) }
     fun controlsFor(profile: TouchProfile, values: Map<String, TouchPlacement> = emptyMap()) =
         availableFor(profile).filter { profile in it.profiles || key(profile, it) in values }
     fun added(profile: TouchProfile, spec: TouchControlSpec) = profile !in spec.profiles
@@ -101,7 +107,7 @@ object TouchLayouts {
         val result = linkedMapOf<String, TouchPlacement>()
         for (line in text.lineSequence().drop(1)) {
             val fields = line.trim().split(Regex("\\s+"))
-            if (fields.size != 6) continue
+            if (fields.size < 6) continue
             val profile = TouchProfile.entries.firstOrNull { it.id == fields[0] } ?: continue
             val spec = controls.firstOrNull { it.id == fields[1] } ?: continue
             if (profile == TouchProfile.MENU) continue
@@ -109,17 +115,19 @@ object TouchLayouts {
             val y = fields[3].toFloatOrNull()?.takeIf { it.isFinite() } ?: continue
             val scale = fields[4].toFloatOrNull()?.takeIf { it.isFinite() } ?: continue
             val visible = when (fields[5]) { "1" -> true; "0" -> false; else -> continue }
-            result[key(profile, spec)] = TouchPlacement(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f), scale.coerceIn(.5f, 2f), visible)
+            val customKey = if (fields.size >= 7 && fields[6] != "-") fields[6] else null
+            result[key(profile, spec)] = TouchPlacement(x.coerceIn(0f, 1f), y.coerceIn(0f, 1f), scale.coerceIn(.5f, 2f), visible, customKey)
         }
         return result
     }
 
     fun encode(values: Map<String, TouchPlacement>): String = buildString {
         appendLine(HEADER)
-        for (profile in TouchProfile.entries.filter {it != TouchProfile.MENU}) for (spec in controls) {
+        for (profile in TouchProfile.entries.filter { it != TouchProfile.MENU }) for (spec in controls) {
             val p = values[key(profile, spec)] ?: continue
             if (!p.x.isFinite() || !p.y.isFinite() || !p.scale.isFinite()) continue
-            appendLine("${profile.id} ${spec.id} ${p.x.coerceIn(0f, 1f)} ${p.y.coerceIn(0f, 1f)} ${p.scale.coerceIn(.5f, 2f)} ${if (p.visible) 1 else 0}")
+            val keyTag = p.customKey ?: "-"
+            appendLine("${profile.id} ${spec.id} ${p.x.coerceIn(0f, 1f)} ${p.y.coerceIn(0f, 1f)} ${p.scale.coerceIn(.5f, 2f)} ${if (p.visible) 1 else 0} $keyTag")
         }
     }
 

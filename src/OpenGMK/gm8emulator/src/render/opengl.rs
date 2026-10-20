@@ -1839,10 +1839,46 @@ static TELEMETRY: std::sync::Mutex<FrametimeTelemetry> = std::sync::Mutex::new(F
     last_instant: None,
 });
 
+#[inline]
+fn format_f32_1dp<'a>(val: f32, suffix: &str, buf: &'a mut [u8; 16]) -> &'a str {
+    let int_part = (val.max(0.0).min(999.9) as u32).min(999);
+    let frac_part = ((val.max(0.0) * 10.0).round() as u32) % 10;
+    let mut pos = 0;
+    if int_part >= 100 {
+        buf[pos] = b'0' + (int_part / 100) as u8;
+        pos += 1;
+        buf[pos] = b'0' + ((int_part / 10) % 10) as u8;
+        pos += 1;
+        buf[pos] = b'0' + (int_part % 10) as u8;
+        pos += 1;
+    } else if int_part >= 10 {
+        buf[pos] = b'0' + (int_part / 10) as u8;
+        pos += 1;
+        buf[pos] = b'0' + (int_part % 10) as u8;
+        pos += 1;
+    } else {
+        buf[pos] = b'0' + int_part as u8;
+        pos += 1;
+    }
+    buf[pos] = b'.';
+    pos += 1;
+    buf[pos] = b'0' + frac_part as u8;
+    pos += 1;
+    for &b in suffix.as_bytes() {
+        if pos < buf.len() {
+            buf[pos] = b;
+            pos += 1;
+        }
+    }
+    std::str::from_utf8(&buf[..pos]).unwrap_or("")
+}
+
 #[cfg(target_os = "android")]
 fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
     let now = std::time::Instant::now();
-    let (avg_fps, low_1, low_01, avg_ft, recent_samples) = {
+    let mut recent_samples = [16.66f32; 30];
+    let mut sample_count = 0usize;
+    let (avg_fps, avg_ft) = {
         if let Ok(mut telem) = TELEMETRY.lock() {
             if let Some(prev) = telem.last_instant {
                 let dt = (now.duration_since(prev).as_micros() as f32 / 1000.0f32).clamp(1.0f32, 100.0f32);
@@ -1855,81 +1891,110 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
             }
             telem.last_instant = Some(now);
 
-            let valid = &telem.samples[..telem.count.max(1)];
+            let count = telem.count.max(1);
+            let valid = &telem.samples[..count];
             let sum: f32 = valid.iter().sum();
-            let avg = sum / (valid.len() as f32);
+            let avg = sum / (count as f32);
             let fps = 1000.0f32 / avg.max(1.0f32);
 
-            let mut sorted = valid.to_vec();
-            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let p99_idx = ((sorted.len() as f32 * 0.99f32) as usize).min(sorted.len() - 1);
-            let p01_idx = sorted.len() - 1;
-            let l1 = 1000.0f32 / sorted[p99_idx].max(1.0f32);
-            let l01 = 1000.0f32 / sorted[p01_idx].max(1.0f32);
-
-            let mut ordered = Vec::with_capacity(60);
-            for s in 0..telem.count {
-                let idx = (telem.idx + 60 - telem.count + s) % 60;
-                ordered.push(telem.samples[idx]);
+            let n = telem.count.min(30);
+            sample_count = n;
+            for s in 0..n {
+                let idx = (telem.idx + 60 - n + s) % 60;
+                recent_samples[s] = telem.samples[idx];
             }
-            (fps, l1, l01, avg, ordered)
+            (fps, avg)
         } else {
-            (60.0f32, 58.0f32, 50.0f32, 16.66f32, vec![16.66f32; 60])
+            sample_count = 30;
+            (60.0f32, 16.66f32)
         }
     };
 
-    // Sleek, compact top-right Performance Badge (never blocks Pokémon HP or battle UI)
-    let badge_w = (ww * 0.16f32).clamp(140.0f32, 185.0f32);
-    let badge_h = (wh * 0.045f32).clamp(28.0f32, 36.0f32);
-    let x0 = ww - badge_w - 12.0f32;
-    let y0 = 10.0f32;
+    // FASE 1: Rediseño Apilado y Ubicación Inteligente del Monitor de FPS
+    // Ancho compacto y altura calculada para apilar Fila 1, Fila 2 y Fila 3 verticalmente sin solapamiento
+    let badge_w = 90.0f32;
+    let badge_h = 50.0f32;
+
+    // Posicionamiento adaptativo:
+    // Comprobar si hay franja negra lateral derecha (Modo 4:3 / Original / Con marco)
+    let (vx, _vy, vw, _vh) = crate::touch_controls::viewport();
+    let game_right = (vx + vw) * ww;
+    let right_bar_width = ww - game_right;
+
+    let (x0, y0) = if right_bar_width >= 80.0f32 {
+        // Modo 4:3 con franja negra derecha: ubicar en la franja negra sin tocar el viewport del juego
+        let bar_x = game_right + ((right_bar_width - badge_w) * 0.5f32).max(4.0f32);
+        (bar_x.min(ww - badge_w - 4.0f32), 8.0f32)
+    } else {
+        // Pantalla completa (Estirado / Rellenar): pegado al borde físico superior derecho
+        // margin_right = 4.0px, margin_top = 6.0px
+        (ww - badge_w - 4.0f32, 6.0f32)
+    };
     let x1 = x0 + badge_w;
     let y1 = y0 + badge_h;
 
-    // Dark semi-transparent pill background and tech-cyan border
-    let bg_col = [0.04f32, 0.06f32, 0.10f32, 0.88f32];
-    let border_col = [0.20f32, 0.55f32, 0.90f32, 0.85f32];
-    push_quad(verts, ww, wh, x0 - 1.5f32, y0 - 1.5f32, x1 + 1.5f32, y1 + 1.5f32, border_col);
+    // Fondo oscuro translúcido con borde sutil de alta legibilidad
+    let bg_col = [0.03f32, 0.05f32, 0.09f32, 0.88f32];
+    let border_col = [0.18f32, 0.45f32, 0.75f32, 0.80f32];
+    push_quad(verts, ww, wh, x0 - 1.0f32, y0 - 1.0f32, x1 + 1.0f32, y1 + 1.0f32, border_col);
     push_quad(verts, ww, wh, x0, y0, x1, y1, bg_col);
 
-    let px = (badge_h * 0.28f32).clamp(2.4f32, 3.4f32);
-    let fps_col = if avg_fps >= 57.0 {
-        [0.25, 0.95, 0.40, 1.0] // Green
-    } else if avg_fps >= 45.0 {
-        [0.95, 0.85, 0.20, 1.0] // Yellow
+    // Color dinámico de FPS: Verde >= 55, Amarillo >= 30, Rojo < 30
+    let fps_col = if avg_fps >= 55.0 {
+        [0.25, 0.95, 0.40, 1.0] // Verde
+    } else if avg_fps >= 30.0 {
+        [0.95, 0.85, 0.20, 1.0] // Amarillo
     } else {
-        [0.95, 0.30, 0.30, 1.0] // Red
+        [0.95, 0.30, 0.30, 1.0] // Rojo
     };
 
-    let fps_text = format!("{:.1} FPS", avg_fps);
-    let ft_text = format!("{:.1}ms", avg_ft);
+    let is_vk = crate::touch_controls::is_vulkan_backend();
+    let backend_str = if is_vk { "VK" } else { "GL" };
+    let backend_col = if is_vk {
+        [0.85, 0.45, 0.95, 0.95] // Vulkan magenta
+    } else {
+        [0.35, 0.75, 0.95, 0.95] // OpenGL cyan
+    };
 
-    push_text_left(verts, ww, wh, &fps_text, x0 + 6.0f32, y0 + badge_h * 0.35f32, px, fps_col);
-    push_text_left(verts, ww, wh, &ft_text, x0 + badge_w * 0.58f32, y0 + badge_h * 0.35f32, px * 0.85f32, [0.85, 0.88, 0.95, 1.0]);
+    // Formateo de cadenas sin asignaciones en heap (Zero-Heap)
+    let mut fps_buf = [0u8; 16];
+    let fps_str = format_f32_1dp(avg_fps, " FPS", &mut fps_buf);
 
-    // Live Frametime mini-histogram (last 30 samples)
+    let mut ft_buf = [0u8; 16];
+    let ft_str = format_f32_1dp(avg_ft, " ms", &mut ft_buf);
+
+    let px = 2.2f32;
+
+    // Fila 1: 60 FPS + Indicador GL / VK (y0 + 9.0)
+    push_text_left(verts, ww, wh, fps_str, x0 + 6.0f32, y0 + 9.0f32, px, fps_col);
+    push_text_left(verts, ww, wh, backend_str, x0 + badge_w - 20.0f32, y0 + 9.0f32, px * 0.9f32, backend_col);
+
+    // Fila 2: 16.6 ms (y0 + 22.0) - directamente debajo de los FPS, jamás en la misma línea
+    push_text_left(verts, ww, wh, ft_str, x0 + 6.0f32, y0 + 22.0f32, px * 0.88f32, [0.85, 0.88, 0.95, 0.95]);
+
+    // Fila 3: Mini-histograma (sparkline) de 30 muestras en la base de la tarjeta (y0 + 33.0)
     let graph_x = x0 + 6.0f32;
-    let graph_y = y0 + badge_h * 0.62f32;
+    let graph_y = y0 + 33.0f32;
     let graph_w = badge_w - 12.0f32;
-    let graph_h = badge_h * 0.28f32;
+    let graph_h = 12.0f32;
 
-    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.06, 0.95]);
+    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.05, 0.92]);
 
-    let sample_count = recent_samples.len().min(30);
-    let bar_w = (graph_w / sample_count.max(1) as f32).max(1.0f32);
-    let start_idx = if recent_samples.len() > 30 { recent_samples.len() - 30 } else { 0 };
-    for (i, &sample_ft) in recent_samples[start_idx..].iter().enumerate() {
+    let bars = sample_count.max(1);
+    let bar_w = (graph_w / bars as f32).max(1.0f32);
+    for i in 0..bars {
+        let sample_ft = recent_samples[i];
         let norm = (sample_ft / 33.33f32).clamp(0.08f32, 1.0f32);
         let bar_h = norm * graph_h;
         let bx = graph_x + i as f32 * bar_w;
         let by = graph_y + graph_h - bar_h;
 
         let col = if sample_ft <= 17.0f32 {
-            [0.25, 0.85, 0.35, 0.90] // Green: < 16.6ms
+            [0.25, 0.85, 0.35, 0.90] // Verde
         } else if sample_ft <= 33.3f32 {
-            [0.95, 0.80, 0.20, 0.90] // Yellow: 16.6ms - 33.3ms
+            [0.95, 0.80, 0.20, 0.90] // Amarillo
         } else {
-            [0.95, 0.25, 0.25, 0.90] // Red: > 33.3ms
+            [0.95, 0.25, 0.25, 0.90] // Rojo
         };
         push_quad(verts, ww, wh, bx, by, bx + bar_w * 0.85f32, graph_y + graph_h, col);
     }
@@ -2101,16 +2166,20 @@ impl RendererImpl {
                 touch_controls::control_art_aspect(c.name),
                 appearance.tint,
             );
-            match c.label {
-                touch_controls::Label::Text(text) => {
-                    if let Some((uv, aspect)) = label_art(text) {
-                        push_label_sprite(&mut label_sprites, ww, wh, lcx, lcy, lr * 0.42, uv, aspect);
-                    } else {
-                        push_text(&mut verts, ww, wh, text, lcx, lcy, lr * 0.28, [0.72, 0.72, 0.76, 0.92]);
-                    }
-                },
-                touch_controls::Label::Arrow(dir) => push_arrow(&mut verts, ww, wh, lcx, lcy, lr * 0.5, dir, [0.72, 0.72, 0.76, 0.92]),
-                touch_controls::Label::None => {},
+            if let Some(custom_txt) = touch_controls::control_custom_label(c.name) {
+                push_text(&mut verts, ww, wh, custom_txt, lcx, lcy, lr * 0.28, [0.85, 0.90, 1.0, 0.95]);
+            } else {
+                match c.label {
+                    touch_controls::Label::Text(text) => {
+                        if let Some((uv, aspect)) = label_art(text) {
+                            push_label_sprite(&mut label_sprites, ww, wh, lcx, lcy, lr * 0.42, uv, aspect);
+                        } else {
+                            push_text(&mut verts, ww, wh, text, lcx, lcy, lr * 0.28, [0.72, 0.72, 0.76, 0.92]);
+                        }
+                    },
+                    touch_controls::Label::Arrow(dir) => push_arrow(&mut verts, ww, wh, lcx, lcy, lr * 0.5, dir, [0.72, 0.72, 0.76, 0.92]),
+                    touch_controls::Label::None => {},
+                }
             }
             transform_touch_vertices(&mut verts[plain_start..], center, visual_scale, brightness);
         }

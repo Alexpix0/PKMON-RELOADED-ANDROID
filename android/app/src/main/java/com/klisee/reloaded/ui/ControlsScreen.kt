@@ -17,8 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +52,7 @@ import androidx.compose.material3.Tab
 import com.klisee.reloaded.AVAILABLE_KEY_CHOICES
 import com.klisee.reloaded.ControlAction
 import com.klisee.reloaded.Preferences
+import com.klisee.reloaded.PadProbe
 import com.klisee.reloaded.buttonName
 import com.klisee.reloaded.connectedPads
 import com.klisee.reloaded.hint
@@ -58,38 +62,6 @@ import java.io.File
 /** The action a button is currently bound to, for showing what a press will do. */
 private fun actionFor(bindings: Map<ControlAction, Int>, code: Int): ControlAction? =
     ControlAction.entries.firstOrNull { (bindings[it] ?: it.defaultCode) == code }
-
-/**
- * A view whose only job is to sit there focused and report every pad button pressed. That is what
- * makes this screen both a test bench and the way a remap learns which button was meant.
- */
-private class PadProbe(context: Context) : View(context) {
-    var onKey: ((Int) -> Unit)? = null
-    var onStick: ((Float, Float) -> Unit)? = null
-
-    init {
-        isFocusable = true
-        isFocusableInTouchMode = true
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        onKey?.invoke(keyCode)
-        return true
-    }
-
-    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK) {
-            onStick?.invoke(event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y))
-            return true
-        }
-        return super.onGenericMotionEvent(event)
-    }
-
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) requestFocus()
-        return true
-    }
-}
 
 /**
  * The control screen: what pad is connected, a live test bench, and the button layout. Everything it
@@ -262,7 +234,8 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
 
             if (capturing != null) {
                 val action = capturing!!
-                var selectedCategory by remember { mutableStateOf("Letras") }
+                var searchQuery by remember { mutableStateOf("") }
+                var selectedCategory by remember { mutableStateOf("Todas") }
                 AlertDialog(
                     onDismissRequest = { capturing = null },
                     title = {
@@ -273,11 +246,26 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                     },
                     text = {
                         Column(
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Buscar tecla (ej. Z, F5, Espacio, Shift)...") },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Buscar") },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Filled.Close, contentDescription = "Limpiar")
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                            )
                             Text(
-                                text = "1. Pulsa cualquier botón en tu mando o tecla en tu teclado físico...",
+                                text = "1. Pulsa cualquier botón en tu mando o tecla física...",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -287,21 +275,36 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
 
-                            val categories = listOf("Letras", "Números", "Especiales", "Flechas", "Funciones (F1-F12)", "Mando")
-                            ScrollableTabRow(
-                                selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
-                                edgePadding = 0.dp,
-                            ) {
-                                categories.forEach { cat ->
-                                    Tab(
-                                        selected = selectedCategory == cat,
-                                        onClick = { selectedCategory = cat },
-                                        text = { Text(cat) }
-                                    )
+                            if (searchQuery.isBlank()) {
+                                val categories = listOf("Todas", "Letras", "Números", "Funciones", "Especiales", "Flechas", "Mando")
+                                ScrollableTabRow(
+                                    selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
+                                    edgePadding = 0.dp,
+                                ) {
+                                    categories.forEach { cat ->
+                                        Tab(
+                                            selected = selectedCategory == cat,
+                                            onClick = { selectedCategory = cat },
+                                            text = { Text(cat) }
+                                        )
+                                    }
                                 }
                             }
 
-                            val keys = AVAILABLE_KEY_CHOICES.filter { it.category == selectedCategory }
+                            val keys = remember(searchQuery, selectedCategory) {
+                                val q = searchQuery.trim().lowercase()
+                                if (q.isNotEmpty()) {
+                                    AVAILABLE_KEY_CHOICES.filter {
+                                        it.name.lowercase().contains(q) ||
+                                        it.keyTag.lowercase().contains(q) ||
+                                        it.category.lowercase().contains(q)
+                                    }
+                                } else if (selectedCategory == "Todas") {
+                                    AVAILABLE_KEY_CHOICES
+                                } else {
+                                    AVAILABLE_KEY_CHOICES.filter { it.category.startsWith(selectedCategory) }
+                                }
+                            }
                             LazyVerticalGrid(
                                 columns = GridCells.Adaptive(minSize = 78.dp),
                                 modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
