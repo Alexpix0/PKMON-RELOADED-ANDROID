@@ -648,23 +648,7 @@ class Preferences(context: Context) {
         }
 
     fun touchLayouts(): Map<String, TouchPlacement> {
-        val values = TouchLayouts.parse(prefs.getString("touchLayoutV1", TouchLayouts.HEADER).orEmpty())
-        if (prefs.getBoolean("battleTopLayoutV1", false)) return values
-        // One-time: in battle, the three buttons on the right sat on top of the party's status bars.
-        // They are lined up with the three on the left; only the untouched old default moves.
-        val migrated = values.toMutableMap()
-        var changed = false
-        for (id in listOf("t", "l", "p")) {
-            val key = "battle/$id"
-            val placement = migrated[key] ?: continue
-            if (kotlin.math.abs(placement.y - 0.050f) < 0.001f) {
-                migrated[key] = placement.copy(y = 0.180f)
-                changed = true
-            }
-        }
-        prefs.edit().putBoolean("battleTopLayoutV1", true).apply()
-        if (changed) prefs.edit().putString("touchLayoutV1", TouchLayouts.encode(migrated)).apply()
-        return migrated
+        return TouchLayouts.parse(prefs.getString("touchLayoutV1", TouchLayouts.HEADER).orEmpty())
     }
 
     /** Called on an IO dispatcher by Save and exit; a failed save is reported to the editor. */

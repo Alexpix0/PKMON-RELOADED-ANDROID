@@ -120,9 +120,9 @@ pub struct Control {
 pub const JOYSTICK_NAME: &str = "joystick";
 
 pub const CLASSIC_CONTROLS: &[Control] = &[
-    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
+    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.982, r: 0.016 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
     // Number keys (first row along the top). They are for the base game only: in battle those keys
-    // pick a party PokÃ©mon, and that is what the SEL wheel below is for, so showing them there would
+    // pick a party Pokémon, and that is what the SEL wheel below is for, so showing them there would
     // only get in the way.
     Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: SAFARI },
     Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: SAFARI },
@@ -137,9 +137,9 @@ pub const CLASSIC_CONTROLS: &[Control] = &[
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE | SAFARI },
     Control { name: "m", key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE | SAFARI },
     Control { name: "e", key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | SAFARI },
+    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | SAFARI },
+    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | SAFARI },
     // Main actions, in the diamond a gamepad's face buttons use: the main one at the bottom, cancel
     // to the right, and the other two on the left and on top. The cluster is about the size of the
     // movement joystick and sits at the same height, so the two thumbs fall in the same place.
@@ -150,13 +150,13 @@ pub const CLASSIC_CONTROLS: &[Control] = &[
     // Secondary.
     Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE | SAFARI },
     Control { name: "s", key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
-    // Holding this opens the party wheel (see below): each slot is one PokÃ©mon of the team.
+    // Holding this opens the party wheel (see below): each slot is one Pokémon of the team.
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
     Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | BATTLE | SAFARI },
     Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD | SAFARI },
     // Menu keys.
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI },
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI },
     // While a dialogue box is open the overlay leaves only this one button, so the text and the
     // portrait are not buried under anything else. Its position is measured from the game image (not
     // the window), so it sits on the box whatever the screen's shape is. It sends the key the game
@@ -178,9 +178,9 @@ pub const CLASSIC_CONTROLS: &[Control] = &[
 ];
 /// Our own (new-style) catalogue, left as it was.
 pub const NEW_CONTROLS: &[Control] = &[
-    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.024 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
+    Control { name: RADIAL_MENU_NAME, key: Key::ScrollLock, shape: Shape::Circle { cx: 0.500, cy: 0.982, r: 0.016 }, label: Label::Arrow(Dir::Down), contexts: WORLD | BATTLE | MENU },
     // Number keys (first row along the top). They are for the base game only: in battle those keys
-    // pick a party PokÃ©mon, and that is what the SEL wheel below is for, so showing them there would
+    // pick a party Pokémon, and that is what the SEL wheel below is for, so showing them there would
     // only get in the way.
     Control { name: "alpha1", key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.055, r: 0.020 }, label: Label::Text("1"), contexts: WORLD | SAFARI },
     Control { name: "alpha2", key: Key::Alpha2, shape: Shape::Circle { cx: 0.372, cy: 0.055, r: 0.020 }, label: Label::Text("2"), contexts: WORLD | SAFARI },
@@ -192,9 +192,9 @@ pub const NEW_CONTROLS: &[Control] = &[
     Control { name: "o", key: Key::O, shape: Shape::Circle { cx: 0.372, cy: 0.145, r: 0.022 }, label: Label::Text("O"), contexts: WORLD | BATTLE | SAFARI },
     Control { name: "m", key: Key::M, shape: Shape::Circle { cx: 0.444, cy: 0.145, r: 0.022 }, label: Label::Text("M"), contexts: WORLD | BATTLE | SAFARI },
     Control { name: "e", key: Key::E, shape: Shape::Circle { cx: 0.516, cy: 0.145, r: 0.022 }, label: Label::Text("E"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | SAFARI },
+    Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | SAFARI },
+    Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | SAFARI },
     // Main actions, in the diamond a gamepad's face buttons use: the main one at the bottom, cancel
     // to the right, and the other two on the left and on top. The cluster is about the size of the
     // movement joystick and sits at the same height, so the two thumbs fall in the same place.
@@ -205,13 +205,13 @@ pub const NEW_CONTROLS: &[Control] = &[
     // Secondary.
     Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE | SAFARI },
     Control { name: "s", key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
-    // Holding this opens the party wheel (see below): each slot is one PokÃ©mon of the team.
+    // Holding this opens the party wheel (see below): each slot is one Pokémon of the team.
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
     Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | SAFARI },
     Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD | SAFARI },
     // Menu keys.
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | BATTLE | SAFARI },
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | BATTLE | SAFARI },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI },
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI },
     // While a dialogue box is open the overlay leaves only this one button, so the text and the
     // portrait are not buried under anything else. Its position is measured from the game image (not
     // the window), so it sits on the box whatever the screen's shape is. It sends the key the game
@@ -860,6 +860,14 @@ pub fn is_active(index: usize) -> bool {
     if overlay_style() == OverlayStyle::None {
         return false
     }
+    // In MENU modals (like "¿Salir del juego?"), never draw game controls
+    if current_context() == MENU {
+        return false;
+    }
+    // In DIALOG, only show the dialogue advancement button
+    if current_context() == DIALOG {
+        return controls()[index].contexts & DIALOG != 0;
+    }
     let classic = overlay_style() == OverlayStyle::Classic;
     if classic {
         if current_context() == WORLD && controls()[index].name.starts_with("alpha") { return false }
@@ -867,11 +875,8 @@ pub fn is_active(index: usize) -> bool {
         if controls()[index].name == PARTY_NAME && current_context() != BATTLE { return false }
         if layout_override(controls()[index].name).is_some_and(|entry| !entry.visible) { return false }
     }
-    if pad_active() || info_window_open()
-        || (controls()[index].contexts & current_context() == 0
-            && !(classic && layout_override(controls()[index].name).is_some()))
-    {
-        return false
+    if pad_active() || info_window_open() || (controls()[index].contexts & current_context() == 0) {
+        return false;
     }
     // The picker's trick button opens the whole roster once, and then has done its job: it is taken
     // away rather than left over the screen for the rest of the game. It comes back with the next new
@@ -903,6 +908,7 @@ pub fn is_active(index: usize) -> bool {
 /// The movement control (joystick or D-pad) drives the arrow keys, which is how the game's menus (the
 /// ones that still show controls) and the overworld are navigated.
 pub fn movement_active() -> bool {
+    if current_context() == MENU || current_context() == DIALOG { return false; }
     if overlay_style() == OverlayStyle::Classic { return joystick_active() }
     overlay_style() != OverlayStyle::None
         && !pad_active()
@@ -912,6 +918,7 @@ pub fn movement_active() -> bool {
 
 /// The joystick drives the arrow keys. Used by the classic overlay.
 pub fn joystick_active() -> bool {
+    if current_context() == MENU || current_context() == DIALOG { return false; }
     !pad_active() && !info_window_open() && joystick_visible()
         && overlay_style() != OverlayStyle::None
         && current_context() & (WORLD | BATTLE | CHOICE | MENU_NAV) != 0

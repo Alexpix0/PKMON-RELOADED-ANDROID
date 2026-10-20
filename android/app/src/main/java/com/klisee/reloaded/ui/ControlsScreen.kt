@@ -36,6 +36,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import com.klisee.reloaded.AVAILABLE_KEY_CHOICES
 import com.klisee.reloaded.ControlAction
 import com.klisee.reloaded.Preferences
 import com.klisee.reloaded.buttonName
@@ -230,7 +241,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                     val code = bindings[action] ?: action.defaultCode
                     NavRow(
                         icon = Icons.Filled.SportsEsports,
-                        title = "Tecla ${action.key}",
+                        title = action.label,
                         subtitle = listOfNotNull(
                             buttonName(code),
                             action.hint.takeIf { it.isNotEmpty() },
@@ -240,6 +251,98 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                         onClick = { capturing = action },
                     )
                 }
+                TextButton(
+                    onClick = { store(emptyMap(), stick) },
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
+                ) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text("Restablecer todos los controles por defecto")
+                }
+            }
+
+            if (capturing != null) {
+                val action = capturing!!
+                var selectedCategory by remember { mutableStateOf("Letras") }
+                AlertDialog(
+                    onDismissRequest = { capturing = null },
+                    title = {
+                        Text(
+                            text = "Asignar: ${action.label}",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "1. Pulsa cualquier botón en tu mando o tecla en tu teclado físico...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Text(
+                                text = "2. O elige directamente una tecla o botón de la lista:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+
+                            val categories = listOf("Letras", "Números", "Especiales", "Flechas", "Funciones (F1-F12)", "Mando")
+                            ScrollableTabRow(
+                                selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
+                                edgePadding = 0.dp,
+                            ) {
+                                categories.forEach { cat ->
+                                    Tab(
+                                        selected = selectedCategory == cat,
+                                        onClick = { selectedCategory = cat },
+                                        text = { Text(cat) }
+                                    )
+                                }
+                            }
+
+                            val keys = AVAILABLE_KEY_CHOICES.filter { it.category == selectedCategory }
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(minSize = 78.dp),
+                                modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                items(keys) { choice ->
+                                    FilterChip(
+                                        selected = (bindings[action] ?: action.defaultCode) == choice.code,
+                                        onClick = {
+                                            store(bindings + (action to choice.code), stick)
+                                            capturing = null
+                                        },
+                                        label = {
+                                            Text(
+                                                text = choice.name,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                store(bindings - action, stick)
+                                capturing = null
+                            }
+                        ) {
+                            Text("Restablecer Tecla")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { capturing = null }) {
+                            Text("Cancelar")
+                        }
+                    }
+                )
             }
 
             SettingsGroup("Stick", modifier = Modifier.padding(horizontal = 16.dp)) {

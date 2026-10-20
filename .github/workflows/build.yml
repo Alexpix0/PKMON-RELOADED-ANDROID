@@ -60,7 +60,7 @@ jobs:
       - name: Subir APK como artefacto descargable
         uses: actions/upload-artifact@v4
         with:
-          name: pokemon-reloaded-0.9.2-release
+          name: pokemon-reloaded-0.9.3-release
           path: android/app/build/outputs/apk/release/*.apk
 
       - name: Publicar GitHub Release

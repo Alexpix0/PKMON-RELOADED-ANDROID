@@ -1878,49 +1878,48 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
         }
     };
 
-    let px = (wh * 0.013f32).clamp(6.0f32, 13.0f32);
-    let box_w = (ww * 0.30f32).clamp(210.0f32, 340.0f32);
-    let box_h = (wh * 0.16f32).clamp(75.0f32, 120.0f32);
-    let x0 = ww * 0.02f32;
-    let y0 = wh * 0.02f32;
-    let x1 = x0 + box_w;
-    let y1 = y0 + box_h;
+    // Sleek, compact top-right Performance Badge (never blocks Pokémon HP or battle UI)
+    let badge_w = (ww * 0.16f32).clamp(140.0f32, 185.0f32);
+    let badge_h = (wh * 0.045f32).clamp(28.0f32, 36.0f32);
+    let x0 = ww - badge_w - 12.0f32;
+    let y0 = 10.0f32;
+    let x1 = x0 + badge_w;
+    let y1 = y0 + badge_h;
 
-    // Dark HUD panel background and cyan border
-    let bg_col = [0.04f32, 0.06f32, 0.09f32, 0.88f32];
-    let border_col = [0.18f32, 0.45f32, 0.80f32, 0.92f32];
-    push_quad(verts, ww, wh, x0 - 2.0f32, y0 - 2.0f32, x1 + 2.0f32, y1 + 2.0f32, border_col);
+    // Dark semi-transparent pill background and tech-cyan border
+    let bg_col = [0.04f32, 0.06f32, 0.10f32, 0.88f32];
+    let border_col = [0.20f32, 0.55f32, 0.90f32, 0.85f32];
+    push_quad(verts, ww, wh, x0 - 1.5f32, y0 - 1.5f32, x1 + 1.5f32, y1 + 1.5f32, border_col);
     push_quad(verts, ww, wh, x0, y0, x1, y1, bg_col);
 
-    // Text Header & metrics
-    let line1 = "MANGOHUD GLES3 (NEON | SPSC)";
-    let line2 = format!("FPS {:>4.1}  1% {:>4.1}  0.1% {:>4.1}", avg_fps, low_1, low_01);
-    let line3 = format!("FT {:>4.1}MS  CALLS 1  RAM OK", avg_ft);
+    let px = (badge_h * 0.28f32).clamp(2.4f32, 3.4f32);
+    let fps_col = if avg_fps >= 57.0 {
+        [0.25, 0.95, 0.40, 1.0] // Green
+    } else if avg_fps >= 45.0 {
+        [0.95, 0.85, 0.20, 1.0] // Yellow
+    } else {
+        [0.95, 0.30, 0.30, 1.0] // Red
+    };
 
-    push_text_left(verts, ww, wh, line1, x0 + 6.0f32, y0 + px * 1.5f32, px * 0.75f32, [0.35, 0.75, 1.0, 1.0]);
-    push_text_left(verts, ww, wh, &line2, x0 + 6.0f32, y0 + px * 3.3f32, px * 0.80f32, [0.35, 1.0, 0.45, 1.0]);
-    push_text_left(verts, ww, wh, &line3, x0 + 6.0f32, y0 + px * 5.0f32, px * 0.75f32, [0.88, 0.88, 0.92, 1.0]);
+    let fps_text = format!("{:.1} FPS", avg_fps);
+    let ft_text = format!("{:.1}ms", avg_ft);
 
-    // Live Frametime Graph
+    push_text_left(verts, ww, wh, &fps_text, x0 + 6.0f32, y0 + badge_h * 0.35f32, px, fps_col);
+    push_text_left(verts, ww, wh, &ft_text, x0 + badge_w * 0.58f32, y0 + badge_h * 0.35f32, px * 0.85f32, [0.85, 0.88, 0.95, 1.0]);
+
+    // Live Frametime mini-histogram (last 30 samples)
     let graph_x = x0 + 6.0f32;
-    let graph_y = y0 + px * 6.5f32;
-    let graph_w = box_w - 12.0f32;
-    let graph_h = y1 - graph_y - 4.0f32;
+    let graph_y = y0 + badge_h * 0.62f32;
+    let graph_w = badge_w - 12.0f32;
+    let graph_h = badge_h * 0.28f32;
 
-    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.05, 0.95]);
+    push_quad(verts, ww, wh, graph_x, graph_y, graph_x + graph_w, graph_y + graph_h, [0.02, 0.03, 0.06, 0.95]);
 
-    // 16.66 ms reference line (60 FPS green/cyan line)
-    let ref60_y = graph_y + graph_h * (1.0f32 - (16.66f32 / 33.33f32).clamp(0.0f32, 1.0f32));
-    push_quad(verts, ww, wh, graph_x, ref60_y - 0.5f32, graph_x + graph_w, ref60_y + 0.5f32, [0.2, 0.7, 0.9, 0.6]);
-
-    // 8.33 ms reference line (120 FPS magenta line)
-    let ref120_y = graph_y + graph_h * (1.0f32 - (8.33f32 / 33.33f32).clamp(0.0f32, 1.0f32));
-    push_quad(verts, ww, wh, graph_x, ref120_y - 0.5f32, graph_x + graph_w, ref120_y + 0.5f32, [0.6, 0.3, 0.8, 0.5]);
-
-    // Render bars for recent frametime samples
-    let bar_w = (graph_w / 60.0f32).max(1.0f32);
-    for (i, &sample_ft) in recent_samples.iter().enumerate() {
-        let norm = (sample_ft / 33.33f32).clamp(0.05f32, 1.0f32);
+    let sample_count = recent_samples.len().min(30);
+    let bar_w = (graph_w / sample_count.max(1) as f32).max(1.0f32);
+    let start_idx = if recent_samples.len() > 30 { recent_samples.len() - 30 } else { 0 };
+    for (i, &sample_ft) in recent_samples[start_idx..].iter().enumerate() {
+        let norm = (sample_ft / 33.33f32).clamp(0.08f32, 1.0f32);
         let bar_h = norm * graph_h;
         let bx = graph_x + i as f32 * bar_w;
         let by = graph_y + graph_h - bar_h;
@@ -2232,9 +2231,9 @@ impl RendererImpl {
 
         // Drastic-style Radial Quick Menu overlay
         if touch_controls::radial_menu_open() {
-            let ring_bg = [0.05, 0.07, 0.12, 0.88];
-            let sector_hl = [0.25, 0.55, 0.95, 0.92];
-            let border_col = [0.45, 0.75, 1.0, 0.75];
+            let ring_bg = [0.05, 0.07, 0.12, 0.90];
+            let sector_hl = [0.22, 0.55, 0.95, 0.94];
+            let border_col = [0.35, 0.65, 0.95, 0.80];
             let (cx, cy) = touch_controls::radial_menu_center(ww, wh);
             let r_inner = touch_controls::radial_menu_inner_radius(ww, wh);
             let r_outer = touch_controls::radial_menu_outer_radius(ww, wh);
@@ -2244,8 +2243,10 @@ impl RendererImpl {
             let segs_per_sector = 8;
             for s in 0..num_sectors {
                 let col = if active_sec == s as i32 { sector_hl } else { ring_bg };
-                let start_ang = (s as f32 * std::f32::consts::TAU / num_sectors as f32) - (std::f32::consts::FRAC_PI_2);
-                let end_ang = ((s + 1) as f32 * std::f32::consts::TAU / num_sectors as f32) - (std::f32::consts::FRAC_PI_2);
+                // Center sector s at mid_ang to align 100% with radial_menu_hit
+                let mid_ang = -std::f32::consts::FRAC_PI_2 + (s as f32 * std::f32::consts::TAU / num_sectors as f32);
+                let start_ang = mid_ang - std::f32::consts::FRAC_PI_8;
+                let end_ang = mid_ang + std::f32::consts::FRAC_PI_8;
                 for i in 0..segs_per_sector {
                     let a0 = start_ang + (end_ang - start_ang) * (i as f32 / segs_per_sector as f32);
                     let a1 = start_ang + (end_ang - start_ang) * ((i + 1) as f32 / segs_per_sector as f32);
@@ -2255,25 +2256,71 @@ impl RendererImpl {
                     let p1_out = (cx + a1.cos() * r_outer, cy + a1.sin() * r_outer);
                     push_quad(&mut verts, ww, wh, p0_in.0, p0_in.1, p1_out.0, p1_out.1, col);
                 }
+                // Sector border / divider line
+                let div_x_in = cx + start_ang.cos() * r_inner;
+                let div_y_in = cy + start_ang.sin() * r_inner;
+                let div_x_out = cx + start_ang.cos() * r_outer;
+                let div_y_out = cy + start_ang.sin() * r_outer;
+                push_quad(&mut verts, ww, wh, div_x_in - 1.0, div_y_in - 1.0, div_x_out + 1.0, div_y_out + 1.0, border_col);
             }
 
-            let px = (wh * 0.016).clamp(8.0, 18.0);
-            let labels = [
-                "VELOCIDAD",
-                "VOLUMEN",
-                "GUARDAR",
-                "CARGAR",
-                "REINICIAR",
-                "FPS HUD",
-                "MARCO",
-                "CERRAR"
-            ];
+            // Center hub (Turbo button in center)
+            let center_col = if touch_controls::fast_forward_active() {
+                [0.95, 0.75, 0.15, 0.95] // Amber/Gold if active
+            } else {
+                [0.08, 0.12, 0.18, 0.94]
+            };
+            let hub_segs = 16;
+            for i in 0..hub_segs {
+                let a0 = i as f32 * std::f32::consts::TAU / hub_segs as f32;
+                let a1 = (i + 1) as f32 * std::f32::consts::TAU / hub_segs as f32;
+                let p0 = (cx + a0.cos() * r_inner, cy + a0.sin() * r_inner);
+                let p1 = (cx + a1.cos() * r_inner, cy + a1.sin() * r_inner);
+                push_quad(&mut verts, ww, wh, cx, cy, p1.0, p1.1, center_col);
+            }
+            let center_text = if touch_controls::fast_forward_active() { "TURBO ON" } else { "TURBO" };
+            let center_px = (wh * 0.0035).clamp(2.4, 3.4);
+            push_text(&mut verts, ww, wh, center_text, cx, cy, center_px, [1.0, 1.0, 1.0, 1.0]);
+
+            // Sector Labels: Small, crisp, compact, pill-backed
+            let px = (wh * 0.0030).clamp(2.2, 3.2);
+            let labels = if touch_controls::key_items_radial_enabled() {
+                [
+                    "BICI",
+                    "PESCA",
+                    "FOTO",
+                    "MOCHILA",
+                    "CERRAR",
+                    "PAUSA",
+                    "TURBO",
+                    "EDITAR"
+                ]
+            } else {
+                [
+                    "AUDIO",
+                    "LOG",
+                    "FOTO",
+                    "FPS HUD",
+                    "CERRAR",
+                    "MARCO",
+                    "GUIA",
+                    "EDITAR"
+                ]
+            };
             for (idx, lbl) in labels.iter().enumerate() {
-                let mid_ang = ((idx as f32 + 0.5) * std::f32::consts::TAU / num_sectors as f32) - (std::f32::consts::FRAC_PI_2);
+                let mid_ang = -std::f32::consts::FRAC_PI_2 + (idx as f32 * std::f32::consts::TAU / num_sectors as f32);
                 let r_mid = (r_inner + r_outer) * 0.5;
                 let lx = cx + mid_ang.cos() * r_mid;
                 let ly = cy + mid_ang.sin() * r_mid;
-                push_text(&mut verts, ww, wh, lbl, lx, ly, px * 0.85, [1.0, 1.0, 1.0, 1.0]);
+                let pill_w = (lbl.len() as f32 * 4.0 * px) + 8.0;
+                let pill_h = (5.0 * px) + 6.0;
+                let pill_col = if active_sec == idx as i32 {
+                    [0.10, 0.25, 0.50, 0.90]
+                } else {
+                    [0.03, 0.04, 0.07, 0.85]
+                };
+                push_quad(&mut verts, ww, wh, lx - pill_w * 0.5, ly - pill_h * 0.5, lx + pill_w * 0.5, ly + pill_h * 0.5, pill_col);
+                push_text(&mut verts, ww, wh, lbl, lx, ly, px, [1.0, 1.0, 1.0, 1.0]);
             }
         }
 

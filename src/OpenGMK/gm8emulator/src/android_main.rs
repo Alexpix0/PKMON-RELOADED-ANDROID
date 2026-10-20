@@ -19,6 +19,7 @@ use ramen::{input::Key, platform::android};
 /// `AKEYCODE_*`, from <android/keycodes.h>. Letters are contiguous from `A`.
 type AKeyCode = i32;
 const AKEYCODE_A: AKeyCode = 29;
+const AKEYCODE_Z: AKeyCode = 54;
 const AKEYCODE_DEL: AKeyCode = 67;
 const AKEYCODE_TAB: AKeyCode = 61;
 const AKEYCODE_ENTER: AKeyCode = 66;
@@ -69,6 +70,40 @@ fn map_key(keycode: AKeyCode) -> Option<Key> {
         AKEYCODE_DPAD_LEFT => Key::LeftArrow,
         AKEYCODE_DPAD_RIGHT => Key::RightArrow,
 
+        // Numbers 0..9 on physical PC keyboard
+        7 => Key::Alpha0,
+        8 => Key::Alpha1,
+        9 => Key::Alpha2,
+        10 => Key::Alpha3,
+        11 => Key::Alpha4,
+        12 => Key::Alpha5,
+        13 => Key::Alpha6,
+        14 => Key::Alpha7,
+        15 => Key::Alpha8,
+        16 => Key::Alpha9,
+
+        // Modifiers on physical PC keyboard
+        57 => Key::LeftAlt,
+        58 => Key::RightAlt,
+        59 => Key::LeftShift,
+        60 => Key::RightShift,
+        113 => Key::LeftControl,
+        114 => Key::RightControl,
+
+        // Function keys F1..F12
+        131 => Key::F1,
+        132 => Key::F2,
+        133 => Key::F3,
+        134 => Key::F4,
+        135 => Key::F5,
+        136 => Key::F6,
+        137 => Key::F7,
+        138 => Key::F8,
+        139 => Key::F9,
+        140 => Key::F10,
+        141 => Key::F11,
+        142 => Key::F12,
+
         // Gamepad. The game only ever reads the keyboard, so a controller plays by pressing the
         // same keys the keyboard does. That is the whole trick, and it needs nothing from the game:
         //
@@ -101,8 +136,12 @@ fn map_key(keycode: AKeyCode) -> Option<Key> {
 }
 
 fn map_letter(keycode: AKeyCode) -> Option<Key> {
-    let index = (keycode - AKEYCODE_A) as usize;
-    LETTERS.get(index).copied()
+    if (AKEYCODE_A..=AKEYCODE_Z).contains(&keycode) {
+        let index = (keycode - AKEYCODE_A) as usize;
+        LETTERS.get(index).copied()
+    } else {
+        None
+    }
 }
 
 fn mapped_key(keycode: i32) -> Option<Key> {
@@ -140,6 +179,7 @@ fn load_video() {
                 let show = value == "1" || value.eq_ignore_ascii_case("true");
                 eprintln!("[video] show_fps: {}", show);
                 std::env::set_var("OPENGMK_SHOW_FPS", if show { "1" } else { "0" });
+                crate::touch_controls::set_show_fps(show);
             } else if name == "bezel" {
                 eprintln!("[video] marco bezel: {}", value);
                 std::env::set_var("OPENGMK_BEZEL", value);
@@ -363,17 +403,50 @@ fn parse_key(name: &str) -> Option<Key> {
         if byte.is_ascii_uppercase() {
             return LETTERS.get(usize::from(byte - b'A')).copied()
         }
+        if byte.is_ascii_digit() {
+            return match byte {
+                b'0' => Some(Key::Alpha0),
+                b'1' => Some(Key::Alpha1),
+                b'2' => Some(Key::Alpha2),
+                b'3' => Some(Key::Alpha3),
+                b'4' => Some(Key::Alpha4),
+                b'5' => Some(Key::Alpha5),
+                b'6' => Some(Key::Alpha6),
+                b'7' => Some(Key::Alpha7),
+                b'8' => Some(Key::Alpha8),
+                b'9' => Some(Key::Alpha9),
+                _ => None,
+            };
+        }
     }
     Some(match upper.as_str() {
         "RETURN" | "ENTER" => Key::Return,
         "SPACE" => Key::Space,
-        "ESCAPE" => Key::Escape,
+        "ESCAPE" | "ESC" => Key::Escape,
         "TAB" => Key::Tab,
         "BACKSPACE" => Key::Backspace,
         "UP" => Key::UpArrow,
         "DOWN" => Key::DownArrow,
         "LEFT" => Key::LeftArrow,
         "RIGHT" => Key::RightArrow,
+        "SHIFT" | "LSHIFT" | "LEFTSHIFT" => Key::LeftShift,
+        "RSHIFT" | "RIGHTSHIFT" => Key::RightShift,
+        "CTRL" | "LCTRL" | "LEFTCONTROL" => Key::LeftControl,
+        "RCTRL" | "RIGHTCONTROL" => Key::RightControl,
+        "ALT" | "LALT" | "LEFTALT" => Key::LeftAlt,
+        "RALT" | "RIGHTALT" => Key::RightAlt,
+        "F1" => Key::F1,
+        "F2" => Key::F2,
+        "F3" => Key::F3,
+        "F4" => Key::F4,
+        "F5" => Key::F5,
+        "F6" => Key::F6,
+        "F7" => Key::F7,
+        "F8" => Key::F8,
+        "F9" => Key::F9,
+        "F10" => Key::F10,
+        "F11" => Key::F11,
+        "F12" => Key::F12,
         _ => return None,
     })
 }
@@ -1604,7 +1677,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.9.2\n\
+             Version: 0.9.3\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

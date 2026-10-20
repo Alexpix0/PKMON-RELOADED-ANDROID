@@ -3,6 +3,7 @@ package com.klisee.reloaded
 import android.content.Context
 import android.hardware.input.InputManager
 import android.view.InputDevice
+import android.view.KeyEvent
 import java.io.File
 
 /** The pads Android is reporting right now. */
@@ -19,58 +20,167 @@ fun connectedPads(context: Context): List<String> {
 }
 
 /**
- * The keyboard keys the game reads that a pad button can be bound to.
- *
- * The game only ever reads the keyboard, so controller support is a pad pressing those keys.
- * Android reports the same key codes for every brand of pad, which is what lets one layout cover
- * an Xbox pad, a PlayStation one and a generic one at the same time.
+ * The keyboard keys the game reads that a pad button or PC key can be bound to.
  */
-enum class ControlAction(val key: String, val defaultCode: Int) {
-    Z("Z", 96), // A (Xbox, Nintendo) / X (PlayStation) / abajo del grupo derecho
-    X("X", 97), // B (Xbox, Nintendo) / circulo (PlayStation) / derecha
-    C("C", 99), // X (Xbox, Nintendo) / cuadrado (PlayStation) / izquierda
-    V("V", 100), // Y (Xbox, Nintendo) / triangulo (PlayStation) / arriba
-    ENTER("RETURN", 109), // select, share, view, menos
-    SPACE("SPACE", 108), // start, options, menu, mas
-    B("B", 103), // R1, RB
-    M("M", 102), // L1, LB
-    O("O", 105), // R2, RT, ZR
-    S("S", 104), // L2, LT, ZL
-    E("E", 106), // pulsar cualquier stick
+enum class ControlAction(val key: String, val defaultCode: Int, val label: String) {
+    Z("Z", 96, "Acción Principal (Z)"),
+    X("X", 97, "Cancelar / Correr (X)"),
+    C("C", 99, "Secundario / Bici (C)"),
+    V("V", 100, "Caña / Ataque 4 (V)"),
+    ENTER("RETURN", 109, "Menú / OK (Enter)"),
+    SPACE("SPACE", 108, "Equipo Pokémon (Espacio)"),
+    B("B", 103, "Relevo Pokémon (B)"),
+    M("M", 102, "Objeto Rápido / Poción (M)"),
+    O("O", 105, "Mochila (O)"),
+    S("S", 104, "Megaevolución (S)"),
+    E("E", 106, "Huir / Escapar (E)"),
+    UP("UP", 19, "Mover Arriba (↑)"),
+    DOWN("DOWN", 20, "Mover Abajo (↓)"),
+    LEFT("LEFT", 21, "Mover Izquierda (←)"),
+    RIGHT("RIGHT", 22, "Mover Derecha (→)");
 }
 
 /** What the key does in the game, for the ones that are known. */
 val ControlAction.hint: String
     get() = when (this) {
-        ControlAction.Z -> "Interactuar y confirmar"
-        ControlAction.X -> "Cancelar y correr"
-        ControlAction.O -> "Mochila"
-        ControlAction.E -> "Escapar de un Pokemon salvaje"
-        else -> ""
+        ControlAction.Z -> "Interactuar, confirmar diálogos y ataque principal"
+        ControlAction.X -> "Cancelar, correr en mundo y ataque secundario"
+        ControlAction.C -> "Bicicleta, abrir menú y tercer ataque"
+        ControlAction.V -> "Caña de pescar y cuarto ataque"
+        ControlAction.ENTER -> "Menú de pausa y confirmación"
+        ControlAction.SPACE -> "Abrir pantalla del equipo Pokémon"
+        ControlAction.B -> "Relevo de Pokémon en combate"
+        ControlAction.M -> "Usar objeto o poción rápida en combate"
+        ControlAction.O -> "Abrir inventario y mochila"
+        ControlAction.S -> "Megaevolución, Movimiento Z o Dinamax"
+        ControlAction.E -> "Escapar de Pokémon salvaje o huir de batalla"
+        ControlAction.UP -> "Caminar o navegar hacia arriba"
+        ControlAction.DOWN -> "Caminar o navegar hacia abajo"
+        ControlAction.LEFT -> "Caminar o navegar hacia la izquierda"
+        ControlAction.RIGHT -> "Caminar o navegar hacia la derecha"
     }
 
-/** The name of a pad button, for showing it on screen. */
+/** The name of a pad button or PC keyboard key, for showing it on screen. */
 fun buttonName(code: Int): String = when (code) {
-    96 -> "A"
-    97 -> "B"
-    99 -> "X"
-    100 -> "Y"
-    102 -> "L1"
-    103 -> "R1"
-    104 -> "L2"
-    105 -> "R2"
-    106 -> "Stick izquierdo"
-    107 -> "Stick derecho"
-    108 -> "Start"
-    109 -> "Select"
-    else -> "Boton $code"
+    // Gamepad buttons
+    96 -> "Mando A"
+    97 -> "Mando B"
+    99 -> "Mando X"
+    100 -> "Mando Y"
+    102 -> "Mando L1"
+    103 -> "Mando R1"
+    104 -> "Mando L2"
+    105 -> "Mando R2"
+    106 -> "Mando Stick L3"
+    107 -> "Mando Stick R3"
+    108 -> "Mando Start"
+    109 -> "Mando Select"
+
+    // D-Pad
+    KeyEvent.KEYCODE_DPAD_UP -> "D-Pad Arriba"
+    KeyEvent.KEYCODE_DPAD_DOWN -> "D-Pad Abajo"
+    KeyEvent.KEYCODE_DPAD_LEFT -> "D-Pad Izquierda"
+    KeyEvent.KEYCODE_DPAD_RIGHT -> "D-Pad Derecha"
+
+    // PC Keyboard Special Keys
+    KeyEvent.KEYCODE_ENTER -> "Tecla ENTER"
+    KeyEvent.KEYCODE_SPACE -> "Tecla ESPACIO"
+    KeyEvent.KEYCODE_ESCAPE -> "Tecla ESCAPE"
+    KeyEvent.KEYCODE_TAB -> "Tecla TAB"
+    KeyEvent.KEYCODE_DEL -> "Tecla RETROCESO"
+    KeyEvent.KEYCODE_SHIFT_LEFT -> "Shift Izquierdo"
+    KeyEvent.KEYCODE_SHIFT_RIGHT -> "Shift Derecho"
+    KeyEvent.KEYCODE_CTRL_LEFT -> "Ctrl Izquierdo"
+    KeyEvent.KEYCODE_CTRL_RIGHT -> "Ctrl Derecho"
+    KeyEvent.KEYCODE_ALT_LEFT -> "Alt Izquierdo"
+    KeyEvent.KEYCODE_ALT_RIGHT -> "Alt Derecho"
+
+    // PC Numbers (0..9)
+    in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> "Tecla ${code - KeyEvent.KEYCODE_0}"
+
+    // PC Letters (A..Z)
+    in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z -> "Tecla ${('A'.code + (code - KeyEvent.KEYCODE_A)).toChar()}"
+
+    // PC Function Keys (F1..F12)
+    in KeyEvent.KEYCODE_F1..KeyEvent.KEYCODE_F12 -> "F${code - KeyEvent.KEYCODE_F1 + 1}"
+
+    else -> {
+        val raw = KeyEvent.keyCodeToString(code)
+        if (raw.startsWith("KEYCODE_")) {
+            raw.removePrefix("KEYCODE_")
+        } else {
+            "Botón $code"
+        }
+    }
+}
+
+/** Definition for key item choice in manual picker */
+data class PcKeyChoice(val code: Int, val name: String, val category: String)
+
+/** Full PC Keyboard & Gamepad Keys Catalogue for visual custom assignment */
+val AVAILABLE_KEY_CHOICES: List<PcKeyChoice> by lazy {
+    val list = mutableListOf<PcKeyChoice>()
+
+    // Gamepad
+    list.add(PcKeyChoice(96, "Mando A", "Mando"))
+    list.add(PcKeyChoice(97, "Mando B", "Mando"))
+    list.add(PcKeyChoice(99, "Mando X", "Mando"))
+    list.add(PcKeyChoice(100, "Mando Y", "Mando"))
+    list.add(PcKeyChoice(102, "Mando L1 (LB)", "Mando"))
+    list.add(PcKeyChoice(103, "Mando R1 (RB)", "Mando"))
+    list.add(PcKeyChoice(104, "Mando L2 (LT)", "Mando"))
+    list.add(PcKeyChoice(105, "Mando R2 (RT)", "Mando"))
+    list.add(PcKeyChoice(106, "Mando Stick L3", "Mando"))
+    list.add(PcKeyChoice(107, "Mando Stick R3", "Mando"))
+    list.add(PcKeyChoice(108, "Mando Start", "Mando"))
+    list.add(PcKeyChoice(109, "Mando Select", "Mando"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_UP, "D-Pad Arriba", "Mando"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_DOWN, "D-Pad Abajo", "Mando"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_LEFT, "D-Pad Izquierda", "Mando"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_RIGHT, "D-Pad Derecha", "Mando"))
+
+    // PC Letters A-Z
+    for (c in 'A'..'Z') {
+        val code = KeyEvent.KEYCODE_A + (c.code - 'A'.code)
+        list.add(PcKeyChoice(code, "Tecla $c", "Letras"))
+    }
+
+    // PC Numbers 0-9
+    for (d in 0..9) {
+        val code = KeyEvent.KEYCODE_0 + d
+        list.add(PcKeyChoice(code, "Tecla $d", "Números"))
+    }
+
+    // Special Keys
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_SPACE, "Espacio", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_ENTER, "Enter / Return", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_ESCAPE, "Escape (Esc)", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_TAB, "Tabulador", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DEL, "Retroceso / Backspace", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_SHIFT_LEFT, "Shift Izquierdo", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_SHIFT_RIGHT, "Shift Derecho", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_CTRL_LEFT, "Control Izquierdo", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_CTRL_RIGHT, "Control Derecho", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_ALT_LEFT, "Alt Izquierdo", "Especiales"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_ALT_RIGHT, "Alt Derecho", "Especiales"))
+
+    // Arrow keys
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_UP, "Flecha Arriba (↑)", "Flechas"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_DOWN, "Flecha Abajo (↓)", "Flechas"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_LEFT, "Flecha Izquierda (←)", "Flechas"))
+    list.add(PcKeyChoice(KeyEvent.KEYCODE_DPAD_RIGHT, "Flecha Derecha (→)", "Flechas"))
+
+    // Function keys F1-F12
+    for (i in 1..12) {
+        val code = KeyEvent.KEYCODE_F1 + (i - 1)
+        list.add(PcKeyChoice(code, "F$i", "Funciones (F1-F12)"))
+    }
+
+    list
 }
 
 /**
  * Writes the layout the emulator reads when it starts.
- *
- * Only the buttons the player actually changed are written, so everything they did not touch keeps
- * the built-in layout (which, for instance, accepts either stick press for `E`).
  */
 fun writeControlsFile(
     filesDir: File,
@@ -88,11 +198,10 @@ fun writeControlsFile(
     val text = buildString {
         appendLine("# Escrito por la pantalla de Controles. El emulador lo lee al arrancar.")
         for (action in ControlAction.entries) {
-            bindings[action]?.let { appendLine("$it=${action.key}") }
+            val code = bindings[action] ?: action.defaultCode
+            appendLine("$code=${action.key}")
         }
         appendLine("stick=${if (stick) 1 else 0}")
-        // With a pad connected the game starts with the touch controls hidden; touching the screen
-        // brings them back.
         appendLine("pad=${if (padConnected) 1 else 0}")
         appendLine("opacity=$opacity")
         appendLine("scale=$scale")
