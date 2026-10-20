@@ -1419,6 +1419,11 @@ fn glyph(c: char) -> Option<[u8; 5]> {
         '/' => [0b001, 0b001, 0b010, 0b100, 0b100],
         '(' => [0b010, 0b100, 0b100, 0b100, 0b010],
         ')' => [0b010, 0b001, 0b001, 0b001, 0b010],
+        'J' => [0b001, 0b001, 0b001, 0b101, 0b010],
+        'Q' => [0b011, 0b101, 0b101, 0b011, 0b001],
+        'Y' => [0b101, 0b101, 0b010, 0b010, 0b010],
+        '>' => [0b100, 0b010, 0b001, 0b010, 0b100],
+        '<' => [0b001, 0b010, 0b100, 0b010, 0b001],
         '-' => [0b000, 0b000, 0b111, 0b000, 0b000],
         ' ' => [0b000, 0b000, 0b000, 0b000, 0b000],
         _ => return None,
@@ -2298,99 +2303,248 @@ impl RendererImpl {
             }
         }
 
-        // Drastic-style Radial Quick Menu overlay
+        // Tactical Radial Beveled Card Wheel
         if touch_controls::radial_menu_open() {
-            let ring_bg = [0.05, 0.07, 0.12, 0.90];
-            let sector_hl = [0.22, 0.55, 0.95, 0.94];
-            let border_col = [0.35, 0.65, 0.95, 0.80];
+            // Dim background for tactical focus
+            push_quad(&mut verts, ww, wh, 0.0, 0.0, ww, wh, [0.0, 0.0, 0.0, 0.50]);
+
             let (cx, cy) = touch_controls::radial_menu_center(ww, wh);
-            let r_inner = touch_controls::radial_menu_inner_radius(ww, wh);
-            let r_outer = touch_controls::radial_menu_outer_radius(ww, wh);
             let active_sec = touch_controls::radial_hover_sector();
+            let min_dim = ww.min(wh);
+            let r_orbit = (min_dim * 0.31f32).clamp(100.0, 240.0);
+            let card_w = (min_dim * 0.165f32).clamp(65.0, 115.0);
+            let card_h = card_w * 0.72f32;
+            let r_inner = touch_controls::radial_menu_inner_radius(ww, wh);
 
-            let num_sectors = 8;
-            let segs_per_sector = 8;
-            for s in 0..num_sectors {
-                let col = if active_sec == s as i32 { sector_hl } else { ring_bg };
-                // Center sector s at mid_ang to align 100% with radial_menu_hit
-                let mid_ang = -std::f32::consts::FRAC_PI_2 + (s as f32 * std::f32::consts::TAU / num_sectors as f32);
-                let start_ang = mid_ang - std::f32::consts::FRAC_PI_8;
-                let end_ang = mid_ang + std::f32::consts::FRAC_PI_8;
-                for i in 0..segs_per_sector {
-                    let a0 = start_ang + (end_ang - start_ang) * (i as f32 / segs_per_sector as f32);
-                    let a1 = start_ang + (end_ang - start_ang) * ((i + 1) as f32 / segs_per_sector as f32);
-                    let p0_in = (cx + a0.cos() * r_inner, cy + a0.sin() * r_inner);
-                    let p0_out = (cx + a0.cos() * r_outer, cy + a0.sin() * r_outer);
-                    let p1_in = (cx + a1.cos() * r_inner, cy + a1.sin() * r_inner);
-                    let p1_out = (cx + a1.cos() * r_outer, cy + a1.sin() * r_outer);
-                    push_quad(&mut verts, ww, wh, p0_in.0, p0_in.1, p1_out.0, p1_out.1, col);
-                }
-                // Sector border / divider line
-                let div_x_in = cx + start_ang.cos() * r_inner;
-                let div_y_in = cy + start_ang.sin() * r_inner;
-                let div_x_out = cx + start_ang.cos() * r_outer;
-                let div_y_out = cy + start_ang.sin() * r_outer;
-                push_quad(&mut verts, ww, wh, div_x_in - 1.0, div_y_in - 1.0, div_x_out + 1.0, div_y_out + 1.0, border_col);
-            }
+            // Subtle connecting tactical ring
+            push_ring(&mut verts, ww, wh, cx, cy, r_orbit, 1.5, [0.0, 0.898, 1.0, 0.18]);
 
-            // Center hub (Turbo button in center)
-            let center_col = if touch_controls::fast_forward_active() {
-                [0.95, 0.75, 0.15, 0.95] // Amber/Gold if active
-            } else {
-                [0.08, 0.12, 0.18, 0.94]
-            };
-            let hub_segs = 16;
-            for i in 0..hub_segs {
-                let a0 = i as f32 * std::f32::consts::TAU / hub_segs as f32;
-                let a1 = (i + 1) as f32 * std::f32::consts::TAU / hub_segs as f32;
-                let p0 = (cx + a0.cos() * r_inner, cy + a0.sin() * r_inner);
-                let p1 = (cx + a1.cos() * r_inner, cy + a1.sin() * r_inner);
-                push_quad(&mut verts, ww, wh, cx, cy, p1.0, p1.1, center_col);
-            }
-            let center_text = if touch_controls::fast_forward_active() { "TURBO ON" } else { "TURBO" };
-            let center_px = (wh * 0.0035).clamp(2.4, 3.4);
-            push_text(&mut verts, ww, wh, center_text, cx, cy, center_px, [1.0, 1.0, 1.0, 1.0]);
+            // 8 Tactical Beveled Cards
+            let labels = [
+                "TURBO",
+                "GUARDAR",
+                "CARGAR",
+                "TIPOS",
+                "PERFIL",
+                "SONIDO",
+                "FPS",
+                "CAPTURA",
+            ];
 
-            // Sector Labels: Small, crisp, compact, pill-backed
-            let px = (wh * 0.0030).clamp(2.2, 3.2);
-            let labels = if touch_controls::key_items_radial_enabled() {
-                [
-                    "BICI",
-                    "PESCA",
-                    "FOTO",
-                    "MOCHILA",
-                    "CERRAR",
-                    "PAUSA",
-                    "TURBO",
-                    "EDITAR"
-                ]
-            } else {
-                [
-                    "AUDIO",
-                    "LOG",
-                    "FOTO",
-                    "FPS HUD",
-                    "CERRAR",
-                    "MARCO",
-                    "GUIA",
-                    "EDITAR"
-                ]
-            };
-            for (idx, lbl) in labels.iter().enumerate() {
-                let mid_ang = -std::f32::consts::FRAC_PI_2 + (idx as f32 * std::f32::consts::TAU / num_sectors as f32);
-                let r_mid = (r_inner + r_outer) * 0.5;
-                let lx = cx + mid_ang.cos() * r_mid;
-                let ly = cy + mid_ang.sin() * r_mid;
-                let pill_w = (lbl.len() as f32 * 4.0 * px) + 8.0;
-                let pill_h = (5.0 * px) + 6.0;
-                let pill_col = if active_sec == idx as i32 {
-                    [0.10, 0.25, 0.50, 0.90]
+            for s in 0..8 {
+                let is_hover = active_sec == s as i32;
+                let mid_ang = -std::f32::consts::FRAC_PI_2 + (s as f32 * std::f32::consts::TAU / 8.0f32);
+                let card_cx = cx + mid_ang.cos() * r_orbit;
+                let card_cy = cy + mid_ang.sin() * r_orbit;
+
+                let x0 = card_cx - card_w * 0.5;
+                let x1 = card_cx + card_w * 0.5;
+                let y0 = card_cy - card_h * 0.5;
+                let y1 = card_cy + card_h * 0.5;
+
+                // 1. Outer Border / Cyan Hover Glow
+                if is_hover {
+                    // Glowing cyan border (#00E5FF)
+                    push_quad(&mut verts, ww, wh, x0 - 3.0, y0 - 3.0, x1 + 3.0, y1 + 3.0, [0.0, 0.898, 1.0, 0.95]);
                 } else {
-                    [0.03, 0.04, 0.07, 0.85]
+                    // Crisp 2px dark border (#101114)
+                    push_quad(&mut verts, ww, wh, x0 - 2.0, y0 - 2.0, x1 + 2.0, y1 + 2.0, [0.06, 0.07, 0.09, 1.0]);
+                }
+
+                // 2. Base Body (#2B2D31)
+                let body_col = if is_hover {
+                    [0.21, 0.23, 0.28, 0.98]
+                } else {
+                    [0.1686, 0.1765, 0.1922, 0.96]
                 };
-                push_quad(&mut verts, ww, wh, lx - pill_w * 0.5, ly - pill_h * 0.5, lx + pill_w * 0.5, ly + pill_h * 0.5, pill_col);
-                push_text(&mut verts, ww, wh, lbl, lx, ly, px, [1.0, 1.0, 1.0, 1.0]);
+                push_quad(&mut verts, ww, wh, x0, y0, x1, y1, body_col);
+
+                // 3. Inner Top Bevel Highlight (#4E525A)
+                push_quad(&mut verts, ww, wh, x0 + 1.5, y0 + 1.0, x1 - 1.5, y0 + 3.0, [0.3059, 0.3216, 0.3529, 0.95]);
+                // Inner Left Bevel Highlight
+                push_quad(&mut verts, ww, wh, x0 + 1.0, y0 + 1.0, x0 + 2.5, y1 - 1.5, [0.26, 0.28, 0.32, 0.70]);
+                // Inner Bottom Shadow
+                push_quad(&mut verts, ww, wh, x0 + 1.5, y1 - 3.0, x1 - 1.5, y1 - 1.0, [0.08, 0.09, 0.11, 0.90]);
+
+                // 4. Procedural / Pixel-Art Icon in top half
+                let icon_cx = card_cx;
+                let icon_cy = card_cy - card_h * 0.17;
+                let isz = (card_h * 0.23).clamp(8.0, 15.0);
+
+                match s {
+                    0 => {
+                        // TURBO: Double lightning chevron >> in gold / cyan
+                        let tcol = if touch_controls::turbo_level() > 0 {
+                            [1.0, 0.85, 0.15, 1.0] // Gold
+                        } else {
+                            [0.0, 0.898, 1.0, 1.0] // Cyan
+                        };
+                        push_tri(&mut verts, ww, wh, (icon_cx - isz * 0.25, icon_cy), (icon_cx - isz * 0.85, icon_cy - isz * 0.7), (icon_cx - isz * 0.85, icon_cy + isz * 0.7), tcol);
+                        push_tri(&mut verts, ww, wh, (icon_cx + isz * 0.85, icon_cy), (icon_cx + isz * 0.25, icon_cy - isz * 0.7), (icon_cx + isz * 0.25, icon_cy + isz * 0.7), tcol);
+                    },
+                    1 => {
+                        // GUARDAR: Retro 3.5" Floppy Disk in emerald green
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.8, icon_cy - isz * 0.8, icon_cx + isz * 0.8, icon_cy + isz * 0.8, [0.18, 0.80, 0.44, 1.0]);
+                        // Metal shutter
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.5, icon_cy - isz * 0.8, icon_cx + isz * 0.4, icon_cy - isz * 0.15, [0.78, 0.82, 0.88, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.3, icon_cy - isz * 0.7, icon_cx - isz * 0.1, icon_cy - isz * 0.25, [0.18, 0.80, 0.44, 1.0]);
+                        // White label
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.6, icon_cy + isz * 0.1, icon_cx + isz * 0.6, icon_cy + isz * 0.7, [0.95, 0.96, 0.98, 1.0]);
+                    },
+                    2 => {
+                        // CARGAR: Return Folder / Arrow in sky blue
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.85, icon_cy - isz * 0.75, icon_cx - isz * 0.2, icon_cy - isz * 0.4, [0.20, 0.55, 0.90, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.85, icon_cy - isz * 0.4, icon_cx + isz * 0.85, icon_cy + isz * 0.7, [0.25, 0.65, 1.0, 1.0]);
+                        // Return arrow
+                        push_tri(&mut verts, ww, wh, (icon_cx, icon_cy - isz * 0.4), (icon_cx - isz * 0.45, icon_cy + isz * 0.05), (icon_cx + isz * 0.45, icon_cy + isz * 0.05), [1.0, 1.0, 1.0, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.15, icon_cy, icon_cx + isz * 0.15, icon_cy + isz * 0.5, [1.0, 1.0, 1.0, 1.0]);
+                    },
+                    3 => {
+                        // TIPOS: Elemental Trio Diamonds (Fire, Water, Grass)
+                        // Fire (Top)
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.35, icon_cy - isz * 0.8, icon_cx + isz * 0.35, icon_cy - isz * 0.15, [0.95, 0.35, 0.20, 1.0]);
+                        // Water (Bottom-Left)
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.85, icon_cy + isz * 0.05, icon_cx - isz * 0.15, icon_cy + isz * 0.7, [0.20, 0.60, 0.98, 1.0]);
+                        // Grass (Bottom-Right)
+                        push_quad(&mut verts, ww, wh, icon_cx + isz * 0.15, icon_cy + isz * 0.05, icon_cx + isz * 0.85, icon_cy + isz * 0.7, [0.25, 0.85, 0.35, 1.0]);
+                    },
+                    4 => {
+                        // PERFIL: Gamepad Controller in violet/cyan
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.95, icon_cy - isz * 0.5, icon_cx + isz * 0.95, icon_cy + isz * 0.5, [0.52, 0.38, 0.85, 1.0]);
+                        // D-Pad cross on left
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.75, icon_cy - isz * 0.15, icon_cx - isz * 0.35, icon_cy + isz * 0.15, [0.18, 0.18, 0.22, 1.0]);
+                        // Action dots on right
+                        push_quad(&mut verts, ww, wh, icon_cx + isz * 0.45, icon_cy - isz * 0.3, icon_cx + isz * 0.75, icon_cy, [0.95, 0.30, 0.30, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx + isz * 0.35, icon_cy + isz * 0.05, icon_cx + isz * 0.65, icon_cy + isz * 0.35, [0.0, 0.898, 1.0, 1.0]);
+                    },
+                    5 => {
+                        // SONIDO: Speaker with sound waves and mute toggle
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.7, icon_cy - isz * 0.3, icon_cx - isz * 0.3, icon_cy + isz * 0.3, [0.92, 0.92, 0.95, 1.0]);
+                        push_tri(&mut verts, ww, wh, (icon_cx - isz * 0.3, icon_cy), (icon_cx + isz * 0.2, icon_cy - isz * 0.65), (icon_cx + isz * 0.2, icon_cy + isz * 0.65), [0.92, 0.92, 0.95, 1.0]);
+                        // Sound wave
+                        push_quad(&mut verts, ww, wh, icon_cx + isz * 0.4, icon_cy - isz * 0.45, icon_cx + isz * 0.6, icon_cy + isz * 0.45, [0.0, 0.898, 1.0, 1.0]);
+                        if touch_controls::is_audio_muted() {
+                            // Bright red mute slash
+                            push_quad(&mut verts, ww, wh, icon_cx - isz * 0.85, icon_cy - isz * 0.75, icon_cx + isz * 0.85, icon_cy + isz * 0.75, [0.95, 0.20, 0.20, 1.0]);
+                        }
+                    },
+                    6 => {
+                        // FPS: Speedometer / 3-bar histogram
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.8, icon_cy + isz * 0.1, icon_cx - isz * 0.3, icon_cy + isz * 0.7, [0.25, 0.85, 0.35, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.25, icon_cy - isz * 0.25, icon_cx + isz * 0.25, icon_cy + isz * 0.7, [0.20, 0.75, 0.95, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx + isz * 0.3, icon_cy - isz * 0.65, icon_cx + isz * 0.8, icon_cy + isz * 0.7, [0.95, 0.80, 0.20, 1.0]);
+                    },
+                    7 => {
+                        // CAPTURA: Pixel-art Camera
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.85, icon_cy - isz * 0.4, icon_cx + isz * 0.85, icon_cy + isz * 0.65, [0.36, 0.42, 0.50, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.3, icon_cy - isz * 0.65, icon_cx + isz * 0.3, icon_cy - isz * 0.4, [0.95, 0.75, 0.20, 1.0]);
+                        // Lens
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.4, icon_cy - isz * 0.15, icon_cx + isz * 0.4, icon_cy + isz * 0.5, [0.0, 0.898, 1.0, 1.0]);
+                        push_quad(&mut verts, ww, wh, icon_cx - isz * 0.2, icon_cy, icon_cx + isz * 0.2, icon_cy + isz * 0.35, [0.10, 0.12, 0.15, 1.0]);
+                    },
+                    _ => {},
+                }
+
+                // 5. Strictly ONE Single Word Underneath (Zero Overlap)
+                let text_cy = card_cy + card_h * 0.26;
+                let text_px = (card_w * 0.0185f32).clamp(1.4f32, 2.1f32);
+                let text_col = if is_hover {
+                    [0.0, 0.898, 1.0, 1.0]
+                } else {
+                    [0.92, 0.94, 0.98, 1.0]
+                };
+                push_text(&mut verts, ww, wh, labels[s], card_cx, text_cy, text_px, text_col);
             }
+
+            // Center Hub: Compact Close button (X) and State Badge (1X / 2X / 4X | P1)
+            let is_center_hover = active_sec == -1;
+            let center_r = r_inner * 0.95;
+            let center_border = if is_center_hover {
+                [0.95, 0.30, 0.30, 0.95]
+            } else {
+                [0.10, 0.11, 0.14, 0.95]
+            };
+            push_circle(&mut verts, ww, wh, cx, cy, center_r + 2.0, center_border);
+            push_circle(&mut verts, ww, wh, cx, cy, center_r, [0.13, 0.14, 0.17, 0.95]);
+
+            // Draw bold X icon in upper center
+            let x_sz = (center_r * 0.32).clamp(6.0, 12.0);
+            let x_y = cy - center_r * 0.25;
+            push_quad(&mut verts, ww, wh, cx - x_sz, x_y - 2.0, cx + x_sz, x_y + 2.0, [0.95, 0.35, 0.35, 1.0]);
+            push_quad(&mut verts, ww, wh, cx - 2.0, x_y - x_sz, cx + 2.0, x_y + x_sz, [0.95, 0.35, 0.35, 1.0]);
+
+            // State Badge underneath: e.g. "1X P1", "2X P2", "4X P1"
+            let turbo_str = match touch_controls::turbo_level() {
+                1 => "2X",
+                2 => "4X",
+                _ => "1X",
+            };
+            let prof_num = touch_controls::active_user_profile() + 1;
+            let badge_str = match (turbo_str, prof_num) {
+                ("1X", 1) => "1X P1",
+                ("1X", 2) => "1X P2",
+                ("1X", 3) => "1X P3",
+                ("1X", 4) => "1X P4",
+                ("2X", 1) => "2X P1",
+                ("2X", 2) => "2X P2",
+                ("2X", 3) => "2X P3",
+                ("2X", 4) => "2X P4",
+                ("4X", 1) => "4X P1",
+                ("4X", 2) => "4X P2",
+                ("4X", 3) => "4X P3",
+                ("4X", 4) => "4X P4",
+                _ => "1X P1",
+            };
+            let badge_px = (center_r * 0.08).clamp(1.4, 2.0);
+            push_text(&mut verts, ww, wh, badge_str, cx, cy + center_r * 0.15, badge_px, [0.0, 0.898, 1.0, 1.0]);
+            push_text(&mut verts, ww, wh, "CERRAR", cx, cy + center_r * 0.50, badge_px * 0.85, [0.70, 0.74, 0.80, 0.90]);
+        }
+
+        // Tactical Type Chart Weakness Assistant Overlay
+        if touch_controls::is_guide_open() {
+            let guide_w = (ww * 0.72f32).clamp(280.0f32, 540.0f32);
+            let guide_h = (wh * 0.75f32).clamp(240.0f32, 400.0f32);
+            let gx0 = (ww - guide_w) * 0.5f32;
+            let gy0 = (wh - guide_h) * 0.5f32;
+            let gx1 = gx0 + guide_w;
+            let gy1 = gy0 + guide_h;
+
+            // Dim backdrop
+            push_quad(&mut verts, ww, wh, 0.0, 0.0, ww, wh, [0.0, 0.0, 0.0, 0.60]);
+            // Outer glow border (#00E5FF)
+            push_quad(&mut verts, ww, wh, gx0 - 2.0, gy0 - 2.0, gx1 + 2.0, gy1 + 2.0, [0.0, 0.898, 1.0, 0.95]);
+            // Dark graphite body (#2B2D31)
+            push_quad(&mut verts, ww, wh, gx0, gy0, gx1, gy1, [0.15, 0.16, 0.19, 0.98]);
+            // Top bevel header
+            push_quad(&mut verts, ww, wh, gx0, gy0, gx1, gy0 + 28.0, [0.22, 0.25, 0.32, 0.98]);
+
+            let title_px = (guide_w * 0.016).clamp(2.0, 2.6);
+            push_text(&mut verts, ww, wh, "TABLA DE TIPOS Y DEBILIDADES", ww * 0.5, gy0 + 14.0, title_px, [0.0, 0.898, 1.0, 1.0]);
+
+            let rows = [
+                ("FUEGO", "DEBIL X2: AGUA TIERRA ROCA", [0.95, 0.35, 0.20, 1.0]),
+                ("AGUA", "DEBIL X2: PLANTA ELECTRICO", [0.20, 0.60, 0.98, 1.0]),
+                ("PLANTA", "DEBIL X2: FUEGO HIELO VENENO VOLADOR", [0.25, 0.85, 0.35, 1.0]),
+                ("ELECTR", "DEBIL X2: TIERRA | INMUNE AL RAYO", [0.95, 0.85, 0.15, 1.0]),
+                ("DRAGON", "DEBIL X2: HIELO DRAGON HADA", [0.45, 0.35, 0.85, 1.0]),
+                ("FANTASMA", "DEBIL X2: FANTASMA SINIESTRO | INMUNE NORMAL", [0.55, 0.40, 0.70, 1.0]),
+                ("ACERO", "DEBIL X2: FUEGO LUCHA TIERRA | RESISTE 10 TIPOS", [0.70, 0.75, 0.82, 1.0]),
+                ("HADA", "DEBIL X2: VENENO ACERO | INMUNE DRAGON", [0.95, 0.55, 0.75, 1.0]),
+            ];
+
+            let row_h = (guide_h - 60.0) / rows.len() as f32;
+            let row_px = (guide_w * 0.0125).clamp(1.4, 1.9);
+            for (idx, (typ, desc, col)) in rows.iter().enumerate() {
+                let ry = gy0 + 36.0 + idx as f32 * row_h;
+                // Type badge
+                let bw = 55.0f32;
+                push_quad(&mut verts, ww, wh, gx0 + 12.0, ry, gx0 + 12.0 + bw, ry + row_h - 4.0, *col);
+                push_text(&mut verts, ww, wh, typ, gx0 + 12.0 + bw * 0.5, ry + (row_h - 4.0) * 0.5, row_px, [1.0, 1.0, 1.0, 1.0]);
+                // Weakness text
+                push_text_left(&mut verts, ww, wh, desc, gx0 + 74.0, ry + (row_h - 4.0) * 0.5, row_px * 0.92, [0.90, 0.92, 0.96, 1.0]);
+            }
+            // Dismiss footnote
+            push_text(&mut verts, ww, wh, "TOCA CUALQUIER PARTE PARA CERRAR", ww * 0.5, gy1 - 10.0, row_px * 0.85, [0.65, 0.70, 0.78, 0.85]);
         }
 
         // Active In-Game Toast notification overlay

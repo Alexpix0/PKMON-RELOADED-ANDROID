@@ -39,17 +39,41 @@ fun UpdateDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Filled.SystemUpdate, contentDescription = null) },
-        title = { Text(if (busy) "Descargando actualizacion" else "Hay una version nueva") },
+        title = { Text(if (busy) "Descargando actualización..." else "¡Nueva versión disponible: v${release.version}!") },
         text = {
-            Column {
-                Text("Version ${release.version}")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (release.name.isNotEmpty()) {
+                    Text(
+                        text = release.name,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                if (release.body.isNotEmpty() && !busy) {
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .androidx.compose.foundation.layout.heightIn(max = 180.dp)
+                            .androidx.compose.foundation.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                            .androidx.compose.foundation.background(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                            )
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = release.body,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 if (busy) {
                     LinearWavyProgressIndicator(
                         progress = { if (total > 0) written.toFloat() / total.toFloat() else 0f },
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
@@ -66,7 +90,7 @@ fun UpdateDialog(
                 }
                 if (problem == null && !busy) {
                     Text(
-                        text = "Se descarga y se instala sola, sin pasar por el navegador. Android te pedira permiso la primera vez.",
+                        text = "Se descarga directamente desde GitHub Releases y se inicia el instalador nativo del sistema.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -76,12 +100,12 @@ fun UpdateDialog(
                         text = problem,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 12.dp),
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 TextButton(onClick = onOpenReleases, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "No confio en el autoactualizador",
+                        text = "Ver release en GitHub",
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -89,12 +113,10 @@ fun UpdateDialog(
         },
         confirmButton = {
             TextButton(onClick = onDownload, enabled = !busy) {
-                Text(if (busy) "Descargando..." else "Descargar")
+                Text(if (busy) "Descargando..." else "Descargar e Instalar APK ahora")
             }
         },
         dismissButton = {
-            // "Ocultar" while it works, "Cancelar" while it waits: the same thing to the user, but
-            // it says what it does at each moment.
             TextButton(onClick = onDismiss, enabled = !busy) { Text(if (busy) "Ocultar" else "Cancelar") }
         },
     )

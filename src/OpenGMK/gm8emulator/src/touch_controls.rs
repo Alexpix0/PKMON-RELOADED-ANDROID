@@ -1547,20 +1547,55 @@ pub fn save_layout_file(path: &Path) {
 
 static FAST_FORWARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_FORWARD_SPEED: AtomicU32 = AtomicU32::new(15);
+static TURBO_LEVEL: AtomicU8 = AtomicU8::new(0); // 0 = 1x (normal), 1 = 2x (rápido), 2 = 4x (extremo)
+
+pub fn turbo_level() -> u8 {
+    TURBO_LEVEL.load(Ordering::Relaxed)
+}
+
+pub fn cycle_turbo() -> u8 {
+    let next = (turbo_level() + 1) % 3;
+    TURBO_LEVEL.store(next, Ordering::Relaxed);
+    match next {
+        0 => {
+            FAST_FORWARD.store(false, Ordering::Relaxed);
+            FAST_FORWARD_SPEED.store(10, Ordering::Relaxed);
+        },
+        1 => {
+            FAST_FORWARD.store(true, Ordering::Relaxed);
+            FAST_FORWARD_SPEED.store(20, Ordering::Relaxed);
+        },
+        2 => {
+            FAST_FORWARD.store(true, Ordering::Relaxed);
+            FAST_FORWARD_SPEED.store(40, Ordering::Relaxed);
+        },
+        _ => {},
+    }
+    next
+}
 
 pub fn fast_forward_active() -> bool {
-    FAST_FORWARD.load(Ordering::Relaxed)
+    turbo_level() > 0 || FAST_FORWARD.load(Ordering::Relaxed)
 }
 
 pub fn toggle_fast_forward() -> bool {
     let active = !fast_forward_active();
     FAST_FORWARD.store(active, Ordering::Relaxed);
+    if !active {
+        TURBO_LEVEL.store(0, Ordering::Relaxed);
+    } else if turbo_level() == 0 {
+        TURBO_LEVEL.store(1, Ordering::Relaxed);
+    }
     active
 }
 
 pub fn fast_forward_multiplier() -> f32 {
     if fast_forward_active() {
-        FAST_FORWARD_SPEED.load(Ordering::Relaxed) as f32 / 10.0
+        match turbo_level() {
+            1 => 2.0,
+            2 => 4.0,
+            _ => FAST_FORWARD_SPEED.load(Ordering::Relaxed) as f32 / 10.0,
+        }
     } else {
         1.0
     }
@@ -1568,6 +1603,22 @@ pub fn fast_forward_multiplier() -> f32 {
 
 pub fn set_fast_forward_speed(tenths: u32) {
     FAST_FORWARD_SPEED.store(tenths.clamp(10, 100), Ordering::Relaxed);
+}
+
+static ACTIVE_USER_PROFILE: AtomicU8 = AtomicU8::new(0); // 0 = P1, 1 = P2, 2 = P3, 3 = P4
+
+pub fn active_user_profile() -> u8 {
+    ACTIVE_USER_PROFILE.load(Ordering::Relaxed)
+}
+
+pub fn set_active_user_profile(profile: u8) {
+    ACTIVE_USER_PROFILE.store(profile % 4, Ordering::Relaxed);
+}
+
+pub fn cycle_user_profile() -> u8 {
+    let next = (active_user_profile() + 1) % 4;
+    set_active_user_profile(next);
+    next
 }
 
 static AUDIO_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -2048,20 +2099,16 @@ pub fn set_radial_hover_sector(sector: i32) {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum RadialAction {
     None,
-    Turbo,     // Center disc
-    Mute,      // Sector 0 (Top)
-    Log,       // Sector 1 (Top-Right)
-    Snapshot,  // Sector 2 (Right)
-    Fps,       // Sector 3 (Bottom-Right)
-    Close,     // Sector 4 (Bottom)
-    Bezel,     // Sector 5 (Bottom-Left)
-    Guide,     // Sector 6 (Left)
-    Edit,      // Sector 7 (Top-Left)
-    Bike,      // Key items: Bici (C)
-    Rod,       // Key items: CaÃ±a (V)
-    Bag,       // Key items: Mochila (O)
-    Pause,     // Tactical Pause
-    Outside,   // Touched outside the wheel -> dismiss
+    Turbo,        // Sector 0 (Top / 12h): >> Fast Forward 1x -> 2x -> 4x
+    QuickSave,    // Sector 1 (Top-Right / 1:30): Floppy Save State
+    QuickLoad,    // Sector 2 (Right / 3h): Return Folder Load State
+    TypeChart,    // Sector 3 (Bottom-Right / 4:30): Elemental Trio Weakness Guide
+    CycleProfile, // Sector 4 (Bottom / 6h): User Profiles P1 -> P2 -> P3 -> P4
+    Mute,         // Sector 5 (Bottom-Left / 7:30): Audio / Mute toggle
+    Fps,          // Sector 6 (Left / 9h): Performance / FPS HUD toggle
+    Snapshot,     // Sector 7 (Top-Left / 10:30): Camera Screen Capture
+    Close,        // Center disc (X): Close Radial Wheel
+    Outside,      // Touched outside: Dismiss Wheel
 }
 
 pub const RADIAL_SECTORS_COUNT: usize = 8;
@@ -2071,11 +2118,11 @@ pub fn radial_menu_center(ww: f32, wh: f32) -> (f32, f32) {
 }
 
 pub fn radial_menu_inner_radius(ww: f32, wh: f32) -> f32 {
-    ww.min(wh) * 0.14
+    ww.min(wh) * 0.09
 }
 
 pub fn radial_menu_outer_radius(ww: f32, wh: f32) -> f32 {
-    ww.min(wh) * 0.40
+    ww.min(wh) * 0.44
 }
 
 pub fn radial_menu_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> RadialAction {
@@ -2087,9 +2134,9 @@ pub fn radial_menu_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> RadialAction {
     let dist = (dx * dx + dy * dy).sqrt();
 
     if dist <= r_inner {
-        return RadialAction::Turbo;
+        return RadialAction::Close;
     }
-    if dist > r_outer * 1.08 {
+    if dist > r_outer * 1.15 {
         return RadialAction::Outside;
     }
 
@@ -2099,30 +2146,16 @@ pub fn radial_menu_hit(tx: f32, ty: f32, ww: f32, wh: f32) -> RadialAction {
     let rel_angle = (angle + std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU) % std::f32::consts::TAU;
     let sector = (((rel_angle + std::f32::consts::FRAC_PI_8) / std::f32::consts::FRAC_PI_4) as usize) % RADIAL_SECTORS_COUNT;
 
-    if key_items_radial_enabled() {
-        match sector {
-            0 => RadialAction::Bike,
-            1 => RadialAction::Rod,
-            2 => RadialAction::Snapshot,
-            3 => RadialAction::Bag,
-            4 => RadialAction::Close,
-            5 => RadialAction::Pause,
-            6 => RadialAction::Turbo,
-            7 => RadialAction::Edit,
-            _ => RadialAction::None,
-        }
-    } else {
-        match sector {
-            0 => RadialAction::Mute,
-            1 => RadialAction::Log,
-            2 => RadialAction::Snapshot,
-            3 => RadialAction::Fps,
-            4 => RadialAction::Close,
-            5 => RadialAction::Bezel,
-            6 => RadialAction::Guide,
-            7 => RadialAction::Edit,
-            _ => RadialAction::None,
-        }
+    match sector {
+        0 => RadialAction::Turbo,        // Sector 1: TURBO
+        1 => RadialAction::QuickSave,    // Sector 2: GUARDAR
+        2 => RadialAction::QuickLoad,    // Sector 3: CARGAR
+        3 => RadialAction::TypeChart,    // Sector 4: TIPOS
+        4 => RadialAction::CycleProfile, // Sector 5: PERFIL
+        5 => RadialAction::Mute,         // Sector 6: SONIDO
+        6 => RadialAction::Fps,          // Sector 7: FPS
+        7 => RadialAction::Snapshot,     // Sector 8: CAPTURA
+        _ => RadialAction::None,
     }
 }
 

@@ -393,6 +393,10 @@ fn load_controls() {
     }
     let layout_path = PathBuf::from(format!("/data/data/{}/files/layout.conf", PACKAGE_DIR));
     crate::touch_controls::load_layout_file(&layout_path);
+    let touch_layout_path = PathBuf::from(format!("/data/data/{}/files/touch-layout.conf", PACKAGE_DIR));
+    if let Ok(text) = std::fs::read_to_string(&touch_layout_path) {
+        crate::touch_controls::load_layout(&text);
+    }
 }
 
 /// The key names the control screen can write into `controls.conf`.
@@ -670,9 +674,102 @@ fn perform_quick_snapshot() {
         }
     }
     if copied > 0 {
-        crate::touch_controls::show_toast("PUNTO DE RETORNO GUARDADO");
+        crate::touch_controls::show_toast("CAPTURA LIMPIA GUARDADA");
     } else {
-        crate::touch_controls::show_toast("NO HAY PARTIDAS ACTIVAS");
+        crate::touch_controls::show_toast("CAPTURA COMPLETADA");
+    }
+}
+
+fn perform_quick_save() {
+    let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
+    let relative_saves = std::path::Path::new("data/partidas");
+    let src_dir = if internal_saves.is_dir() {
+        internal_saves
+    } else if relative_saves.is_dir() {
+        relative_saves
+    } else {
+        crate::touch_controls::show_toast("ERROR: NO SE HALLARON PARTIDAS");
+        return;
+    };
+
+    let quicksave_dir = std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/quicksaves");
+    let _ = std::fs::create_dir_all(&quicksave_dir);
+
+    let mut copied = 0;
+    if let Ok(entries) = std::fs::read_dir(src_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case("sav") || ext.eq_ignore_ascii_case("nfo") {
+                    if let Some(file_name) = path.file_name() {
+                        let dest = quicksave_dir.join(file_name);
+                        if std::fs::copy(&path, &dest).is_ok() {
+                            copied += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Also dispatch F5 (standard GM quicksave key)
+    android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::F5, text: None });
+    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::F5 });
+
+    if copied > 0 {
+        crate::touch_controls::show_toast("QUICK SAVE: GUARDADO (1-TOQUE)");
+    } else {
+        crate::touch_controls::show_toast("GUARDANDO EN MEMORIA...");
+    }
+}
+
+fn perform_quick_load() {
+    let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
+    let relative_saves = std::path::Path::new("data/partidas");
+    let dst_dir = if internal_saves.is_dir() {
+        internal_saves
+    } else if relative_saves.is_dir() {
+        relative_saves
+    } else {
+        crate::touch_controls::show_toast("ERROR: NO SE HALLO CARPETA PARTIDAS");
+        return;
+    };
+
+    let quicksave_dir = std::path::PathBuf::from("/data/data/com.klisee.reloaded/files/quicksaves");
+    let mut restored = 0;
+    if let Ok(entries) = std::fs::read_dir(&quicksave_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if ext.eq_ignore_ascii_case("sav") || ext.eq_ignore_ascii_case("nfo") {
+                    if let Some(file_name) = path.file_name() {
+                        let dest = dst_dir.join(file_name);
+                        if std::fs::copy(&path, &dest).is_ok() {
+                            restored += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Also dispatch F6 (standard GM quickload key)
+    android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::F6, text: None });
+    android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::F6 });
+
+    if restored > 0 {
+        crate::touch_controls::show_toast("QUICK LOAD: PARTIDA RESTAURADA");
+    } else {
+        crate::touch_controls::show_toast("NO HAY QUICK SAVE PREVIO");
+    }
+}
+
+pub fn apply_user_profile(p: u8) {
+    crate::touch_controls::set_active_user_profile(p);
+    let p_num = p + 1;
+    let specific_path = std::path::PathBuf::from(format!("/data/data/{}/files/touch-layout-p{}.conf", PACKAGE_DIR, p_num));
+    let base_path = std::path::PathBuf::from(format!("/data/data/{}/files/touch-layout.conf", PACKAGE_DIR));
+    let path = if specific_path.exists() { specific_path } else { base_path };
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        crate::touch_controls::load_layout(&text);
     }
 }
 
@@ -702,82 +799,51 @@ fn pointer_down(id: i32, x: f32, y: f32) {
         let action = crate::touch_controls::radial_menu_hit(x, y, wf, hf);
         match action {
             crate::touch_controls::RadialAction::Turbo => {
-                let on = crate::touch_controls::toggle_fast_forward();
-                let mult = crate::touch_controls::fast_forward_multiplier();
-                if on {
-                    crate::touch_controls::show_toast(&format!("TURBO: {:.1}x ACTIVADO", mult));
-                } else {
-                    crate::touch_controls::show_toast("TURBO: DESACTIVADO");
-                }
-                jni_vibrate(if on { 25 } else { 12 });
+                let lvl = crate::touch_controls::cycle_turbo();
+                let txt = match lvl {
+                    0 => "TURBO: 1X (NORMAL)",
+                    1 => "TURBO: 2X (RAPIDO)",
+                    2 => "TURBO: 4X (EXTREMO)",
+                    _ => "TURBO: 1X",
+                };
+                crate::touch_controls::show_toast(txt);
+                jni_vibrate(25);
+            },
+            crate::touch_controls::RadialAction::QuickSave => {
+                crate::touch_controls::set_radial_menu_open(false);
+                perform_quick_save();
+                jni_vibrate(35);
+            },
+            crate::touch_controls::RadialAction::QuickLoad => {
+                crate::touch_controls::set_radial_menu_open(false);
+                perform_quick_load();
+                jni_vibrate(35);
+            },
+            crate::touch_controls::RadialAction::TypeChart => {
+                crate::touch_controls::set_radial_menu_open(false);
+                crate::touch_controls::toggle_guide_modal();
+                jni_vibrate(25);
+            },
+            crate::touch_controls::RadialAction::CycleProfile => {
+                let next = crate::touch_controls::cycle_user_profile();
+                apply_user_profile(next);
+                crate::touch_controls::show_toast(&format!("PERFIL CONTROLES: PERFIL {}", next + 1));
+                jni_vibrate(25);
             },
             crate::touch_controls::RadialAction::Mute => {
                 let muted = crate::touch_controls::toggle_audio_mute();
                 crate::touch_controls::show_toast(if muted { "AUDIO: SILENCIADO" } else { "AUDIO: ACTIVADO" });
                 jni_vibrate(if muted { 25 } else { 12 });
             },
-            crate::touch_controls::RadialAction::Log => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_log_modal();
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Guide => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_guide_modal();
+            crate::touch_controls::RadialAction::Fps => {
+                let on = crate::touch_controls::toggle_fps();
+                crate::touch_controls::show_toast(if on { "FPS: MOSTRAR" } else { "FPS: OCULTAR" });
                 jni_vibrate(20);
             },
             crate::touch_controls::RadialAction::Snapshot => {
                 crate::touch_controls::set_radial_menu_open(false);
                 perform_quick_snapshot();
                 jni_vibrate(35);
-            },
-            crate::touch_controls::RadialAction::Fps => {
-                let on = crate::touch_controls::toggle_fps();
-                crate::touch_controls::show_toast(if on { "FPS: MOSTRAR" } else { "FPS: OCULTAR" });
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Bezel => {
-                let mode = crate::touch_controls::cycle_bezel();
-                crate::touch_controls::show_toast(&format!("BEZEL: {}", mode.to_ascii_uppercase()));
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Edit => {
-                crate::touch_controls::set_radial_menu_open(false);
-                let edit = crate::touch_controls::toggle_edit_mode();
-                if edit {
-                    for i in 0..crate::touch_controls::CONTROLS.len() {
-                        control_key_up(i);
-                    }
-                    joystick_release();
-                    *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                    *EDIT_SLIDER_DRAG.lock().unwrap_or_else(|e| e.into_inner()) = None;
-                }
-                jni_vibrate(30);
-            },
-            crate::touch_controls::RadialAction::Bike => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::show_toast("OBJETO: Bicicleta (C)");
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::C, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::C });
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Rod => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::show_toast("OBJETO: Caña de Pescar (V)");
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::V, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::V });
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Bag => {
-                crate::touch_controls::set_radial_menu_open(false);
-                android::push_input(ramen::platform::android::InputEvent::KeyDown { key: Key::O, text: None });
-                android::push_input(ramen::platform::android::InputEvent::KeyUp { key: Key::O });
-                jni_vibrate(20);
-            },
-            crate::touch_controls::RadialAction::Pause => {
-                crate::touch_controls::set_radial_menu_open(false);
-                crate::touch_controls::toggle_puzzle_pause();
-                jni_vibrate(25);
             },
             crate::touch_controls::RadialAction::Close | crate::touch_controls::RadialAction::Outside => {
                 crate::touch_controls::set_radial_menu_open(false);

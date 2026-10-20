@@ -173,7 +173,7 @@ fun App(
     BackHandler(enabled = pushed != null) { pushed = null }
 
     when (pushed) {
-        Pushed.About -> AboutScreen(onBack = { pushed = null })
+        Pushed.About -> AboutScreen(onBack = { pushed = null }, onUpdateFound = { update = it })
         Pushed.Controls -> ControlsScreen(prefs = prefs, filesDir = context.filesDir, onBack = { pushed = null })
         Pushed.TouchSettings -> TouchSettingsScreen(prefs = prefs, onBack = { pushed = null })
         Pushed.MySaves -> MySavesScreen(repo = repo, onBack = { pushed = null })

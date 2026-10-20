@@ -647,21 +647,39 @@ class Preferences(context: Context) {
             touchOpacity = value.coerceIn(5, 100) / 100f
         }
 
-    fun touchLayouts(): Map<String, TouchPlacement> {
+    var activeUserProfile: Int
+        get() = prefs.getInt("activeUserProfile", 0).coerceIn(0, 3)
+        set(value) {
+            prefs.edit().putInt("activeUserProfile", value.coerceIn(0, 3)).apply()
+        }
+
+    fun touchLayouts(userProfile: Int = activeUserProfile): Map<String, TouchPlacement> {
+        val key = if (userProfile == 0) "touchLayoutV1" else "touchLayoutV1_p${userProfile + 1}"
+        val saved = prefs.getString(key, null)
+        if (saved != null) {
+            return TouchLayouts.parse(saved)
+        }
         return TouchLayouts.parse(prefs.getString("touchLayoutV1", TouchLayouts.HEADER).orEmpty())
     }
 
     /** Called on an IO dispatcher by Save and exit; a failed save is reported to the editor. */
-    fun saveTouchLayouts(values: Map<String, TouchPlacement>, filesDir: File) {
+    fun saveTouchLayouts(values: Map<String, TouchPlacement>, filesDir: File, userProfile: Int = activeUserProfile) {
         val text = TouchLayouts.encode(values)
-        if (!prefs.edit().putString("touchLayoutV1", text).commit()) {
+        val key = if (userProfile == 0) "touchLayoutV1" else "touchLayoutV1_p${userProfile + 1}"
+        if (!prefs.edit().putString(key, text).commit()) {
             throw IOException("No se pudo guardar la configuración. Inténtalo nuevamente.")
         }
-        writeTouchLayoutText(filesDir, text)
+        writeTouchLayoutText(filesDir, text, userProfile)
     }
 
     fun writeTouchLayouts(filesDir: File) = runCatching {
-        writeTouchLayoutText(filesDir, TouchLayouts.encode(touchLayouts()))
+        val current = activeUserProfile
+        writeTouchLayoutText(filesDir, TouchLayouts.encode(touchLayouts(current)), current)
+        for (p in 0..3) {
+            val key = if (p == 0) "touchLayoutV1" else "touchLayoutV1_p${p + 1}"
+            val text = prefs.getString(key, null) ?: TouchLayouts.encode(touchLayouts(0))
+            writeAtomicText(File(filesDir, "touch-layout-p${p + 1}.conf"), text)
+        }
     }
 
     var touchAppearance: TouchAppearance
@@ -698,8 +716,9 @@ class Preferences(context: Context) {
         }
     }
 
-    private fun writeTouchLayoutText(filesDir: File, text: String) {
+    private fun writeTouchLayoutText(filesDir: File, text: String, userProfile: Int = 0) {
         writeAtomicText(File(filesDir, "touch-layout.conf"), text)
+        writeAtomicText(File(filesDir, "touch-layout-p${userProfile + 1}.conf"), text)
     }
 
     private fun writeAtomicText(target: File, text: String) {

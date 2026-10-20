@@ -26,10 +26,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import com.klisee.reloaded.AppInfo
+import com.klisee.reloaded.Update
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(onBack: () -> Unit, onUpdateFound: (Update.Release) -> Unit = {}) {
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
                 title = { Text("Acerca de") },
@@ -61,7 +77,7 @@ fun AboutScreen(onBack: () -> Unit) {
                 InfoRow(Icons.Filled.Person, "El juego", "Fer Productions", items = 4, index = 0)
                 InfoRow(Icons.Filled.Memory, "El motor", "OpenGMK, reimplementacion en Rust", items = 4, index = 1)
                 InfoRow(Icons.Filled.Favorite, "Port Android", "Comunidad, sin animo de lucro", items = 4, index = 2)
-                InfoRow(Icons.Filled.Favorite, "Edicion EX", "v${com.klisee.reloaded.AppInfo.VERSION_NAME} EX (Alexpix0 / Armando)", items = 4, index = 3)
+                InfoRow(Icons.Filled.Favorite, "Edicion EX", "v${AppInfo.VERSION_NAME} EX (Alexpix0 / Armando)", items = 4, index = 3)
             }
 
             SettingsGroup("Licencias y avisos") {
@@ -75,15 +91,36 @@ fun AboutScreen(onBack: () -> Unit) {
                 )
             }
 
-            SettingsGroup("Version") {
+            SettingsGroup("Versión y Actualizaciones") {
                 val context = androidx.compose.ui.platform.LocalContext.current
                 val version = remember(context) {
                     runCatching {
                         val info = context.packageManager.getPackageInfo(context.packageName, 0)
                         "${info.versionName} (${info.versionCode})"
-                    }.getOrDefault("desconocida")
+                    }.getOrDefault("0.9.4 EX (33)")
                 }
-                InfoRow(Icons.Filled.Memory, "Launcher", version, items = 1, index = 0)
+                InfoRow(Icons.Filled.Memory, "Launcher", version, items = 2, index = 0)
+                NavRow(
+                    icon = Icons.Filled.SystemUpdate,
+                    title = "🔄 Buscar actualizaciones de versión (GitHub)",
+                    subtitle = "Instalada: v${AppInfo.VERSION_NAME} (build 33) · Toca para comprobar GitHub Releases",
+                    items = 2,
+                    index = 1,
+                    enabled = !checking,
+                    onClick = {
+                        checking = true
+                        scope.launch {
+                            val result = Update.check(AppInfo.VERSION_NAME)
+                            checking = false
+                            val found = result.getOrNull()
+                            if (found != null) {
+                                onUpdateFound(found)
+                            } else {
+                                snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v${AppInfo.VERSION_NAME} EX).")
+                            }
+                        }
+                    },
+                )
             }
 
             Spacer(Modifier.height(8.dp))

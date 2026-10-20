@@ -58,8 +58,10 @@ private val LayoutSaver = Saver<Map<String, TouchPlacement>, String>(
 
 @Composable
 fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
-    var values by rememberSaveable(stateSaver = LayoutSaver) { mutableStateOf(prefs.touchLayouts()) }
-    var savedText by rememberSaveable { mutableStateOf(TouchLayouts.encode(prefs.touchLayouts())) }
+    var userProfile by rememberSaveable { mutableStateOf(prefs.activeUserProfile) }
+    var userProfileMenu by remember { mutableStateOf(false) }
+    var values by rememberSaveable(stateSaver = LayoutSaver) { mutableStateOf(prefs.touchLayouts(userProfile)) }
+    var savedText by rememberSaveable { mutableStateOf(TouchLayouts.encode(prefs.touchLayouts(userProfile))) }
     var profileId by rememberSaveable { mutableStateOf(TouchProfile.WORLD.id) }
     val profile = TouchProfile.entries.first { it.id == profileId }
     val controls = remember(profile, values) { TouchLayouts.controlsFor(profile, values) }
@@ -71,6 +73,7 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
     var controlMenu by remember { mutableStateOf(false) }
     var keyPickerMode by remember { mutableStateOf<String?>(null) }
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmResetTLB by remember { mutableStateOf(false) }
     var confirmExit by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -81,6 +84,22 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
         val key = TouchLayouts.key(profile, spec)
         values = if (placement == TouchLayouts.original(spec, profile) && !TouchLayouts.added(profile, spec)) values - key else values + (key to placement)
     }
+    fun switchUserProfile(newIndex: Int) {
+        if (newIndex == userProfile) return
+        val currentSnapshot = values
+        prefs.saveTouchLayouts(currentSnapshot, filesDir, userProfile)
+        userProfile = newIndex
+        prefs.activeUserProfile = newIndex
+        values = prefs.touchLayouts(newIndex)
+        savedText = TouchLayouts.encode(values)
+        selectedId = TouchLayouts.controlsFor(profile, values).firstOrNull()?.id.orEmpty()
+    }
+    fun copyFromP1() {
+        values = prefs.touchLayouts(0)
+    }
+    fun resetToReloadedDefault() {
+        values = emptyMap()
+    }
     fun exit() { if (dirty) confirmExit = true else onExit() }
     fun save() {
         if (saving) return
@@ -90,7 +109,8 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
             try {
                 withContext(Dispatchers.IO) {
                     prefs.touchOpacityPercent = opacityPercent
-                    prefs.saveTouchLayouts(snapshot, filesDir)
+                    prefs.activeUserProfile = userProfile
+                    prefs.saveTouchLayouts(snapshot, filesDir, userProfile)
                 }
                 savedText = TouchLayouts.encode(snapshot)
                 onExit()
@@ -108,9 +128,33 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { exit() }, enabled = !saving) { Text("Volver") }
+
+                    // Selector de Perfil de Usuario (Perfil 1, 2, 3, 4)
+                    Box {
+                        OutlinedButton(
+                            onClick = { userProfileMenu = true },
+                            enabled = !saving,
+                            modifier = Modifier.testTag("user-profile-picker")
+                        ) {
+                            Text("Perfil ${userProfile + 1}")
+                        }
+                        DropdownMenu(expanded = userProfileMenu, onDismissRequest = { userProfileMenu = false }) {
+                            for (p in 0..3) {
+                                DropdownMenuItem(
+                                    text = { Text("Perfil ${p + 1}") },
+                                    onClick = {
+                                        switchUserProfile(p)
+                                        userProfileMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Selector de Contexto de juego
                     Box {
                         OutlinedButton(onClick = { profileMenu = true }, enabled = !saving,
-                            modifier = Modifier.testTag("profile-picker")) { Text("Perfil: ${profile.title}") }
+                            modifier = Modifier.testTag("profile-picker")) { Text("Modo: ${profile.title}") }
                         DropdownMenu(expanded = profileMenu, onDismissRequest = { profileMenu = false }) {
                             for (item in TouchProfile.entries) {
                                 DropdownMenuItem(text = { Text(item.title) }, onClick = {
@@ -313,7 +357,29 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                             ) {
                                 Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Restablecer perfil")
+                                Text("Restablecer modo actual")
+                            }
+
+                            // Botón Copiar del Perfil 1 (si estamos en Perfil 2, 3 o 4)
+                            if (userProfile != 0) {
+                                OutlinedButton(
+                                    onClick = { copyFromP1() },
+                                    enabled = !saving,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Copiar diseño del Perfil 1")
+                                }
+                            }
+
+                            // Botón Restablecer al predeterminado de Reloaded TLB
+                            OutlinedButton(
+                                onClick = { confirmResetTLB = true },
+                                enabled = !saving,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Filled.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Predeterminado TLB")
                             }
                         }
                     }
@@ -363,9 +429,14 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
 
     if (confirmReset) AlertDialog(onDismissRequest = { confirmReset = false },
         title = { Text("Restablecer ${profile.title}") },
-        text = { Text("Se recuperarán las posiciones, tamaños y visibilidad originales de este perfil. Se quitarán los botones agregados a este perfil. Los otros perfiles se conservan. Pulsa Guardar y salir para aplicar los cambios.") },
+        text = { Text("Se recuperarán las posiciones, tamaños y visibilidad originales de este modo. Pulsa Guardar y salir para aplicar los cambios.") },
         confirmButton = { TextButton(onClick = { values = TouchLayouts.resetProfile(values, profile); confirmReset = false }) { Text("Restablecer") } },
         dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancelar") } })
+    if (confirmResetTLB) AlertDialog(onDismissRequest = { confirmResetTLB = false },
+        title = { Text("Restablecer al predeterminado de Reloaded TLB") },
+        text = { Text("Se restablecerán todos los controles de este perfil a los valores originales predeterminados de Pokémon Reloaded TLB.") },
+        confirmButton = { TextButton(onClick = { resetToReloadedDefault(); confirmResetTLB = false }) { Text("Restablecer") } },
+        dismissButton = { TextButton(onClick = { confirmResetTLB = false }) { Text("Cancelar") } })
     if (confirmExit) AlertDialog(onDismissRequest = { confirmExit = false },
         title = { Text("¿Salir sin guardar?") }, text = { Text("Hay cambios en los controles que todavía no guardaste.") },
         confirmButton = { TextButton(onClick = { confirmExit = false; onExit() }) { Text("Descartar y salir") } },

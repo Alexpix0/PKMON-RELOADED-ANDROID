@@ -16,7 +16,13 @@ object Update {
     private const val LATEST = "https://api.github.com/repos/$REPO/releases/latest"
     const val RELEASES_PAGE = "https://github.com/$REPO/releases/latest"
 
-    data class Release(val version: String, val apkUrl: String?, val pageUrl: String)
+    data class Release(
+        val version: String,
+        val apkUrl: String?,
+        val pageUrl: String,
+        val name: String = "",
+        val body: String = "",
+    )
 
     /** The newer release, or `null` when the installed build is already the latest one. */
     suspend fun check(installed: String): Result<Release?> = withContext(Dispatchers.IO) {
@@ -33,7 +39,9 @@ object Update {
                     ?.optString("browser_download_url")
                     ?.takeIf { it.isNotEmpty() }
             }
-            Release(tag, apk, json.optString("html_url").ifEmpty { RELEASES_PAGE })
+            val name = json.optString("name")
+            val body = json.optString("body")
+            Release(tag, apk, json.optString("html_url").ifEmpty { RELEASES_PAGE }, name, body)
         }
     }
 
@@ -94,7 +102,7 @@ object Update {
     private fun open(url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 20_000
         readTimeout = 20_000
-        setRequestProperty("User-Agent", "ReloadedLauncher/1.0")
+        setRequestProperty("User-Agent", "Pokemon-Reloaded-Android")
         setRequestProperty("Accept", "application/vnd.github+json")
     }
 

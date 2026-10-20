@@ -2065,14 +2065,37 @@ fun SettingsScreen(
                                     }
                                 }
 
+                    SettingsGroup("Actualizaciones de la Aplicación") {
+                        NavRow(
+                            icon = Icons.Filled.SystemUpdate,
+                            title = "🔄 Buscar actualizaciones de versión (GitHub)",
+                            subtitle = "Instalada: v$appVersion (build 33) · Toca para comprobar GitHub Releases",
+                            items = 1,
+                            index = 0,
+                            enabled = !checking,
+                            onClick = {
+                                checking = true
+                                scope.launch {
+                                    val result = Update.check(appVersion)
+                                    checking = false
+                                    val found = result.getOrNull()
+                                    if (found != null) {
+                                        onUpdateFound(found)
+                                    } else {
+                                        snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v$appVersion EX).")
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
 
                 "about" -> {
                     SettingsGroup("Actualizaciones y Ayuda") {
                                     NavRow(
                                         icon = Icons.Filled.SystemUpdate,
-                                        title = "Versión de la app: $appVersion",
-                                        subtitle = "Comprueba si hay actualizaciones disponibles",
+                                        title = "🔄 Buscar actualizaciones de versión (GitHub)",
+                                        subtitle = "Instalada: v$appVersion (build 33) · Toca para comprobar GitHub Releases",
                                         items = 3,
                                         index = 0,
                                         enabled = !checking,
@@ -2084,7 +2107,7 @@ fun SettingsScreen(
                                                 if (found != null) {
                                                     onUpdateFound(found)
                                                 } else {
-                                                    snackbar.showSnackbar("Ya tienes la última versión ($appVersion).")
+                                                    snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v$appVersion EX).")
                                                 }
                                             }
                                         },
