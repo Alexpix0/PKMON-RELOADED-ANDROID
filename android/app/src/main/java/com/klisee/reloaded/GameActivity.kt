@@ -2,6 +2,9 @@ package com.klisee.reloaded
 
 import android.app.NativeActivity
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -29,6 +32,54 @@ private const val TAG = "GameActivity"
 class GameActivity : NativeActivity() {
     private val touchFeedback by lazy { TouchFeedback(this) }
     private val touchPreferences by lazy { Preferences(this) }
+    private val audioManager by lazy { getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    private var focusRequest: AudioFocusRequest? = null
+
+    /**
+     * Another app took the audio focus (a call, a notification, a video): the game pauses its output
+     * instead of talking over it, and resumes when the focus comes back.
+     */
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> nativeAudioFocus(true)
+            AudioManager.AUDIOFOCUS_GAIN -> nativeAudioFocus(false)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Ask once the window is actually on screen: some Android versions reject a focus request
+        // made during onResume, and a denied request must never take the game down with it.
+        window.decorView.post { requestAudioFocus() }
+    }
+
+    private fun requestAudioFocus() {
+        if (focusRequest != null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching {
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build(),
+                    )
+                    .setOnAudioFocusChangeListener(focusListener)
+                    .build()
+                if (audioManager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    focusRequest = request
+                }
+            }
+        }
+    }
+
+    override fun onPause() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            runCatching { focusRequest?.let { audioManager.abandonAudioFocusRequest(it) } }
+        }
+        focusRequest = null
+        super.onPause()
+    }
 
     private var imeAnchor: EditText? = null
 
@@ -189,6 +240,7 @@ class GameActivity : NativeActivity() {
     external fun nativeBackspace()
     external fun nativeEnter()
     external fun nativeImeInset(height: Int)
+    external fun nativeAudioFocus(lost: Boolean)
 
     companion object {
         init {

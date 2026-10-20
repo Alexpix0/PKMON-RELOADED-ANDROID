@@ -42,3 +42,11 @@ pokemon-reloaded-*.apk
 # Internal Roadmap and Planning Documents
 .MD/
 
+# Official reference sources (never commit)
+SOURCE CODE*/
+"SOURCE CODE DEL OFICIAL"/
+
+# Agent & IDE guidelines
+.agents/
+GEMINI.md
+

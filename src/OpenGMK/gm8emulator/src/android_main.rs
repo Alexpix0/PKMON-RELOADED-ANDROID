@@ -1423,24 +1423,49 @@ fn jni_adjust_volume(up: bool) {
     })();
 }
 
+static PUBLISHED_WINDOW: std::sync::atomic::AtomicPtr<std::ffi::c_void> =
+    std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
 fn publish_window(app: &AndroidApp) {
-    if let Some(window) = app.native_window() {
-        let ptr = window.ptr().as_ptr() as *mut std::ffi::c_void;
-        // The `NativeWindow` wrapper above owns a reference and drops it when this function
-        // returns; without acquiring our own, the window can be freed before the game thread
-        // calls eglCreateWindowSurface on it, which crashes with a null function pointer.
-        // SAFETY: `ptr` is a valid ANativeWindow handed out by the activity, and this only
-        // bumps its reference count.
+    let Some(window) = app.native_window() else { return };
+    let ptr = window.ptr().as_ptr() as *mut std::ffi::c_void;
+    let width = window.width() as u32;
+    let height = window.height() as u32;
+    let previous = PUBLISHED_WINDOW.swap(ptr, std::sync::atomic::Ordering::SeqCst);
+    // Acquire first, then tell the renderer, and only then drop the old one: at no point is the
+    // window the renderer has been told about already freed.
+    if previous != ptr {
         unsafe { ANativeWindow_acquire(ptr) };
-        let width = window.width() as u32;
-        let height = window.height() as u32;
-        android::set_native_window(ptr, width, height);
+    }
+    android::set_native_window(ptr, width, height);
+    if !previous.is_null() && previous != ptr {
+        unsafe { ANativeWindow_release(previous) };
     }
 }
 
 extern "C" {
     /// Bumps the reference count of an `ANativeWindow`. From `libandroid`, always linked.
     fn ANativeWindow_acquire(window: *mut std::ffi::c_void) -> i32;
+    /// Drops a reference taken with [ANativeWindow_acquire].
+    fn ANativeWindow_release(window: *mut std::ffi::c_void);
+}
+
+/// Android can recreate the Activity inside the same process. Carrying the previous session's
+/// input state over would leave keys held down (the player walking on their own, a wheel stuck...).
+fn reset_input_state() {
+    if let Ok(mut value) = POINTER_CONTROLS.lock() { *value = None; }
+    if let Ok(mut value) = WHEEL_PTR.lock() { *value = None; }
+    if let Ok(mut value) = SWALLOWED_INPUTS.lock() { *value = None; }
+    if let Ok(mut value) = MOUSE_DOWN_AT.lock() { value.clear(); }
+    if let Ok(mut value) = DELAYED_UPS.lock() { value.clear(); }
+    if let Ok(mut value) = DELAYED_DOWNS.lock() { value.clear(); }
+    if let Ok(mut value) = JOYSTICK_PTR.lock() { *value = None; }
+    JOYSTICK_STATE.store(0, std::sync::atomic::Ordering::Relaxed);
+    IME_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
+    crate::touch_controls::clear_layout();
+    crate::touch_controls::set_wheel_open(false);
+    crate::touch_controls::set_guide_open(false);
+    crate::touch_controls::set_log_open(false);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1579,6 +1604,16 @@ pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeImeInset<'loc
     IME_SHOWN.store(height > 0, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Called from the audio focus listener: true pauses the game's output.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeAudioFocus<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    lost: jni::sys::jboolean,
+) {
+    crate::game::audio::set_output_paused(lost != 0);
+}
+
 /// Whether the system keyboard is up, so it is only raised or dropped on a change.
 static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -1650,6 +1685,13 @@ fn with_activity(f: impl FnOnce(&mut jni::JNIEnv, &jni::objects::JClass) -> jni:
 
 /// Copies everything the engine prints to logcat.
 fn pipe_std_to_logcat() {
+    // The native entry can run again if the Activity is recreated in the same process; a second
+    // pipe thread would keep the first one blocked on a dead pipe forever.
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(install_std_log_pipe);
+}
+
+fn install_std_log_pipe() {
     let mut fds = [0 as libc::c_int; 2];
     // SAFETY: `fds` is a valid array of two ints, which is what pipe() fills in.
     if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
@@ -1725,6 +1767,8 @@ pub fn android_entry(app: AndroidApp) {
     // First thing, so the opening lines of the session are captured as well.
     pipe_std_to_logcat();
     std::env::set_var("RUST_BACKTRACE", "1");
+    // A recreated Activity must not inherit the previous session's held keys.
+    reset_input_state();
 
     // Install robust crash dump telemetry hook
     std::panic::set_hook(Box::new(|info| {
@@ -1845,7 +1889,14 @@ pub fn android_entry(app: AndroidApp) {
             jni_refresh_ime_height();
         }
 
-        game_app.poll_events(Some(Duration::from_millis(8)), |event| match event {
+        // While paused the engine is not drawing, so the pump does not need to spin: a long wait
+        // still wakes immediately for Resume, input or Destroy.
+        let poll_wait = if ramen::platform::android::paused() {
+            Duration::from_secs(1)
+        } else {
+            Duration::from_millis(8)
+        };
+        game_app.poll_events(Some(poll_wait), |event| match event {
             PollEvent::Main(main_event) => match main_event {
                 // Init/Resume/Start all mean the surface is (re)available, which is also what
                 // happens when the user comes back from the home screen.
@@ -1855,8 +1906,6 @@ pub fn android_entry(app: AndroidApp) {
                 | android_activity::MainEvent::Resume { .. }
                 | android_activity::MainEvent::GainedFocus
                 | android_activity::MainEvent::Start => {
-                    ramen::platform::android::set_paused(false);
-                    crate::game::audio::set_output_paused(false);
                     publish_window(&game_app);
                     if let Some(window) = game_app.native_window() {
                         // The activity has given us a window: build the GL surface for it now, while
@@ -1867,6 +1916,12 @@ pub fn android_entry(app: AndroidApp) {
                             crate::render::opengl::egl::attach_surface(ptr);
                         }
                         android::push_resize(window.width() as u16, window.height() as u16);
+                        // Only wake the engine once it has somewhere to draw. Resuming before the
+                        // surface exists made the render loop spin without presenting a frame.
+                        if crate::render::opengl::egl::has_surface() {
+                            ramen::platform::android::set_paused(false);
+                            crate::game::audio::set_output_paused(false);
+                        }
                     }
                 },
                 // Going away. The surface is let go on `Pause`/`Stop` as well as on
@@ -1902,6 +1957,11 @@ pub fn android_entry(app: AndroidApp) {
             PollEvent::Timeout => {},
             _ => {},
         });
+    }
+
+    let last = PUBLISHED_WINDOW.swap(std::ptr::null_mut(), std::sync::atomic::Ordering::Relaxed);
+    if !last.is_null() {
+        unsafe { ANativeWindow_release(last) };
     }
 }
 
@@ -1939,7 +1999,7 @@ fn free_bytes_on(path: &Path) -> Option<u64> {
         if libc::statvfs(path_c.as_ptr(), &mut stats) != 0 {
             return None
         }
-        Some(stats.f_bavail * u64::from(stats.f_frsize))
+        Some(stats.f_bavail as u64 * stats.f_frsize as u64)
     }
 }
 
