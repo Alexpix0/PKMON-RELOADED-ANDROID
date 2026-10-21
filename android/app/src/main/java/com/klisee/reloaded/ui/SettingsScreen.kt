@@ -680,7 +680,12 @@ fun SettingsScreen(
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Spacer(Modifier.height(4.dp))
@@ -778,8 +783,20 @@ fun SettingsScreen(
                                         items = 2,
                                         index = 1,
                                         onSelect = {
-                                            graphicsBackend = "vulkan"
-                                            prefs.graphicsBackend = "vulkan"
+                                            val hasVulkan = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL)
+                                            if (!hasVulkan) {
+                                                scope.launch {
+                                                    snackbar.showSnackbar("Este dispositivo no soporta Vulkan por hardware. Se mantiene OpenGL ES.")
+                                                }
+                                                graphicsBackend = "opengl"
+                                                prefs.graphicsBackend = "opengl"
+                                            } else {
+                                                graphicsBackend = "vulkan"
+                                                prefs.graphicsBackend = "vulkan"
+                                                scope.launch {
+                                                    snackbar.showSnackbar("Backend Vulkan activado. Reinicia la partida si está en ejecución para recrear el contexto gráfico.")
+                                                }
+                                            }
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -799,8 +816,10 @@ fun SettingsScreen(
                                             if (it) {
                                                 prefs.applyPerformanceProfile("extreme_combat")
                                                 renderScale = prefs.renderScale
-                                                fsrMode = prefs.fsrMode
-                                                drsEnabled = prefs.drsEnabled
+                                                fsrMode = 0
+                                                prefs.fsrMode = 0
+                                                drsEnabled = false
+                                                prefs.drsEnabled = false
                                                 force60Fps = prefs.force60Fps
                                             }
                                             prefs.writeVideo(context.filesDir)
@@ -829,6 +848,10 @@ fun SettingsScreen(
                                         onSelect = {
                                             fsrMode = 1
                                             prefs.fsrMode = 1
+                                            extremeCombat = false
+                                            prefs.extremeCombat = false
+                                            drsEnabled = false
+                                            prefs.drsEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -842,6 +865,10 @@ fun SettingsScreen(
                                         onSelect = {
                                             fsrMode = 2
                                             prefs.fsrMode = 2
+                                            extremeCombat = false
+                                            prefs.extremeCombat = false
+                                            drsEnabled = false
+                                            prefs.drsEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -855,6 +882,10 @@ fun SettingsScreen(
                                         onSelect = {
                                             fsrMode = 3
                                             prefs.fsrMode = 3
+                                            extremeCombat = false
+                                            prefs.extremeCombat = false
+                                            drsEnabled = false
+                                            prefs.drsEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1071,7 +1102,7 @@ fun SettingsScreen(
                                         title = "0.75x (Modo Rendimiento / GPUs antiguas)",
                                         subtitle = "Alivia la tasa de relleno y gana entre 5 y 15 FPS en GPUs PowerVR/Mali",
                                         selected = renderScale == "0.75",
-                                        items = 4,
+                                        items = 5,
                                         index = 0,
                                         onSelect = {
                                             renderScale = "0.75"
@@ -1081,11 +1112,24 @@ fun SettingsScreen(
                                     )
                                     ChoiceRow(
                                         icon = Icons.Filled.AspectRatio,
+                                        title = "0.85x (Equilibrado / Combate Extremo)",
+                                        subtitle = "Escala fijada por el perfil extremo para combates a 60 FPS estables",
+                                        selected = renderScale == "0.85",
+                                        items = 5,
+                                        index = 1,
+                                        onSelect = {
+                                            renderScale = "0.85"
+                                            prefs.renderScale = "0.85"
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    ChoiceRow(
+                                        icon = Icons.Filled.AspectRatio,
                                         title = "1.0x (Nativo Pixel-Perfect)",
                                         subtitle = "Resolución original del juego con nitidez estándar",
-                                        selected = renderScale == "1.0",
-                                        items = 4,
-                                        index = 1,
+                                        selected = renderScale == "1.0" || (renderScale != "0.75" && renderScale != "0.85" && renderScale != "1.25" && renderScale != "1.5"),
+                                        items = 5,
+                                        index = 2,
                                         onSelect = {
                                             renderScale = "1.0"
                                             prefs.renderScale = "1.0"
@@ -1097,8 +1141,8 @@ fun SettingsScreen(
                                         title = "1.25x (Super-Sampled)",
                                         subtitle = "Mayor suavidad de bordes para pantallas FHD/OLED",
                                         selected = renderScale == "1.25",
-                                        items = 4,
-                                        index = 2,
+                                        items = 5,
+                                        index = 3,
                                         onSelect = {
                                             renderScale = "1.25"
                                             prefs.renderScale = "1.25"
@@ -1110,8 +1154,8 @@ fun SettingsScreen(
                                         title = "1.5x (Ultra Definición)",
                                         subtitle = "Máxima calidad visual para terminales de gama alta",
                                         selected = renderScale == "1.5",
-                                        items = 4,
-                                        index = 3,
+                                        items = 5,
+                                        index = 4,
                                         onSelect = {
                                             renderScale = "1.5"
                                             prefs.renderScale = "1.5"
@@ -1716,13 +1760,19 @@ fun SettingsScreen(
                                         onCheckedChange = {
                                             drsEnabled = it
                                             prefs.drsEnabled = it
+                                            if (it) {
+                                                extremeCombat = false
+                                                prefs.extremeCombat = false
+                                                fsrMode = 0
+                                                prefs.fsrMode = 0
+                                            }
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
                                     SwitchRow(
                                         icon = Icons.Filled.Shield,
                                         title = "Despertador de Frecuencia GPU Mali (Anti-Downclock)",
-                                        subtitle = "Envía sugerencias de 16.66 ms a APerformanceHintManager e inyecta glFlush() para mantener 800-950 MHz",
+                                        subtitle = "Sincroniza eglPresentationTimeANDROID y frame-pacing adaptable sin bloqueos síncronos de pipeline",
                                         checked = gpuWakeup,
                                         items = 5,
                                         index = 3,
@@ -2251,7 +2301,7 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(BottomNavSpace))
+            Spacer(Modifier.height(BottomNavSpace + 32.dp))
         }
     }
 }

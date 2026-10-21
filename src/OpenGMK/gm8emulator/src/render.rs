@@ -663,6 +663,8 @@ impl Renderer {
                 },
                 Err(e) => {
                     eprintln!("[render] ADVERTENCIA: No se pudo iniciar Vulkan ({}). Fallback automático a OpenGL ES.", e);
+                    crate::touch_controls::set_vulkan_backend(false);
+                    std::env::set_var("OPENGMK_BACKEND", "opengl");
                 }
             }
         }

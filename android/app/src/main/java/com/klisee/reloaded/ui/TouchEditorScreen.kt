@@ -198,18 +198,16 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Personalizar controles", style = MaterialTheme.typography.titleMedium)
 
-                        // Botón Agregar nuevo botón
-                        if (profile != TouchProfile.MENU) {
-                            Button(
-                                onClick = { keyPickerMode = "add" },
-                                enabled = !saving,
-                                modifier = Modifier.fillMaxWidth().testTag("add-control"),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Agregar nuevo botón")
-                            }
+                        // Botón Agregar nuevo botón (habilitado en todos los perfiles, incluido Menús y caja)
+                        Button(
+                            onClick = { keyPickerMode = "add" },
+                            enabled = !saving,
+                            modifier = Modifier.fillMaxWidth().testTag("add-control"),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Agregar nuevo botón")
                         }
 
                         if (selected == null) {

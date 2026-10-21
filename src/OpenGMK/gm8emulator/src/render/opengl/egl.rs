@@ -42,6 +42,22 @@ pub const EGL_NONE: c_int = 0x3038;
 /// Reported by `eglGetError` after a call that found the context gone (EGL 1.5).
 pub const EGL_CONTEXT_LOST: c_uint = 0x300E;
 
+type EGLnsecsANDROID = i64;
+type PFNEGLPRESENTATIONTIMEANDROIDPROC = Option<unsafe extern "C" fn(EGLDisplay, EGLSurface, EGLnsecsANDROID) -> c_uint>;
+
+static PRESENTATION_TIME_FN: std::sync::OnceLock<PFNEGLPRESENTATIONTIMEANDROIDPROC> = std::sync::OnceLock::new();
+
+fn get_presentation_time_fn() -> PFNEGLPRESENTATIONTIMEANDROIDPROC {
+    *PRESENTATION_TIME_FN.get_or_init(|| unsafe {
+        let ptr = eglGetProcAddress(b"eglPresentationTimeANDROID\0".as_ptr().cast());
+        if ptr.is_null() {
+            None
+        } else {
+            Some(std::mem::transmute(ptr))
+        }
+    })
+}
+
 extern "C" {
     fn eglGetDisplay(display_id: *mut c_void) -> EGLDisplay;
     fn eglInitialize(display: EGLDisplay, major: *mut c_int, minor: *mut c_int) -> c_uint;
@@ -404,6 +420,36 @@ impl PlatformImpl {
         let Ok(slot) = GL.lock() else { return };
         let Some(gl) = slot.as_ref() else { return };
         if gl.surface != EGL_NO_SURFACE {
+            static LAST_SWAP: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+            static CURRENT_INTERVAL: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+            let now = std::time::Instant::now();
+            if let Ok(mut last_lock) = LAST_SWAP.lock() {
+                if let Some(prev) = *last_lock {
+                    let frametime_ms = now.duration_since(prev).as_secs_f32() * 1000.0;
+                    // Anti-lock 25/30 FPS & adaptive frame pacing:
+                    // Drop swap interval to 0 when frametime exceeds 16.6ms to prevent TBDR driver latching
+                    if frametime_ms > 16.6 {
+                        if CURRENT_INTERVAL.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+                            eglSwapInterval(gl.display, 0);
+                            CURRENT_INTERVAL.store(0, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    } else if gl.swap_interval > 0 && CURRENT_INTERVAL.load(std::sync::atomic::Ordering::Relaxed) != gl.swap_interval {
+                        eglSwapInterval(gl.display, gl.swap_interval as c_int);
+                        CURRENT_INTERVAL.store(gl.swap_interval, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                *last_lock = Some(now);
+            }
+
+            // eglPresentationTimeANDROID hint to keep compositor in sync without blocking pipeline
+            if let Some(pres_fn) = get_presentation_time_fn() {
+                if let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
+                    let now_ns = duration.as_nanos() as i64;
+                    pres_fn(gl.display, gl.surface, now_ns + 16_666_667);
+                }
+            }
+
             if eglSwapBuffers(gl.display, gl.surface) == 0 {
                 note_egl_error("eglSwapBuffers");
             }

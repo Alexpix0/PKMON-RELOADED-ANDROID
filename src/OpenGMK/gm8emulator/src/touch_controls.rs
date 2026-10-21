@@ -450,9 +450,9 @@ pub fn load_layout(text: &str) {
             let fields: Vec<_> = line.split_whitespace().collect();
             if fields.len() < 6 { continue }
             let context = match fields[0] {
-                "world" => WORLD, "battle" => BATTLE, "dialog" => DIALOG, "character" => CHARACTER, "choice" => CHOICE, "safari" => SAFARI, "menu_nav" => MENU_NAV, _ => continue,
+                "world" => WORLD, "battle" => BATTLE, "dialog" => DIALOG, "character" => CHARACTER, "choice" => CHOICE, "safari" => SAFARI, "menu_nav" => MENU_NAV, "menu" => MENU, _ => continue,
             };
-            let name = if fields[1] == JOYSTICK_NAME && context & (WORLD | BATTLE | CHOICE | MENU_NAV) != 0 {
+            let name = if fields[1] == JOYSTICK_NAME && context & (WORLD | BATTLE | CHOICE | MENU_NAV | MENU) != 0 {
                 JOYSTICK_NAME
             } else if let Some(c) = CLASSIC_CONTROLS.iter().find(|c| c.name == fields[1]) {
                 c.name
@@ -511,7 +511,18 @@ fn profile_default(name: &str, context: u8) -> Option<LayoutOverride> {
         (BATTLE, "p") => ("p", 0.600, 0.180),
         (BATTLE, "m") => ("m", 0.860, 0.330),
         (BATTLE, "a") => ("a", 0.755, 0.448),
-        (BATTLE, "s") => ("s", 0.700, 0.650),
+        (BATTLE, "s") => ("s", 0.820, 0.880),
+        (BATTLE, "b") => ("b", 0.880, 0.880),
+        (BATTLE, "z") => ("z", 0.910, 0.720),
+        (BATTLE, "x") => ("x", 0.965, 0.580),
+        (BATTLE, "c") => ("c", 0.850, 0.580),
+        (BATTLE, "v") => ("v", 0.910, 0.440),
+        (MENU, "z") => ("z", 0.865, 0.851),
+        (MENU, "x") => ("x", 0.933, 0.700),
+        (MENU, "c") => ("c", 0.797, 0.700),
+        (MENU, "v") => ("v", 0.865, 0.549),
+        (MENU, "l") => ("l", 0.730, 0.440),
+        (MENU, "p") => ("p", 0.930, 0.440),
         (MENU_NAV, "z") => ("z", 0.865, 0.851),
         (MENU_NAV, "x") => ("x", 0.933, 0.700),
         (MENU_NAV, "a") => ("a", 0.797, 0.851),
@@ -965,8 +976,12 @@ pub fn is_active(index: usize) -> bool {
     if overlay_style() == OverlayStyle::None {
         return false
     }
-    // In MENU modals (like "¿Salir del juego?"), never draw game controls
+    // In MENU modals / box management, allow hybrid mode with overlay buttons if enabled in layout
     if current_context() == MENU {
+        let name = controls()[index].name;
+        if let Some(entry) = layout_override(name) {
+            return entry.visible;
+        }
         return false;
     }
     // In DIALOG, only show the dialogue advancement button
@@ -1013,20 +1028,26 @@ pub fn is_active(index: usize) -> bool {
 /// The movement control (joystick or D-pad) drives the arrow keys, which is how the game's menus (the
 /// ones that still show controls) and the overworld are navigated.
 pub fn movement_active() -> bool {
-    if current_context() == MENU || current_context() == DIALOG { return false; }
+    if current_context() == DIALOG { return false; }
+    if current_context() == MENU {
+        return joystick_visible() && CLASSIC_LAYOUT.lock().unwrap().iter().any(|e| e.context == MENU && e.name == JOYSTICK_NAME && e.visible);
+    }
     if overlay_style() == OverlayStyle::Classic { return joystick_active() }
     overlay_style() != OverlayStyle::None
         && !pad_active()
         && !info_window_open()
-        && current_context() & (WORLD | BATTLE | CHOICE | MENU_NAV) != 0
+        && current_context() & (WORLD | BATTLE | CHOICE | MENU_NAV | MENU) != 0
 }
 
 /// The joystick drives the arrow keys. Used by the classic overlay.
 pub fn joystick_active() -> bool {
-    if current_context() == MENU || current_context() == DIALOG { return false; }
+    if current_context() == DIALOG { return false; }
+    if current_context() == MENU {
+        return joystick_visible() && CLASSIC_LAYOUT.lock().unwrap().iter().any(|e| e.context == MENU && e.name == JOYSTICK_NAME && e.visible);
+    }
     !pad_active() && !info_window_open() && joystick_visible()
         && overlay_style() != OverlayStyle::None
-        && current_context() & (WORLD | BATTLE | CHOICE | MENU_NAV) != 0
+        && current_context() & (WORLD | BATTLE | CHOICE | MENU_NAV | MENU) != 0
 }
 
 /// Returns the index of the control containing the point, if any. The point is normalised, but the

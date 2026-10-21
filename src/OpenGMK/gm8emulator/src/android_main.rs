@@ -255,6 +255,10 @@ fn load_video() {
             } else if name == "extreme_combat" {
                 let ec = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::touch_controls::set_extreme_combat(ec);
+                if ec {
+                    crate::render::fsr::set_drs_enabled(false);
+                    crate::render::fsr::set_fsr_mode(0);
+                }
             } else if name == "mali_earlyz" {
                 let me = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::touch_controls::set_mali_earlyz(me);
@@ -282,10 +286,18 @@ fn load_video() {
             } else if name == "fsr_mode" {
                 if let Ok(m) = value.parse::<u32>() {
                     crate::render::fsr::set_fsr_mode(m);
+                    if m > 0 {
+                        crate::touch_controls::set_extreme_combat(false);
+                        crate::render::fsr::set_drs_enabled(false);
+                    }
                 }
             } else if name == "drs_enabled" {
                 let drs = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::render::fsr::set_drs_enabled(drs);
+                if drs {
+                    crate::touch_controls::set_extreme_combat(false);
+                    crate::render::fsr::set_fsr_mode(0);
+                }
             } else if name == "xbrz_enabled" {
                 let xbrz = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::render::fsr::set_xbrz_enabled(xbrz);
@@ -1809,7 +1821,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.9.5\n\
+             Version: 9.6\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

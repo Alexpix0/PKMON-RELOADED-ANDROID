@@ -366,7 +366,13 @@ class Preferences(context: Context) {
     var extremeCombat: Boolean
         get() = prefs.getBoolean("extremeCombat", false)
         set(value) {
-            prefs.edit().putBoolean("extremeCombat", value).apply()
+            val editor = prefs.edit().putBoolean("extremeCombat", value)
+            if (value) {
+                editor.putBoolean("drsEnabled", false)
+                editor.putInt("fsrMode", 0)
+                editor.putString("renderScale", "0.85")
+            }
+            editor.apply()
         }
 
     /** Alpha-Test Early-Z FPK para GPUs ARM Mali */
@@ -429,14 +435,24 @@ class Preferences(context: Context) {
     var fsrMode: Int
         get() = prefs.getInt("fsrMode", 0)
         set(value) {
-            prefs.edit().putInt("fsrMode", value).apply()
+            val editor = prefs.edit().putInt("fsrMode", value)
+            if (value > 0) {
+                editor.putBoolean("extremeCombat", false)
+                editor.putBoolean("drsEnabled", false)
+            }
+            editor.apply()
         }
 
     /** Resolución Dinámica DRS con Bucle PID Continuo */
     var drsEnabled: Boolean
         get() = prefs.getBoolean("drsEnabled", false)
         set(value) {
-            prefs.edit().putBoolean("drsEnabled", value).apply()
+            val editor = prefs.edit().putBoolean("drsEnabled", value)
+            if (value) {
+                editor.putBoolean("extremeCombat", false)
+                editor.putInt("fsrMode", 0)
+            }
+            editor.apply()
         }
 
     /** Super-Resolución Neuronal xBRZ 4x/6x HD */
@@ -636,8 +652,8 @@ class Preferences(context: Context) {
                 extremeCombat = true
                 maliEarlyZ = true
                 gpuWakeup = true
-                fsrMode = 2 // Balanced FSR
-                drsEnabled = true
+                fsrMode = 0
+                drsEnabled = false
                 activeStaticPartition = true
                 batterySaver = false
             }

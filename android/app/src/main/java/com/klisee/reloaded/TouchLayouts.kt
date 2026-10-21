@@ -9,7 +9,7 @@ enum class TouchProfile(val id: String, val title: String, val description: Stri
     CHOICE("choice", "Opciones", "Joystick y Z/X para responder las listas de opciones."),
     SAFARI("safari", "Safari", "Controles de captura en la Zona Safari."),
     MENU_NAV("menu_nav", "Navegación", "Mochila y listas: joystick, X y gestos táctiles."),
-    MENU("menu", "Menús y caja", "Toque directo: este modo no muestra botones superpuestos."),
+    MENU("menu", "Menús y caja", "Modo híbrido: toque directo y botones superpuestos configurables."),
 }
 
 data class TouchControlSpec(
@@ -74,8 +74,8 @@ object TouchLayouts {
             setOf(TouchProfile.WORLD, TouchProfile.BATTLE, TouchProfile.CHOICE, TouchProfile.MENU_NAV), "joystick-base.png", joystick = true),
     )
     fun key(profile: TouchProfile, spec: TouchControlSpec) = "${profile.id}/${spec.id}"
-    fun availableFor(profile: TouchProfile) = if (profile == TouchProfile.MENU) emptyList() else
-        controls.filter { (!it.joystick || profile in it.profiles) && (it.id != "sel_world" || profile == TouchProfile.WORLD) && (it.id != "pkmn" || profile == TouchProfile.BATTLE) }
+    fun availableFor(profile: TouchProfile) =
+        controls.filter { (!it.joystick || profile in it.profiles || profile == TouchProfile.MENU) && (it.id != "sel_world" || profile == TouchProfile.WORLD) && (it.id != "pkmn" || profile == TouchProfile.BATTLE) }
     fun controlsFor(profile: TouchProfile, values: Map<String, TouchPlacement> = emptyMap()) =
         availableFor(profile).filter { profile in it.profiles || key(profile, it) in values }
     fun added(profile: TouchProfile, spec: TouchControlSpec) = profile !in spec.profiles
@@ -95,7 +95,18 @@ object TouchLayouts {
         "battle/e" to TouchPlacement(0.148f, 0.180f),
         "battle/m" to TouchPlacement(0.860f, 0.330f),
         "battle/a" to TouchPlacement(0.755f, 0.448f),
-        "battle/s" to TouchPlacement(0.700f, 0.650f),
+        "battle/s" to TouchPlacement(0.820f, 0.880f),
+        "battle/b" to TouchPlacement(0.880f, 0.880f),
+        "battle/z" to TouchPlacement(0.910f, 0.720f),
+        "battle/x" to TouchPlacement(0.965f, 0.580f),
+        "battle/c" to TouchPlacement(0.850f, 0.580f),
+        "battle/v" to TouchPlacement(0.910f, 0.440f),
+        "menu/z" to TouchPlacement(0.865f, 0.851f),
+        "menu/x" to TouchPlacement(0.933f, 0.700f),
+        "menu/c" to TouchPlacement(0.797f, 0.700f),
+        "menu/v" to TouchPlacement(0.865f, 0.549f),
+        "menu/l" to TouchPlacement(0.730f, 0.440f),
+        "menu/p" to TouchPlacement(0.930f, 0.440f),
     )
     fun original(spec: TouchControlSpec, profile: TouchProfile = TouchProfile.WORLD) =
         profileDefaults[key(profile, spec)] ?: TouchPlacement(spec.x, spec.y)
@@ -110,7 +121,6 @@ object TouchLayouts {
             if (fields.size < 6) continue
             val profile = TouchProfile.entries.firstOrNull { it.id == fields[0] } ?: continue
             val spec = controls.firstOrNull { it.id == fields[1] } ?: continue
-            if (profile == TouchProfile.MENU) continue
             val x = fields[2].toFloatOrNull()?.takeIf { it.isFinite() } ?: continue
             val y = fields[3].toFloatOrNull()?.takeIf { it.isFinite() } ?: continue
             val scale = fields[4].toFloatOrNull()?.takeIf { it.isFinite() } ?: continue
