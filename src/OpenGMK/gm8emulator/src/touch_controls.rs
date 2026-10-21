@@ -803,9 +803,6 @@ pub fn is_keyboard_wait_active() -> bool {
     KEYBOARD_WAIT_ACTIVE.load(Ordering::SeqCst)
 }
 
-pub fn force_dialogue_closed() {
-    DIALOGUE.clear();
-}
 
 static LAST_CONTEXT: AtomicU8 = AtomicU8::new(0);
 
@@ -932,13 +929,6 @@ pub fn info_window_open() -> bool {
     INFO_WINDOW_OPEN.load(Ordering::Relaxed)
 }
 
-static LAST_CONTEXT: AtomicU32 = AtomicU32::new(0);
-
-pub fn update_context_transition() -> bool {
-    let ctx = current_context() as u32;
-    let old = LAST_CONTEXT.swap(ctx, Ordering::Relaxed);
-    old != ctx
-}
 
 static OPPONENT_SPECIES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 

@@ -1961,6 +1961,8 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
         [0.35, 0.75, 0.95, 0.95] // OpenGL cyan
     };
 
+    let px = 2.2f32;
+
     // Píldora lateral independiente para el backend gráfico (GL / VK)
     let pill_x0 = x0 - 36.0f32;
     let pill_y0 = y0 + 2.0f32;
@@ -1977,8 +1979,6 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
 
     let mut ft_buf = [0u8; 16];
     let ft_str = format_f32_1dp(avg_ft, " ms", &mut ft_buf);
-
-    let px = 2.2f32;
 
     // Fila 1: 60.0 FPS (100% limpia sin texto encima)
     push_text_left(verts, ww, wh, fps_str, x0 + 8.0f32, y0 + 9.0f32, px, fps_col);
