@@ -343,6 +343,20 @@ class Preferences(context: Context) {
             prefs.edit().putInt("trainerNameLimit", value).apply()
         }
 
+    var gameLanguage: String
+        get() = prefs.getString("gameLanguage", "auto") ?: "auto"
+        set(value) {
+            prefs.edit().putString("gameLanguage", value).apply()
+        }
+
+    fun resolvedGameLanguage(): String {
+        return when (gameLanguage) {
+            "en" -> "en"
+            "es" -> "es"
+            else -> if (java.util.Locale.getDefault().language.equals("en", ignoreCase = true)) "en" else "es"
+        }
+    }
+
     /** Alerta Visual Perimetral de Pokémon Variocolor (Shiny Beacon) */
     var shinyBeacon: Boolean
         get() = prefs.getBoolean("shinyBeacon", false)
