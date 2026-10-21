@@ -25,7 +25,11 @@ import java.net.URL
  * the launcher shows, and it keeps the APK from growing another dependency.
  */
 @Composable
-fun RemoteImage(url: String, modifier: Modifier = Modifier) {
+fun RemoteImage(
+    url: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
     var bitmap by remember(url) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(url) {
@@ -52,7 +56,7 @@ fun RemoteImage(url: String, modifier: Modifier = Modifier) {
         Image(
             bitmap = image,
             contentDescription = null,
-            contentScale = ContentScale.Crop,
+            contentScale = contentScale,
             modifier = modifier,
         )
     }
