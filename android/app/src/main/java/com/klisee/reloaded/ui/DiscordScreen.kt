@@ -205,7 +205,7 @@ fun DiscordScreen(prefs: Preferences, onBack: () -> Unit) {
                                     DiscordRpcManager.logout()
                                     enabled = false
                                     prefs.discordEnabled = false
-                                    scope.launch { snackbar.showSnackbar(Strings.tr("Cuenta desvinculada.")) }
+                                    scope.launch { snackbar.showSnackbar("Cuenta desvinculada.") }
                                 } else {
                                     confirmLogin = true
                                 }
@@ -252,7 +252,7 @@ fun DiscordScreen(prefs: Preferences, onBack: () -> Unit) {
                     enabled = authorized && enabled,
                     onClick = {
                         DiscordRpcManager.republish()
-                        scope.launch { snackbar.showSnackbar(Strings.tr("Presencia actualizada.")) }
+                        scope.launch { snackbar.showSnackbar("Presencia actualizada.") }
                     },
                 )
             }

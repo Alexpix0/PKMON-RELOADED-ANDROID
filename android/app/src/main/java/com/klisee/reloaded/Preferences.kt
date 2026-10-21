@@ -337,6 +337,12 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("discordWarningDismissed", value).apply()
         }
 
+    var trainerNameLimit: Int
+        get() = prefs.getInt("trainerNameLimit", 0)
+        set(value) {
+            prefs.edit().putInt("trainerNameLimit", value).apply()
+        }
+
     /** Alerta Visual Perimetral de Pokémon Variocolor (Shiny Beacon) */
     var shinyBeacon: Boolean
         get() = prefs.getBoolean("shinyBeacon", false)
