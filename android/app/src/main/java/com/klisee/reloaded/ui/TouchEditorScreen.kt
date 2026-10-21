@@ -460,6 +460,7 @@ private fun KeySelectionDialog(
     onResetToDefault: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
+    val cyanAccent = Color(0xFF00E5FF)
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas") }
     var detectedKey by remember { mutableStateOf<PcKeyChoice?>(null) }
@@ -554,7 +555,6 @@ private fun KeySelectionDialog(
                     )
 
                     // Tarjeta reactiva PadProbe (resalta en cian al detectar tecla física o mando)
-                    val cyanAccent = Color(0xFF00E5FF)
                     Surface(
                         color = if (detectedKey != null) cyanAccent.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                         border = if (detectedKey != null) BorderStroke(1.5.dp, cyanAccent) else null,
