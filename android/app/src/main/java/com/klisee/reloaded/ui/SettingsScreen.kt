@@ -175,6 +175,13 @@ fun SettingsScreen(
     var achievements by remember { mutableStateOf(prefs.achievements) }
     var uiStyle by remember { mutableStateOf(prefs.uiStyle) }
 
+    // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
+    var tbdrSurfaceFusion by remember { mutableStateOf(prefs.tbdrSurfaceFusion) }
+    var asyncRenderThread by remember { mutableStateOf(prefs.asyncRenderThread) }
+    var townZsortBaking by remember { mutableStateOf(prefs.townZsortBaking) }
+    var shaderBinaryPrecache by remember { mutableStateOf(prefs.shaderBinaryPrecache) }
+    var npcTickCulling by remember { mutableStateOf(prefs.npcTickCulling) }
+
     // Snapshots state
     var showSnapshotsDialog by remember { mutableStateOf(false) }
     var snapshotsList by remember { mutableStateOf<List<GameRepository.SnapshotItem>>(emptyList()) }
@@ -1802,6 +1809,74 @@ fun SettingsScreen(
                                         onCheckedChange = {
                                             megaAtlas = it
                                             prefs.megaAtlas = it
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                }
+
+                    SettingsGroup("Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)") {
+                                    SwitchRow(
+                                        icon = Icons.Filled.Layers,
+                                        title = "Fusión de Superficies TBDR (Zero-Copy Battle FBO)",
+                                        subtitle = "Unifica las capas de interfaz, sombras y efectos de combate en un solo pase de memoria para eliminar la subida a 35ms",
+                                        checked = tbdrSurfaceFusion,
+                                        items = 5,
+                                        index = 0,
+                                        onCheckedChange = {
+                                            tbdrSurfaceFusion = it
+                                            prefs.tbdrSurfaceFusion = it
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    SwitchRow(
+                                        icon = Icons.Filled.Speed,
+                                        title = "Hilo de Renderizado Desacoplado (Async Render + Frame Interpolation)",
+                                        subtitle = "Separa el motor lógico del hilo de dibujo OpenGL/Vulkan e interpola movimiento a 60 FPS constantes en pueblos y combates",
+                                        checked = asyncRenderThread,
+                                        items = 5,
+                                        index = 1,
+                                        onCheckedChange = {
+                                            asyncRenderThread = it
+                                            prefs.asyncRenderThread = it
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    SwitchRow(
+                                        icon = Icons.Filled.Terrain,
+                                        title = "Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking)",
+                                        subtitle = "Delega el orden de profundidad de edificios/NPCs a la GPU y pre-renderiza el suelo estático para evitar caídas a 30 FPS al caminar",
+                                        checked = townZsortBaking,
+                                        items = 5,
+                                        index = 2,
+                                        onCheckedChange = {
+                                            townZsortBaking = it
+                                            prefs.townZsortBaking = it
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    SwitchRow(
+                                        icon = Icons.Filled.Memory,
+                                        title = "Caché Binaria Precompilada de Shaders (Vulkan PSO / GL Program Binary)",
+                                        subtitle = "Guarda los shaders de ataques y efectos en disco para eliminar tirones y errores gráficos al iniciar combates",
+                                        checked = shaderBinaryPrecache,
+                                        items = 5,
+                                        index = 3,
+                                        onCheckedChange = {
+                                            shaderBinaryPrecache = it
+                                            prefs.shaderBinaryPrecache = it
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    SwitchRow(
+                                        icon = Icons.Filled.VisibilityOff,
+                                        title = "Limitador Inteligente de Scripts Lejanos (NPC Tick Culling)",
+                                        subtitle = "Pausa la evaluación de colisiones y animaciones de eventos que están fuera de la pantalla del jugador",
+                                        checked = npcTickCulling,
+                                        items = 5,
+                                        index = 4,
+                                        onCheckedChange = {
+                                            npcTickCulling = it
+                                            prefs.npcTickCulling = it
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )

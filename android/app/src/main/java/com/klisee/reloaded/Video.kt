@@ -58,7 +58,13 @@ fun writeVideoFile(
     replayBlackbox: Boolean = false,
     achievements: Boolean = false,
     jitArm64: Boolean = true,
-    bigLittleAffinity: Boolean = true
+    bigLittleAffinity: Boolean = true,
+    // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
+    tbdrSurfaceFusion: Boolean = true,
+    asyncRenderThread: Boolean = true,
+    townZsortBaking: Boolean = true,
+    shaderBinaryPrecache: Boolean = true,
+    npcTickCulling: Boolean = true
 ) {
     val text = buildString {
         appendLine("# Escrito por Ajustes (v0.9.0). El motor OpenGMK lo lee al arrancar.")
@@ -114,6 +120,12 @@ fun writeVideoFile(
         appendLine("achievements=${if (achievements) 1 else 0}")
         appendLine("jit_arm64=${if (jitArm64) 1 else 0}")
         appendLine("big_little_affinity=${if (bigLittleAffinity) 1 else 0}")
+        // Complementos v9.7 Ultra Engine
+        appendLine("tbdr_surface_fusion=${if (tbdrSurfaceFusion) 1 else 0}")
+        appendLine("async_render_thread=${if (asyncRenderThread) 1 else 0}")
+        appendLine("town_zsort_baking=${if (townZsortBaking) 1 else 0}")
+        appendLine("shader_binary_precache=${if (shaderBinaryPrecache) 1 else 0}")
+        appendLine("npc_tick_culling=${if (npcTickCulling) 1 else 0}")
     }
     runCatching { File(filesDir, "video.conf").writeText(text) }
 }

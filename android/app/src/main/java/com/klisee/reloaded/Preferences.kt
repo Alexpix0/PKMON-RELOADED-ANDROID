@@ -579,6 +579,44 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("bigLittleAffinity", value).apply()
         }
 
+    // ------------------------------------------------------------------------------------------
+    // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
+
+    /** Fusión de Superficies TBDR (Zero-Copy Battle FBO) */
+    var tbdrSurfaceFusion: Boolean
+        get() = prefs.getBoolean("tbdrSurfaceFusion", true)
+        set(value) {
+            prefs.edit().putBoolean("tbdrSurfaceFusion", value).apply()
+        }
+
+    /** Hilo de Renderizado Desacoplado (Async Render + Frame Interpolation) */
+    var asyncRenderThread: Boolean
+        get() = prefs.getBoolean("asyncRenderThread", true)
+        set(value) {
+            prefs.edit().putBoolean("asyncRenderThread", value).apply()
+        }
+
+    /** Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking) */
+    var townZsortBaking: Boolean
+        get() = prefs.getBoolean("townZsortBaking", true)
+        set(value) {
+            prefs.edit().putBoolean("townZsortBaking", value).apply()
+        }
+
+    /** Caché Binaria Precompilada de Shaders (Vulkan PSO / GL Program Binary) */
+    var shaderBinaryPrecache: Boolean
+        get() = prefs.getBoolean("shaderBinaryPrecache", true)
+        set(value) {
+            prefs.edit().putBoolean("shaderBinaryPrecache", value).apply()
+        }
+
+    /** Limitador Inteligente de Scripts Lejanos (NPC Tick Culling) */
+    var npcTickCulling: Boolean
+        get() = prefs.getBoolean("npcTickCulling", true)
+        set(value) {
+            prefs.edit().putBoolean("npcTickCulling", value).apply()
+        }
+
     /** Estilo de Interfaz del Emulador ("classic", "glassmorphic") */
     var uiStyle: String
         get() = prefs.getString("uiStyle", "glassmorphic") ?: "glassmorphic"
@@ -638,7 +676,12 @@ class Preferences(context: Context) {
         replayBlackbox = replayBlackbox,
         achievements = achievements,
         jitArm64 = jitArm64,
-        bigLittleAffinity = bigLittleAffinity
+        bigLittleAffinity = bigLittleAffinity,
+        tbdrSurfaceFusion = tbdrSurfaceFusion,
+        asyncRenderThread = asyncRenderThread,
+        townZsortBaking = townZsortBaking,
+        shaderBinaryPrecache = shaderBinaryPrecache,
+        npcTickCulling = npcTickCulling
     )
 
     /**

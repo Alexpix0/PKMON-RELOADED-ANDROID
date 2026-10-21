@@ -69,12 +69,12 @@ impl ShaderCache {
             if p.is_null() { "unknown_version" } else { std::ffi::CStr::from_ptr(p.cast()).to_str().unwrap_or("unknown") }
         };
 
-        let app_version = "0.9.5";
+        let app_version = "0.9.7";
         let hash = Self::compute_hash(&[name, renderer, version, app_version, vertex_source, fragment_source]);
         let cache_file = Self::cache_dir().join(format!("prog_{}_{:016x}.bin", name, hash));
 
         // 1. Try loading from cache if binary functions are supported
-        if gl.ProgramBinary.is_loaded() && cache_file.exists() {
+        if crate::touch_controls::shader_binary_precache_enabled() && gl.ProgramBinary.is_loaded() && cache_file.exists() {
             if let Ok(mut file) = File::open(&cache_file) {
                 let mut header = [0u8; 16]; // [u64 hash, u32 format, u32 length]
                 if file.read_exact(&mut header).is_ok() {

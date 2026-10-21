@@ -158,10 +158,10 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: "eleccion_ok", key: Key::Return, shape: Shape::Circle { cx: 0.932, cy: 0.600, r: 0.036 }, label: Label::Text("OK"), contexts: CHARACTER },
     Control { name: "eleccion_atras", key: Key::X, shape: Shape::Circle { cx: 0.972, cy: 0.420, r: 0.028 }, label: Label::Text("X"), contexts: CHARACTER },
     Control { name: COMBO_BUTTON_NAME, key: Key::LeftControl, shape: Shape::Circle { cx: 0.500, cy: 0.060, r: 0.018 }, label: Label::Text("C+P"), contexts: CHARACTER },
-    Control { name: "lmb", key: Key::LeftControl, shape: Shape::Circle { cx: 0.850, cy: 0.350, r: 0.028 }, label: Label::Text("LMB"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
-    Control { name: "rmb", key: Key::LeftAlt, shape: Shape::Circle { cx: 0.920, cy: 0.350, r: 0.028 }, label: Label::Text("RMB"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
-    Control { name: "qty_plus", key: Key::UpArrow, shape: Shape::Circle { cx: 0.850, cy: 0.260, r: 0.022 }, label: Label::Text("+"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
-    Control { name: "qty_minus", key: Key::DownArrow, shape: Shape::Circle { cx: 0.920, cy: 0.260, r: 0.022 }, label: Label::Text("-"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
+    Control { name: "lmb", key: Key::LeftControl, shape: Shape::Circle { cx: 0.850, cy: 0.350, r: 0.028 }, label: Label::Text("LMB"), contexts: 0 },
+    Control { name: "rmb", key: Key::LeftAlt, shape: Shape::Circle { cx: 0.920, cy: 0.350, r: 0.028 }, label: Label::Text("RMB"), contexts: 0 },
+    Control { name: "qty_plus", key: Key::UpArrow, shape: Shape::Circle { cx: 0.850, cy: 0.260, r: 0.022 }, label: Label::Text("+"), contexts: 0 },
+    Control { name: "qty_minus", key: Key::DownArrow, shape: Shape::Circle { cx: 0.920, cy: 0.260, r: 0.022 }, label: Label::Text("-"), contexts: 0 },
 ];
 
 pub const CLASSIC_CONTROLS: &[Control] = MASTER_CONTROLS;
@@ -2464,5 +2464,28 @@ pub fn set_active_static_partition(enabled: bool) { ACTIVE_STATIC_PARTITION.stor
 
 pub fn mega_atlas_enabled() -> bool { MEGA_ATLAS.load(Ordering::Relaxed) }
 pub fn set_mega_atlas(enabled: bool) { MEGA_ATLAS.store(enabled, Ordering::Relaxed); }
+
+// Complementos Avanzados de Rendimiento v9.7 Ultra Engine (activos por defecto para máximo rendimiento)
+static TBDR_SURFACE_FUSION: AtomicBool = AtomicBool::new(true);
+static ASYNC_RENDER_THREAD: AtomicBool = AtomicBool::new(true);
+static TOWN_ZSORT_BAKING: AtomicBool = AtomicBool::new(true);
+static SHADER_BINARY_PRECACHE: AtomicBool = AtomicBool::new(true);
+static NPC_TICK_CULLING: AtomicBool = AtomicBool::new(true);
+
+pub fn tbdr_surface_fusion_enabled() -> bool { TBDR_SURFACE_FUSION.load(Ordering::Relaxed) }
+pub fn set_tbdr_surface_fusion(enabled: bool) { TBDR_SURFACE_FUSION.store(enabled, Ordering::Relaxed); }
+
+pub fn async_render_thread_enabled() -> bool { ASYNC_RENDER_THREAD.load(Ordering::Relaxed) }
+pub fn set_async_render_thread(enabled: bool) { ASYNC_RENDER_THREAD.store(enabled, Ordering::Relaxed); }
+
+pub fn town_zsort_baking_enabled() -> bool { TOWN_ZSORT_BAKING.load(Ordering::Relaxed) }
+pub fn set_town_zsort_baking(enabled: bool) { TOWN_ZSORT_BAKING.store(enabled, Ordering::Relaxed); }
+
+pub fn shader_binary_precache_enabled() -> bool { SHADER_BINARY_PRECACHE.load(Ordering::Relaxed) }
+pub fn set_shader_binary_precache(enabled: bool) { SHADER_BINARY_PRECACHE.store(enabled, Ordering::Relaxed); }
+
+pub fn npc_tick_culling_enabled() -> bool { NPC_TICK_CULLING.load(Ordering::Relaxed) }
+pub fn set_npc_tick_culling(enabled: bool) { NPC_TICK_CULLING.store(enabled, Ordering::Relaxed); }
+
 
 

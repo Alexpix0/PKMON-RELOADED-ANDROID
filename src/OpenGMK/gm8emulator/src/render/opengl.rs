@@ -221,6 +221,8 @@ pub struct RendererImpl {
     /// What is bound right now, so the texture state is only touched when it actually changes.
     current_texture: Option<GLuint>,
     last_filter_mode: Option<GLenum>,
+    current_draw_fbo: Option<GLuint>,
+    current_program: Option<GLuint>,
     framebuffer: Framebuffer,
     stored_framebuffer: Option<Framebuffer>,
     zbuf_format: GLint,
@@ -766,6 +768,8 @@ impl RendererImpl {
                 current_atlas: 0,
                 current_texture: None,
                 last_filter_mode: None,
+                current_draw_fbo: Some(framebuffer_fbo),
+                current_program: Some(program),
                 framebuffer: Framebuffer {
                     texture: framebuffer_texture,
                     zbuf: framebuffer_zbuf,
@@ -959,7 +963,10 @@ impl RendererImpl {
                 err => panic!("OpenGL threw an error somewhere (error code {})", err),
             }
 
-            self.gl.UseProgram(self.program);
+            if self.current_program != Some(self.program) {
+                self.gl.UseProgram(self.program);
+                self.current_program = Some(self.program);
+            }
             self.gl.BindVertexArray(self.vao);
             self.gl.BindBuffer(gl::ARRAY_BUFFER, self.commands_vbo);
 
@@ -3089,7 +3096,10 @@ impl RendererTrait for RendererImpl {
         {
             let AtlasRect { x, y, w, h, .. } = *rect;
             unsafe {
-                self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, *fbo_id);
+                if self.current_draw_fbo != Some(*fbo_id) {
+                    self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, *fbo_id);
+                    self.current_draw_fbo = Some(*fbo_id);
+                }
                 // set viewport here since set_view doesn't
                 self.gl.Viewport(x, y, w, h);
                 self.gl.Scissor(x, y, w, h);
@@ -3102,7 +3112,10 @@ impl RendererTrait for RendererImpl {
     fn reset_target(&mut self) {
         self.flush_queue();
         unsafe {
-            self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, self.framebuffer.fbo);
+            if self.current_draw_fbo != Some(self.framebuffer.fbo) {
+                self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, self.framebuffer.fbo);
+                self.current_draw_fbo = Some(self.framebuffer.fbo);
+            }
 
             // reset view
             let fb_width = self.framebuffer.width as i32;

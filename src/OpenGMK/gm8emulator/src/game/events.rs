@@ -20,6 +20,26 @@ impl Game {
         while let Some(&object_id) = holders.borrow().get(position) {
             let mut iter = self.room.instance_list.iter_by_object(object_id);
             while let Some(instance) = iter.next(&self.room.instance_list) {
+                if crate::touch_controls::npc_tick_culling_enabled() && event_id == gml::ev::STEP && self.room.views_enabled {
+                    let inst = self.room.instance_list.get(instance);
+                    let view = &self.room.views[self.view_current];
+                    let vx = view.source_x as f64;
+                    let vy = view.source_y as f64;
+                    let vw = view.source_w as f64;
+                    let vh = view.source_h as f64;
+                    let ix = inst.x.get().into_inner();
+                    let iy = inst.y.get().into_inner();
+                    const CULL_MARGIN: f64 = 384.0;
+                    if (ix < vx - CULL_MARGIN || ix > vx + vw + CULL_MARGIN || iy < vy - CULL_MARGIN || iy > vy + vh + CULL_MARGIN)
+                        && inst.visible.get()
+                        && inst.speed.get() == 0.into()
+                        && inst.hspeed.get() == 0.into()
+                        && inst.vspeed.get() == 0.into()
+                        && !inst.alarms.borrow().values().any(|&a| a >= 0)
+                    {
+                        continue;
+                    }
+                }
                 if crate::touch_controls::active_static_partition_enabled() && event_id == gml::ev::STEP {
                     let inst = self.room.instance_list.get(instance);
                     // Regla de Inmunidad Estricta para Controladores y Entidades Críticas (Infinix Hot 20i Blindaje):

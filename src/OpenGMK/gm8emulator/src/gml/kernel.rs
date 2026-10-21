@@ -785,7 +785,6 @@ impl Game {
         } else {
             self.renderer.clear_view((col as u32).into(), alpha.into());
         }
-        self.renderer.clear_view((col as u32).into(), alpha.into());
         Ok(Default::default())
     }
 
