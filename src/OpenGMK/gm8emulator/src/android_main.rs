@@ -1017,6 +1017,12 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             }
         },
         None => {
+            if crate::touch_controls::is_keyboard_wait_active() {
+                // Escape key fallback on tap to avoid getting trapped in keyboard_wait
+                jni_vibrate(20);
+                tap_key(Key::Escape);
+                return;
+            }
             if crate::touch_controls::text_entry_open() {
                 ime_set(true);
             }

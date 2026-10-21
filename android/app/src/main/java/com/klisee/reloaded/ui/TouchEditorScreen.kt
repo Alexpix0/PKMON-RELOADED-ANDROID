@@ -554,8 +554,10 @@ private fun KeySelectionDialog(
                     )
 
                     // Tarjeta reactiva PadProbe (resalta en cian al detectar tecla física o mando)
+                    val cyanAccent = Color(0xFF00E5FF)
                     Surface(
-                        color = if (detectedKey != null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        color = if (detectedKey != null) cyanAccent.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        border = if (detectedKey != null) BorderStroke(1.5.dp, cyanAccent) else null,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -568,13 +570,13 @@ private fun KeySelectionDialog(
                                 Icons.Filled.SportsEsports,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp),
-                                tint = if (detectedKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = if (detectedKey != null) cyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = if (detectedKey != null) "¡Detectado: ${detectedKey!!.name} (${detectedKey!!.keyTag})!"
                                 else "Pulsa un botón físico de mando o teclado para asignar",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (detectedKey != null) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (detectedKey != null) cyanAccent else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -626,7 +628,7 @@ private fun KeySelectionDialog(
                                 onClick = onResetToDefault,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Restablecer", style = MaterialTheme.typography.labelMedium)
+                                Text("Restablecer a TLB Original", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -660,7 +662,7 @@ private fun KeySelectionDialog(
                         Text(
                             text = "Toca para asignar o agregar al instante",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = cyanAccent
                         )
                     }
 
@@ -677,10 +679,10 @@ private fun KeySelectionDialog(
                             val isSelected = currentKeyTag?.equals(choice.keyTag, ignoreCase = true) == true
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                color = if (isSelected) cyanAccent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                 border = BorderStroke(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    if (isSelected) 1.5.dp else 1.dp,
+                                    if (isSelected) cyanAccent else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -697,13 +699,13 @@ private fun KeySelectionDialog(
                                     Text(
                                         text = choice.name,
                                         style = MaterialTheme.typography.titleSmall,
-                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        color = if (isSelected) cyanAccent else MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1
                                     )
                                     Text(
                                         text = choice.keyTag,
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (isSelected) cyanAccent.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1
                                     )
                                 }

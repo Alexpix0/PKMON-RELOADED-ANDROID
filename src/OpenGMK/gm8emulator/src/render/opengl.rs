@@ -748,7 +748,7 @@ impl RendererImpl {
             let mut buf_state: GLuint = 0;
             gl.GenBuffers(1, &mut buf_state);
             gl.BindBufferBase(gl::UNIFORM_BUFFER, loc_state, buf_state);
-            assert_eq!(gl.GetError(), 0);
+            debug_assert_eq!(gl.GetError(), 0);
 
             // Create Renderer
             let mut renderer = Self {
@@ -805,7 +805,7 @@ impl RendererImpl {
 
                 gl,
             };
-            assert_eq!(renderer.gl.GetError(), 0);
+            debug_assert_eq!(renderer.gl.GetError(), 0);
 
             // default uniform values
             renderer.gl.Uniform1i(renderer.loc_gm81_normalize, options.normalize_normals as _);
@@ -817,7 +817,7 @@ impl RendererImpl {
                 (&renderer.queue_render_state as *const RenderState).cast(),
                 gl::STATIC_DRAW,
             );
-            assert_eq!(renderer.gl.GetError(), 0);
+            debug_assert_eq!(renderer.gl.GetError(), 0);
 
             // Start first frame
             renderer.setup_frame(clear_colour);
@@ -2924,7 +2924,7 @@ impl RendererTrait for RendererImpl {
                         self.gl.DeleteFramebuffers(1, fbo);
                         self.fbo_ids[rect.atlas_id as usize] = None;
                     }
-                    assert_eq!(self.gl.GetError(), 0);
+                    debug_assert_eq!(self.gl.GetError(), 0);
                 }
             }
         }
