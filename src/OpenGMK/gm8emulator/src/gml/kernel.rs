@@ -7485,11 +7485,21 @@ impl Game {
     pub fn keyboard_wait(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
         if self.play_type == PlayType::Normal {
+            #[cfg(target_os = "android")]
+            crate::touch_controls::set_keyboard_wait_active(true);
+
             self.input.set_keyboard_lastkey(0);
             while self.input.keyboard_lastkey() == 0 {
-                datetime::sleep(std::time::Duration::from_millis(50));
+                datetime::sleep(std::time::Duration::from_millis(16));
                 self.process_window_events();
+                #[cfg(target_os = "android")]
+                {
+                    let _ = self.screen_redraw(&[]);
+                }
             }
+
+            #[cfg(target_os = "android")]
+            crate::touch_controls::set_keyboard_wait_active(false);
         }
         Ok(Default::default())
     }

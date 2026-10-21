@@ -82,6 +82,30 @@ use std::{
 };
 
 static FRAME_LAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static CACHED_FRAME_SKIP: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static CACHED_WEATHER_OPT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static ENV_CACHED_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static LAST_FRAME_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(16_666);
+
+pub fn update_cached_env_settings() {
+    let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
+    let fs_val = match mode.as_str() {
+        "1" => 1,
+        "2" => 2,
+        "auto" => 3,
+        _ => 0,
+    };
+    CACHED_FRAME_SKIP.store(fs_val, std::sync::atomic::Ordering::Relaxed);
+
+    let weather = std::env::var("OPENGMK_WEATHER_OPT").unwrap_or_default();
+    let w_val = match weather.as_str() {
+        "minimal" => 1,
+        "optimized" => 2,
+        _ => 0,
+    };
+    CACHED_WEATHER_OPT.store(w_val, std::sync::atomic::Ordering::Relaxed);
+    ENV_CACHED_INIT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum GameClock {
@@ -1969,6 +1993,10 @@ impl Game {
         crate::touch_controls::set_picker_boxes(self.picker_boxes());
         crate::touch_controls::set_modal_open(self.modal_system() > 0);
         crate::touch_controls::set_modal_id(self.modal_system());
+        if self.modal_system() == crate::touch_controls::LIST_MODAL || self.inside_box() {
+            crate::touch_controls::force_dialogue_closed();
+        }
+        crate::touch_controls::update_context();
     }
 
     #[cfg(target_os = "android")]
@@ -2017,12 +2045,13 @@ impl Game {
         boxes
     }
 
-    /// Each party slot's stored species value (0 = empty) straight from `global.pkmn1[0..5]`.
+    /// Each party slot's stored species value (0 = empty) from `global.pkmn1..6[0]`.
     #[cfg(target_os = "android")]
     fn party_species(&self) -> [i32; crate::touch_controls::PICKER_SLOTS] {
+        let pkmn_names: [&[u8]; crate::touch_controls::PICKER_SLOTS] = [b"pkmn1", b"pkmn2", b"pkmn3", b"pkmn4", b"pkmn5", b"pkmn6"];
         let mut species = [0; crate::touch_controls::PICKER_SLOTS];
         for (index, slot) in species.iter_mut().enumerate() {
-            *slot = self.global_number(b"pkmn1", index as u32).unwrap_or(0);
+            *slot = self.global_number(pkmn_names[index], 0).unwrap_or(0);
         }
         species
     }
@@ -2278,43 +2307,53 @@ impl Game {
 
         #[cfg(target_os = "android")]
         let skip_visual_frame = {
+            if !ENV_CACHED_INIT.load(std::sync::atomic::Ordering::Relaxed) {
+                update_cached_env_settings();
+            }
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
-            match mode.as_str() {
-                "1" => {
-                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    (c % 2) == 1
-                },
-                "2" => {
-                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    (c % 3) != 0
-                },
-                "auto" => {
-                    if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            let in_battle = matches!(self.room.id, 47 | 191 | 709);
+            let battle_lag = in_battle && LAST_FRAME_MICROS.load(std::sync::atomic::Ordering::Relaxed) > 17_500;
+            if battle_lag {
+                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (c % 2) == 1
+            } else {
+                let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
+                match fs_mode {
+                    1 => {
                         let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         (c % 2) == 1
-                    } else {
-                        false
-                    }
-                },
-                _ => false,
+                    },
+                    2 => {
+                        let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        (c % 3) != 0
+                    },
+                    3 => {
+                        if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                            let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            (c % 2) == 1
+                        } else {
+                            false
+                        }
+                    },
+                    _ => false,
+                }
             }
         };
         #[cfg(not(target_os = "android"))]
         let skip_visual_frame = false;
 
         #[cfg(target_os = "android")]
-        let weather_opt = std::env::var("OPENGMK_WEATHER_OPT").unwrap_or_default();
+        let weather_opt = CACHED_WEATHER_OPT.load(std::sync::atomic::Ordering::Relaxed);
         #[cfg(not(target_os = "android"))]
-        let weather_opt = String::new();
+        let weather_opt = 0u32;
 
-        if weather_opt == "minimal" {
+        if weather_opt == 1 {
             static PARTICLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let c = PARTICLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if (c % 3) == 0 {
                 self.particles.auto_update_systems(&mut self.rand);
             }
-        } else if weather_opt == "optimized" {
+        } else if weather_opt == 2 {
             static OPT_PARTICLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let c = OPT_PARTICLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             if (c % 2) == 0 {
@@ -2362,10 +2401,10 @@ impl Game {
             self.renderer.present(self.window_inner_size.0, self.window_inner_size.1, self.scaling);
         }
 
-        // Live Time Rewind: step back or record current frame
+        // Live Time Rewind: step back or record current frame only if user enabled Rewind
         if rewind::is_rewind_requested() {
             self.rewind_manager.rewind_step(&self.room.instance_list);
-        } else {
+        } else if rewind::is_rewind_enabled() {
             self.rewind_manager.record_frame(&self.room.instance_list);
         }
 
@@ -2641,6 +2680,7 @@ impl Game {
 
             // frame limiter
             let diff = Instant::now().duration_since(time_now);
+            LAST_FRAME_MICROS.store(diff.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
             #[cfg(target_os = "android")]
             let speed_mult = crate::touch_controls::fast_forward_multiplier();
             #[cfg(not(target_os = "android"))]

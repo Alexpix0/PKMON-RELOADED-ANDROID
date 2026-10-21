@@ -594,7 +594,7 @@ pub fn jni_vibrate(duration_ms: i64) {
 fn control_key_down(index: usize) {
     crate::touch_controls::set_pressed(index, true);
     // The trick combination needs both keys held at once, so it is not one key like the rest.
-    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+    if crate::touch_controls::control_at(index).name == crate::touch_controls::COMBO_BUTTON_NAME {
         for key in [Key::LeftControl, Key::P] {
             android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
         }
@@ -602,7 +602,7 @@ fn control_key_down(index: usize) {
         crate::touch_controls::set_combo_used();
         return
     }
-    let name = crate::touch_controls::CONTROLS[index].name;
+    let name = crate::touch_controls::control_at(index).name;
     if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
         crate::touch_controls::register_autofire(index);
     }
@@ -628,7 +628,7 @@ fn control_key_down(index: usize) {
 fn control_key_up(index: usize) {
     crate::touch_controls::set_pressed(index, false);
     crate::touch_controls::unregister_autofire(index);
-    if crate::touch_controls::CONTROLS[index].name == crate::touch_controls::COMBO_BUTTON_NAME {
+    if crate::touch_controls::control_at(index).name == crate::touch_controls::COMBO_BUTTON_NAME {
         for key in [Key::LeftControl, Key::P] {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
         }
@@ -931,7 +931,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
 
             let hit = crate::touch_controls::hit(x / wf, y / hf, wf, hf);
             if let Some(index) = hit {
-                let name = crate::touch_controls::CONTROLS[index].name;
+                let name = crate::touch_controls::control_at(index).name;
                 *DRAGGED_ITEM.lock().unwrap_or_else(|e| e.into_inner()) = Some((name.to_string(), x / wf, y / hf));
                 jni_vibrate(12);
                 return;
@@ -972,10 +972,11 @@ fn pointer_down(id: i32, x: f32, y: f32) {
     }
     match hit {
         Some(index) => {
-            let name = crate::touch_controls::CONTROLS[index].name;
+            let name = crate::touch_controls::control_at(index).name;
             if name == crate::touch_controls::PARTY_NAME {
                 // Holding it opens the party wheel instead of pressing a key of its own.
                 crate::touch_controls::set_wheel_open(true);
+                crate::touch_controls::set_wheel_touch_origin(x / wf, y / hf);
                 *WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
                 jni_vibrate(18);
             } else if name == crate::touch_controls::RADIAL_MENU_NAME {
@@ -996,7 +997,7 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             } else if name == crate::touch_controls::EDIT_NAME {
                 let edit = crate::touch_controls::toggle_edit_mode();
                 if edit {
-                    for i in 0..crate::touch_controls::CONTROLS.len() {
+                    for i in 0..crate::touch_controls::controls().len() {
                         control_key_up(i);
                     }
                     joystick_release();
@@ -1054,6 +1055,7 @@ fn pointer_up(id: i32, x: f32, y: f32) {
             tap_key(crate::touch_controls::PICKER_KEYS[selected as usize]);
             jni_vibrate(22);
         }
+        crate::touch_controls::clear_wheel_touch_origin();
         crate::touch_controls::set_wheel_open(false);
         return
     }
@@ -1364,6 +1366,7 @@ fn translate(event: &InputEvent) {
                 },
                 MotionAction::Cancel => {
                     if WHEEL_PTR.lock().unwrap_or_else(|e| e.into_inner()).take().is_some() {
+                        crate::touch_controls::clear_wheel_touch_origin();
                         crate::touch_controls::set_wheel_open(false);
                     }
                     joystick_release();
@@ -1464,6 +1467,7 @@ fn reset_input_state() {
     JOYSTICK_STATE.store(0, std::sync::atomic::Ordering::Relaxed);
     IME_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
     crate::touch_controls::clear_layout();
+    crate::touch_controls::clear_wheel_touch_origin();
     crate::touch_controls::set_wheel_open(false);
     crate::touch_controls::set_guide_open(false);
     crate::touch_controls::set_log_open(false);
@@ -1613,6 +1617,17 @@ pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeAudioFocus<'l
     lost: jni::sys::jboolean,
 ) {
     crate::game::audio::set_output_paused(lost != 0);
+}
+
+/// Called when the user updates controls/layouts in the launcher or touch editor,
+/// reloading all layouts in hot memory without restarting the activity.
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeReloadLayout<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    _profile: jni::sys::jint,
+) {
+    load_controls();
 }
 
 /// Whether the system keyboard is up, so it is only raised or dropped on a change.
@@ -1788,7 +1803,7 @@ pub fn android_entry(app: AndroidApp) {
             .unwrap_or_else(|_| "desconocida".to_string());
         let dump = format!(
             "=== POKEMON RELOADED ANDROID CRASH DUMP ===\n\
-             Version: 0.9.4\n\
+             Version: 0.9.5\n\
              Fecha/Hora (UTC): {}\n\
              Panico: {}\n\
              Ubicacion: {}\n\

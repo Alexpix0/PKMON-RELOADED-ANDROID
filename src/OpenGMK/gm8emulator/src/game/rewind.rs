@@ -35,6 +35,7 @@ pub struct RewindManager {
 }
 
 static REWIND_ACTIVE: AtomicBool = AtomicBool::new(false);
+static REWIND_ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_rewind_requested() -> bool {
     REWIND_ACTIVE.load(Ordering::Relaxed)
@@ -42,6 +43,14 @@ pub fn is_rewind_requested() -> bool {
 
 pub fn set_rewind_requested(active: bool) {
     REWIND_ACTIVE.store(active, Ordering::Relaxed);
+}
+
+pub fn is_rewind_enabled() -> bool {
+    REWIND_ENABLED.load(Ordering::Relaxed)
+}
+
+pub fn set_rewind_enabled(enabled: bool) {
+    REWIND_ENABLED.store(enabled, Ordering::Relaxed);
 }
 
 pub fn toggle_rewind() -> bool {

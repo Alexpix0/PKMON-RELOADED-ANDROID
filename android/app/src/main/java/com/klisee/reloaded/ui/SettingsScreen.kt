@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.Key
 import android.content.ClipboardManager
 import android.content.ClipData
 import android.content.Context
@@ -189,6 +190,9 @@ fun SettingsScreen(
     var installingMod by remember { mutableStateOf(false) }
     var showCrashDumpDialog by remember { mutableStateOf(false) }
     var currentCrashDump by remember { mutableStateOf(repo.getCrashDump()) }
+    var showGithubTokenDialog by remember { mutableStateOf(false) }
+    var githubTokenInput by remember { mutableStateOf(prefs.githubToken) }
+    var testingGithubToken by remember { mutableStateOf(false) }
 
     val modPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -445,6 +449,88 @@ fun SettingsScreen(
                     TextButton(onClick = { showCrashDumpDialog = false }) {
                         Text("Cerrar")
                     }
+                }
+            }
+        )
+    }
+
+    if (showGithubTokenDialog) {
+        AlertDialog(
+            onDismissRequest = { showGithubTokenDialog = false },
+            icon = { Icon(Icons.Filled.Key, contentDescription = null) },
+            title = { Text("🔑 Vincular Token de GitHub (Repo Privado)") },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Pega tu Personal Access Token (classic o fine-grained: ghp_... / github_pat_...) con permisos para acceder y descargar releases del repositorio privado.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = githubTokenInput,
+                        onValueChange = { githubTokenInput = it },
+                        label = { Text("Personal Access Token (PAT)") },
+                        placeholder = { Text("ghp_... o github_pat_...") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            if (githubTokenInput.isNotEmpty()) {
+                                IconButton(onClick = { githubTokenInput = "" }) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Limpiar")
+                                }
+                            }
+                        }
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            testingGithubToken = true
+                            scope.launch {
+                                val result = Update.testConnection(githubTokenInput)
+                                testingGithubToken = false
+                                result.fold(
+                                    onSuccess = { tag ->
+                                        snackbar.showSnackbar("✅ Conexión exitosa con GitHub. Último tag: $tag")
+                                    },
+                                    onFailure = { err ->
+                                        snackbar.showSnackbar("❌ Error de conexión: ${err.message}")
+                                    }
+                                )
+                            }
+                        },
+                        enabled = !testingGithubToken && githubTokenInput.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (testingGithubToken) {
+                            Text("Probando conexión...")
+                        } else {
+                            Text("🔍 Probar conexión")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    prefs.githubToken = githubTokenInput.trim()
+                    showGithubTokenDialog = false
+                    scope.launch { snackbar.showSnackbar("Token guardado correctamente.") }
+                }) { Text("Guardar") }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (prefs.githubToken.isNotBlank()) {
+                        TextButton(onClick = {
+                            prefs.githubToken = ""
+                            githubTokenInput = ""
+                            showGithubTokenDialog = false
+                            scope.launch { snackbar.showSnackbar("Token eliminado.") }
+                        }) { Text("Eliminar") }
+                    }
+                    TextButton(onClick = {
+                        githubTokenInput = prefs.githubToken
+                        showGithubTokenDialog = false
+                    }) { Text("Cancelar") }
                 }
             }
         )
@@ -2069,14 +2155,14 @@ fun SettingsScreen(
                         NavRow(
                             icon = Icons.Filled.SystemUpdate,
                             title = "🔄 Buscar actualizaciones de versión (GitHub)",
-                            subtitle = "Instalada: v$appVersion (build 33) · Toca para comprobar GitHub Releases",
-                            items = 1,
+                            subtitle = "Instalada: v$appVersion (build 36) · Toca para comprobar GitHub Releases",
+                            items = 2,
                             index = 0,
                             enabled = !checking,
                             onClick = {
                                 checking = true
                                 scope.launch {
-                                    val result = Update.check(appVersion)
+                                    val result = Update.check(appVersion, prefs.githubToken)
                                     checking = false
                                     val found = result.getOrNull()
                                     if (found != null) {
@@ -2087,6 +2173,17 @@ fun SettingsScreen(
                                 }
                             },
                         )
+                        NavRow(
+                            icon = Icons.Filled.Key,
+                            title = "🔑 Vincular Token de GitHub (Repo Privado)",
+                            subtitle = if (prefs.githubToken.isNotBlank()) "Token configurado (••••••••) · Toca para gestionar o probar" else "Introduce un Personal Access Token para acceder a releases privados",
+                            items = 2,
+                            index = 1,
+                            onClick = {
+                                githubTokenInput = prefs.githubToken
+                                showGithubTokenDialog = true
+                            },
+                        )
                     }
                 }
 
@@ -2095,14 +2192,14 @@ fun SettingsScreen(
                                     NavRow(
                                         icon = Icons.Filled.SystemUpdate,
                                         title = "🔄 Buscar actualizaciones de versión (GitHub)",
-                                        subtitle = "Instalada: v$appVersion (build 33) · Toca para comprobar GitHub Releases",
-                                        items = 3,
+                                        subtitle = "Instalada: v$appVersion (build 36) · Toca para comprobar GitHub Releases",
+                                        items = if (currentCrashDump != null) 5 else 4,
                                         index = 0,
                                         enabled = !checking,
                                         onClick = {
                                             checking = true
                                             scope.launch {
-                                                val found = Update.check(appVersion).getOrNull()
+                                                val found = Update.check(appVersion, prefs.githubToken).getOrNull()
                                                 checking = false
                                                 if (found != null) {
                                                     onUpdateFound(found)
@@ -2113,19 +2210,30 @@ fun SettingsScreen(
                                         },
                                     )
                                     NavRow(
+                                        icon = Icons.Filled.Key,
+                                        title = "🔑 Vincular Token de GitHub (Repo Privado)",
+                                        subtitle = if (prefs.githubToken.isNotBlank()) "Token configurado (••••••••) · Toca para gestionar o probar" else "Introduce un Personal Access Token para acceder a releases privados",
+                                        items = if (currentCrashDump != null) 5 else 4,
+                                        index = 1,
+                                        onClick = {
+                                            githubTokenInput = prefs.githubToken
+                                            showGithubTokenDialog = true
+                                        },
+                                    )
+                                    NavRow(
                                         icon = Icons.Filled.Article,
                                         title = "Logs técnicos",
                                         subtitle = "En caso de un error, comparte los logs para diagnosticar el problema",
-                                        items = 3,
-                                        index = 1,
+                                        items = if (currentCrashDump != null) 5 else 4,
+                                        index = 2,
                                         onClick = onLog,
                                     )
                                     NavRow(
                                         icon = Icons.Filled.Info,
                                         title = "Acerca de",
                                         subtitle = "Versión, créditos y aviso de Pokémon Reloaded Android",
-                                        items = if (currentCrashDump != null) 4 else 3,
-                                        index = 2,
+                                        items = if (currentCrashDump != null) 5 else 4,
+                                        index = 3,
                                         onClick = onAbout,
                                     )
                                     if (currentCrashDump != null) {
@@ -2133,8 +2241,8 @@ fun SettingsScreen(
                                             icon = Icons.Filled.BugReport,
                                             title = "Reporte de Fallo (Crash Dump)",
                                             subtitle = "Se detectó un informe de error del motor. Toca para ver y copiar",
-                                            items = 4,
-                                            index = 3,
+                                            items = 5,
+                                            index = 4,
                                             onClick = { showCrashDumpDialog = true },
                                         )
                                     }

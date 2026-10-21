@@ -110,7 +110,7 @@ fun App(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull().orEmpty()
         if (installed.isNotEmpty()) {
-            Update.check(installed).getOrNull()?.let { update = it }
+            Update.check(installed, prefs.githubToken).getOrNull()?.let { update = it }
         }
     }
 
@@ -123,7 +123,7 @@ fun App(
             problem = problem,
             onDownload = {
                 val url = release.apkUrl
-                if (url == null) {
+                if (url == null && release.assetId <= 0L) {
                     // No APK attached to the release: the page is the honest fallback.
                     openInBrowser(context, release.pageUrl)
                     update = null
@@ -133,7 +133,7 @@ fun App(
                     total = 0
                     problem = null
                     scope.launch {
-                        val result = Update.download(url, java.io.File(context.cacheDir, "update.apk")) { done, size ->
+                        val result = Update.download(release, java.io.File(context.cacheDir, "update.apk"), prefs.githubToken) { done, size ->
                             written = done
                             total = size
                         }

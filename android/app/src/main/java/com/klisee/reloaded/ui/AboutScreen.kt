@@ -40,6 +40,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutScreen(onBack: () -> Unit, onUpdateFound: (Update.Release) -> Unit = {}) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { com.klisee.reloaded.Preferences(context) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
@@ -97,20 +99,20 @@ fun AboutScreen(onBack: () -> Unit, onUpdateFound: (Update.Release) -> Unit = {}
                     runCatching {
                         val info = context.packageManager.getPackageInfo(context.packageName, 0)
                         "${info.versionName} (${info.versionCode})"
-                    }.getOrDefault("0.9.4 EX (33)")
+                    }.getOrDefault("0.9.5 EX (36)")
                 }
                 InfoRow(Icons.Filled.Memory, "Launcher", version, items = 2, index = 0)
                 NavRow(
                     icon = Icons.Filled.SystemUpdate,
                     title = "🔄 Buscar actualizaciones de versión (GitHub)",
-                    subtitle = "Instalada: v${AppInfo.VERSION_NAME} (build 33) · Toca para comprobar GitHub Releases",
+                    subtitle = "Instalada: v${AppInfo.VERSION_NAME} (build ${AppInfo.VERSION_CODE}) · Toca para comprobar GitHub Releases",
                     items = 2,
                     index = 1,
                     enabled = !checking,
                     onClick = {
                         checking = true
                         scope.launch {
-                            val result = Update.check(AppInfo.VERSION_NAME)
+                            val result = Update.check(AppInfo.VERSION_NAME, prefs.githubToken)
                             checking = false
                             val found = result.getOrNull()
                             if (found != null) {

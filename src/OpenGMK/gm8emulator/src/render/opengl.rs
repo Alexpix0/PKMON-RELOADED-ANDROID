@@ -778,7 +778,7 @@ impl RendererImpl {
             zbuf_type,
                 zbuf_trashed: false,
                 white_pixel: Default::default(),
-                vertex_queue: Vec::with_capacity(1536),
+                vertex_queue: Vec::with_capacity(16384),
                 queue_type: PrimitiveShape::Triangle,
                 queue_render_state: RenderState {
                     interpolate_pixels: options.interpolate_pixels.into(),
@@ -1917,7 +1917,7 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
 
     // FASE 1: Rediseño Apilado y Ubicación Inteligente del Monitor de FPS
     // Ancho compacto y altura calculada para apilar Fila 1, Fila 2 y Fila 3 verticalmente sin solapamiento
-    let badge_w = 90.0f32;
+    let badge_w = 112.0f32;
     let badge_h = 50.0f32;
 
     // Posicionamiento adaptativo:
@@ -1961,6 +1961,16 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
         [0.35, 0.75, 0.95, 0.95] // OpenGL cyan
     };
 
+    // Píldora lateral independiente para el backend gráfico (GL / VK)
+    let pill_x0 = x0 - 36.0f32;
+    let pill_y0 = y0 + 2.0f32;
+    let pill_x1 = x0 - 4.0f32;
+    let pill_y1 = y0 + 18.0f32;
+    let pill_border = [0.18f32, 0.45f32, 0.75f32, 0.80f32];
+    push_quad(verts, ww, wh, pill_x0 - 1.0f32, pill_y0 - 1.0f32, pill_x1 + 1.0f32, pill_y1 + 1.0f32, pill_border);
+    push_quad(verts, ww, wh, pill_x0, pill_y0, pill_x1, pill_y1, bg_col);
+    push_text_left(verts, ww, wh, backend_str, pill_x0 + 7.0f32, pill_y0 + 8.5f32, px * 0.85f32, backend_col);
+
     // Formateo de cadenas sin asignaciones en heap (Zero-Heap)
     let mut fps_buf = [0u8; 16];
     let fps_str = format_f32_1dp(avg_fps, " FPS", &mut fps_buf);
@@ -1970,12 +1980,11 @@ fn render_mangohud_overlay(verts: &mut Vec<f32>, ww: f32, wh: f32) {
 
     let px = 2.2f32;
 
-    // Fila 1: 60 FPS + Indicador GL / VK (y0 + 9.0)
-    push_text_left(verts, ww, wh, fps_str, x0 + 6.0f32, y0 + 9.0f32, px, fps_col);
-    push_text_left(verts, ww, wh, backend_str, x0 + badge_w - 20.0f32, y0 + 9.0f32, px * 0.9f32, backend_col);
+    // Fila 1: 60.0 FPS (100% limpia sin texto encima)
+    push_text_left(verts, ww, wh, fps_str, x0 + 8.0f32, y0 + 9.0f32, px, fps_col);
 
     // Fila 2: 16.6 ms (y0 + 22.0) - directamente debajo de los FPS, jamás en la misma línea
-    push_text_left(verts, ww, wh, ft_str, x0 + 6.0f32, y0 + 22.0f32, px * 0.88f32, [0.85, 0.88, 0.95, 0.95]);
+    push_text_left(verts, ww, wh, ft_str, x0 + 8.0f32, y0 + 22.0f32, px * 0.88f32, [0.85, 0.88, 0.95, 0.95]);
 
     // Fila 3: Mini-histograma (sparkline) de 30 muestras en la base de la tarjeta (y0 + 33.0)
     let graph_x = x0 + 6.0f32;
@@ -3049,7 +3058,7 @@ impl RendererTrait for RendererImpl {
             // cleanup
             self.gl.BindTexture(gl::TEXTURE_2D, prev_tex2d as _);
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, prev_fbo as _);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
         let id = self.texture_rects.len() as i32;
         self.texture_rects.push(Some(AtlasRect {
@@ -3075,7 +3084,7 @@ impl RendererTrait for RendererImpl {
                 // set viewport here since set_view doesn't
                 self.gl.Viewport(x, y, w, h);
                 self.gl.Scissor(x, y, w, h);
-                assert_eq!(self.gl.GetError(), 0);
+                debug_assert_eq!(self.gl.GetError(), 0);
             }
             self.set_view(x, y, w, h, 0.0, x, y, w, h);
         }
@@ -3154,7 +3163,7 @@ impl RendererTrait for RendererImpl {
                     // Remember old framebuffer so we can rebind it after we're done
                     let mut fb_old = 0;
                     self.gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut fb_old);
-                    assert_eq!(self.gl.GetError(), 0);
+                    debug_assert_eq!(self.gl.GetError(), 0);
 
                     self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, *dst_id);
                     self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, *src_id);
@@ -3174,7 +3183,7 @@ impl RendererTrait for RendererImpl {
 
                     self.gl.Enable(gl::SCISSOR_TEST);
 
-                    assert_eq!(self.gl.GetError(), 0);
+                    debug_assert_eq!(self.gl.GetError(), 0);
                 }
             }
         }
@@ -3188,7 +3197,7 @@ impl RendererTrait for RendererImpl {
                 let mut prev_fbo = 0;
                 self.gl.GetIntegerv(gl::READ_FRAMEBUFFER_BINDING, &mut prev_fbo);
                 self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
-                assert_eq!(self.gl.GetError(), 0);
+                debug_assert_eq!(self.gl.GetError(), 0);
                 self.gl.FramebufferTexture2D(
                     gl::READ_FRAMEBUFFER,
                     gl::DEPTH_ATTACHMENT,
@@ -3196,7 +3205,7 @@ impl RendererTrait for RendererImpl {
                     if trashed { 0 } else { self.framebuffer.zbuf },
                     0,
                 );
-                assert_eq!(self.gl.GetError(), 0);
+                debug_assert_eq!(self.gl.GetError(), 0);
                 self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, prev_fbo as _);
             }
         }
@@ -3230,7 +3239,7 @@ impl RendererTrait for RendererImpl {
                 gl::UNSIGNED_BYTE, // type
                 ptr::null(),       // data
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             // set up new zbuffer
             let old_zbuf = self.framebuffer.zbuf;
             self.gl.GenTextures(1, &mut self.framebuffer.zbuf);
@@ -3246,7 +3255,7 @@ impl RendererTrait for RendererImpl {
                 self.zbuf_type,        // type
                 ptr::null(),         // data
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             // set up new fbo
             let old_fbo = self.framebuffer.fbo;
             self.gl.GenFramebuffers(1, &mut self.framebuffer.fbo);
@@ -3265,7 +3274,7 @@ impl RendererTrait for RendererImpl {
                 self.framebuffer.zbuf,
                 0,
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             // draw old fb onto new
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, old_fbo);
             let copy_width = width.min(old_width as _);
@@ -3282,7 +3291,7 @@ impl RendererTrait for RendererImpl {
                 gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT,
                 gl::NEAREST,
             );
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             if store {
                 // store old texture and fbo, delete previous stored one
                 if let Some(framebuffer) = &self.stored_framebuffer {
@@ -3303,7 +3312,7 @@ impl RendererTrait for RendererImpl {
                 self.gl.DeleteTextures(1, &old_zbuf);
                 self.gl.DeleteFramebuffers(1, &old_fbo);
             }
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 
@@ -3348,11 +3357,11 @@ impl RendererTrait for RendererImpl {
             data.set_len(len);
             self.gl.ReadPixels(rect.x, rect.y, rect.w, rect.h, gl::RGBA, gl::UNSIGNED_BYTE, data.as_mut_ptr().cast());
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             // cleanup
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, prev_read_fbo as GLuint);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             data.into_boxed_slice()
         }
@@ -3365,7 +3374,7 @@ impl RendererTrait for RendererImpl {
             data.set_len(len);
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
             self.gl.ReadPixels(x, y, w, h, gl::RGBA, gl::UNSIGNED_BYTE, data.as_mut_ptr().cast());
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             data.into_boxed_slice()
         }
     }
@@ -3379,7 +3388,7 @@ impl RendererTrait for RendererImpl {
             data.set_len(len);
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, fb.fbo);
             self.gl.ReadPixels(0, 0, width as _, height as _, gl::RGBA, gl::UNSIGNED_BYTE, data.as_mut_ptr().cast());
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             data.into_boxed_slice()
         }
     }
@@ -3407,12 +3416,12 @@ impl RendererTrait for RendererImpl {
             self.gl.GenTextures(1, &mut texture);
             self.gl.GenTextures(1, &mut zbuffer);
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.BindTexture(gl::TEXTURE_2D, texture);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as _);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.TexImage2D(
                 gl::TEXTURE_2D,
                 0,
@@ -3425,7 +3434,7 @@ impl RendererTrait for RendererImpl {
                 rgba.as_ptr().cast(),
             );
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.BindTexture(gl::TEXTURE_2D, zbuffer);
             self.gl.TexImage2D(
@@ -3440,11 +3449,11 @@ impl RendererTrait for RendererImpl {
                 zbuf.as_ptr().cast(),
             );
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.BindFramebuffer(gl::FRAMEBUFFER, fbo);
             self.gl.FramebufferTexture2D(gl::READ_FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, texture, 0);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.FramebufferTexture2D(gl::READ_FRAMEBUFFER, gl::DEPTH_ATTACHMENT, gl::TEXTURE_2D, zbuffer, 0);
 
             if let Some(framebuffer) = &self.stored_framebuffer {
@@ -3461,7 +3470,7 @@ impl RendererTrait for RendererImpl {
                 height: fb_h,
             });
 
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 
@@ -3512,7 +3521,7 @@ impl RendererTrait for RendererImpl {
             }
 
             self.gl.BindTexture(gl::TEXTURE_2D, prev_tex2d as _);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
 
             textures
         }
@@ -3605,7 +3614,7 @@ impl RendererTrait for RendererImpl {
                 }
             }
             self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
-            assert_eq!(self.gl.GetError(), 0);
+            debug_assert_eq!(self.gl.GetError(), 0);
         }
     }
 

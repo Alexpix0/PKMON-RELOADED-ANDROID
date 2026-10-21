@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +39,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +47,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.view.HapticFeedbackConstants
 import com.klisee.reloaded.*
 import java.io.File
 import kotlin.math.hypot
@@ -111,6 +117,7 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                     prefs.touchOpacityPercent = opacityPercent
                     prefs.activeUserProfile = userProfile
                     prefs.saveTouchLayouts(snapshot, filesDir, userProfile)
+                    GameActivity.reloadLayout(userProfile)
                 }
                 savedText = TouchLayouts.encode(snapshot)
                 onExit()
@@ -456,6 +463,7 @@ private fun KeySelectionDialog(
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas") }
     var detectedKey by remember { mutableStateOf<PcKeyChoice?>(null) }
+    val view = LocalView.current
 
     val categories = listOf("Todas", "Letras", "Números", "Funciones", "Especiales", "Flechas", "Mando")
 
@@ -474,121 +482,238 @@ private fun KeySelectionDialog(
         }
     }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Filled.Keyboard, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-            }
-        },
-        text = {
-            Column(
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.88f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 6.dp,
+            shadowElevation = 12.dp
+        ) {
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 480.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Buscar tecla o botón (ej. Z, F5, Espacio, Shift)...") },
-                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Buscar") },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Limpiar")
+                // PANEL IZQUIERDO (40% de ancho)
+                Column(
+                    modifier = Modifier
+                        .weight(0.40f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Cabecera con icono, título y badge de tecla actual
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.Keyboard,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1
+                            )
+                            if (currentKeyTag != null) {
+                                Text(
+                                    text = "Actual: $currentKeyTag",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
-                    },
-                    singleLine = true,
-                )
+                    }
 
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    // Buscador OutlinedTextField
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Buscar tecla o botón (Z, Espacio...)", style = MaterialTheme.typography.bodySmall) },
+                        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Buscar", modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Limpiar", modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+
+                    // Tarjeta reactiva PadProbe (resalta en cian al detectar tecla física o mando)
+                    Surface(
+                        color = if (detectedKey != null) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Filled.SportsEsports, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = if (detectedKey != null) "Tecla detectada: ${detectedKey!!.name} (${detectedKey!!.keyTag})"
-                            else "O pulsa una tecla física o botón de mando para asignar",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (detectedKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                AndroidView(
-                    factory = { ctx -> PadProbe(ctx).apply { requestFocus() } },
-                    modifier = Modifier.fillMaxWidth().height(1.dp),
-                    update = { probe ->
-                        probe.onKey = { code ->
-                            val choice = keyChoiceForCode(code)
-                            detectedKey = choice
-                            onKeySelected(choice)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.SportsEsports,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = if (detectedKey != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (detectedKey != null) "¡Detectado: ${detectedKey!!.name} (${detectedKey!!.keyTag})!"
+                                else "Pulsa un botón físico de mando o teclado para asignar",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (detectedKey != null) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        probe.requestFocus()
                     }
-                )
 
-                if (searchQuery.isBlank()) {
+                    AndroidView(
+                        factory = { ctx -> PadProbe(ctx).apply { requestFocus() } },
+                        modifier = Modifier.fillMaxWidth().height(1.dp),
+                        update = { probe ->
+                            probe.onKey = { code ->
+                                val choice = keyChoiceForCode(code)
+                                detectedKey = choice
+                                onKeySelected(choice)
+                            }
+                            probe.requestFocus()
+                        }
+                    )
+
+                    // Selector de categorías en scroll horizontal
                     ScrollableTabRow(
                         selectedTabIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
                         edgePadding = 0.dp,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         categories.forEach { cat ->
                             Tab(
                                 selected = selectedCategory == cat,
                                 onClick = { selectedCategory = cat },
-                                text = { Text(cat, style = MaterialTheme.typography.labelMedium) }
+                                text = { Text(cat, style = MaterialTheme.typography.labelSmall) }
                             )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Botones inferiores de acción
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancelar", style = MaterialTheme.typography.labelMedium)
+                        }
+                        if (onResetToDefault != null) {
+                            FilledTonalButton(
+                                onClick = onResetToDefault,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Restablecer", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
                 }
 
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 74.dp),
-                    modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                // Divisor vertical
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                )
+
+                // PANEL DERECHO (60% de ancho)
+                Column(
+                    modifier = Modifier
+                        .weight(0.60f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredKeys) { choice ->
-                        val isSelected = currentKeyTag?.equals(choice.keyTag, ignoreCase = true) == true
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onKeySelected(choice) },
-                            label = {
-                                Text(
-                                    text = choice.name,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    maxLines = 1,
-                                )
-                            }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${filteredKeys.size} opciones disponibles",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Text(
+                            text = "Toca para asignar o agregar al instante",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 72.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(filteredKeys) { choice ->
+                            val isSelected = currentKeyTag?.equals(choice.keyTag, ignoreCase = true) == true
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                        onKeySelected(choice)
+                                    }
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = choice.name,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = choice.keyTag,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            if (onResetToDefault != null) {
-                TextButton(onClick = onResetToDefault) {
-                    Text("Tecla por defecto")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
         }
-    )
+    }
 }
 
 @Composable

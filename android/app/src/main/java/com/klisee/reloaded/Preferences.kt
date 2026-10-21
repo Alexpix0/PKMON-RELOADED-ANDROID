@@ -296,6 +296,13 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("keyItemsRadial", value).apply()
         }
 
+    /** Token de Acceso Personal (PAT) de GitHub para repositorios privados */
+    var githubToken: String
+        get() = prefs.getString("githubToken", "") ?: ""
+        set(value) {
+            prefs.edit().putString("githubToken", value.trim()).apply()
+        }
+
     /** Modo Auto-Run / Correr Permanente */
     var autoRun: Boolean
         get() = prefs.getBoolean("autoRun", false)

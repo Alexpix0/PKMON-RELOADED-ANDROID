@@ -22,44 +22,93 @@ object Update {
         val pageUrl: String,
         val name: String = "",
         val body: String = "",
+        val assetId: Long = 0L,
     )
 
     /** The newer release, or `null` when the installed build is already the latest one. */
-    suspend fun check(installed: String): Result<Release?> = withContext(Dispatchers.IO) {
+    suspend fun check(installed: String, token: String = ""): Result<Release?> = withContext(Dispatchers.IO) {
         runCatching {
-            val json = JSONObject(get(LATEST))
+            val json = JSONObject(get(LATEST, token))
             val tag = json.optString("tag_name").trim().trimStart('v', 'V')
             if (tag.isEmpty() || !isNewer(tag, installed)) {
                 return@runCatching null
             }
-            val apk = json.optJSONArray("assets")?.let { assets ->
-                (0 until assets.length())
-                    .map { assets.getJSONObject(it) }
-                    .firstOrNull { it.optString("name").endsWith(".apk", ignoreCase = true) }
-                    ?.optString("browser_download_url")
-                    ?.takeIf { it.isNotEmpty() }
+            var assetId = 0L
+            var apkUrl: String? = null
+            json.optJSONArray("assets")?.let { assets ->
+                for (i in 0 until assets.length()) {
+                    val obj = assets.getJSONObject(i)
+                    if (obj.optString("name").endsWith(".apk", ignoreCase = true)) {
+                        apkUrl = obj.optString("browser_download_url").takeIf { it.isNotEmpty() }
+                        assetId = obj.optLong("id", 0L)
+                        break
+                    }
+                }
             }
             val name = json.optString("name")
             val body = json.optString("body")
-            Release(tag, apk, json.optString("html_url").ifEmpty { RELEASES_PAGE }, name, body)
+            Release(tag, apkUrl, json.optString("html_url").ifEmpty { RELEASES_PAGE }, name, body, assetId)
+        }
+    }
+
+    /** Verifies connection using the given token and returns the latest release tag. */
+    suspend fun testConnection(token: String): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val json = JSONObject(get(LATEST, token))
+            val tag = json.optString("tag_name")
+            if (tag.isEmpty()) error("Respuesta sin tag_name")
+            tag
         }
     }
 
     /**
      * Downloads the release's APK so the system installer can be handed a local file.
-     *
-     * Reports the bytes as they arrive, because sixty megabytes with no sign of life cannot be told
-     * apart from a download that has died. Everything that happens is also written to the log, since
-     * the failure used to be swallowed and the app simply opened the browser as if nothing was wrong.
+     * Handles GitHub API private asset download with AWS S3 redirection.
      */
-    suspend fun download(url: String, target: File, onProgress: (Long, Long) -> Unit): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun download(release: Release, target: File, token: String = "", onProgress: (Long, Long) -> Unit): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
-            val connection = open(url)
+            val trimmedToken = token.trim()
+            val connection: HttpURLConnection
+            if (trimmedToken.isNotEmpty() && release.assetId > 0L) {
+                // Private repository: request release asset through GitHub API
+                val assetApiUrl = "https://api.github.com/repos/$REPO/releases/assets/${release.assetId}"
+                val apiConn = (URL(assetApiUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 20_000
+                    readTimeout = 20_000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "Pokemon-Reloaded-Android")
+                    setRequestProperty("Authorization", "Bearer $trimmedToken")
+                    setRequestProperty("Accept", "application/octet-stream")
+                }
+                apiConn.connect()
+                val apiCode = apiConn.responseCode
+                trace("update: API asset request $apiCode")
+                if (apiCode == HttpURLConnection.HTTP_MOVED_TEMP || apiCode == HttpURLConnection.HTTP_MOVED_PERM || apiCode == 307 || apiCode == 308) {
+                    val redirectUrl = apiConn.getHeaderField("Location") ?: error("Redirección S3 sin Location")
+                    trace("update: S3 redirect recibido, descargando asset...")
+                    // Connect to Amazon S3 WITHOUT Authorization header!
+                    val s3Conn = (URL(redirectUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 30_000
+                        readTimeout = 30_000
+                        setRequestProperty("User-Agent", "Pokemon-Reloaded-Android")
+                    }
+                    connection = s3Conn
+                } else if (apiCode in 200..299) {
+                    connection = apiConn
+                } else {
+                    error("GitHub API asset request respondió $apiCode")
+                }
+            } else {
+                // Public fallback using browser_download_url
+                val directUrl = release.apkUrl ?: error("No hay URL de APK disponible en el release.")
+                connection = open(directUrl, trimmedToken)
+            }
+
             connection.connect()
             val code = connection.responseCode
             val total = connection.contentLengthLong
-            trace("update: descarga $code, $total bytes desde $url")
-            if (code !in 200..299) error("La descarga respondio $code.")
+            trace("update: descarga $code, $total bytes")
+            if (code !in 200..299) error("La descarga respondió $code.")
             connection.inputStream.use { input ->
                 target.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -71,21 +120,21 @@ object Update {
                         written += read
                         onProgress(written, total)
                     }
-                    trace("update: descargados $written bytes")
+                    trace("update: descargados $written bytes exitosamente")
                 }
             }
             target
-        }.onFailure { trace("update: FALLO la descarga: ${it::class.java.simpleName}: ${it.message}") }
+        }.onFailure { trace("update: FALLÓ la descarga: ${it::class.java.simpleName}: ${it.message}") }
     }
+
+    /** Compatibility overload taking direct url */
+    suspend fun download(url: String, target: File, onProgress: (Long, Long) -> Unit): Result<File> =
+        download(Release("", url, ""), target, "", onProgress)
 
     private fun trace(message: String) {
         android.util.Log.i("Reloaded", message)
     }
 
-    /**
-     * True when `candidate` is ahead of `installed`, comparing the numbers one by one so that 0.1.10
-     * counts as newer than 0.1.9 (a plain string comparison would get that wrong).
-     */
     fun isNewer(candidate: String, installed: String): Boolean {
         val a = numbers(candidate)
         val b = numbers(installed)
@@ -99,17 +148,20 @@ object Update {
 
     private fun numbers(value: String) = value.trim().split('.', '-', '+').mapNotNull { it.toIntOrNull() }
 
-    private fun open(url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
+    private fun open(url: String, token: String = "") = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 20_000
         readTimeout = 20_000
         setRequestProperty("User-Agent", "Pokemon-Reloaded-Android")
         setRequestProperty("Accept", "application/vnd.github+json")
+        if (token.isNotBlank()) {
+            setRequestProperty("Authorization", "Bearer ${token.trim()}")
+        }
     }
 
-    private fun get(url: String): String {
-        val connection = open(url)
+    private fun get(url: String, token: String = ""): String {
+        val connection = open(url, token)
         connection.connect()
-        if (connection.responseCode !in 200..299) error("GitHub respondio ${connection.responseCode}.")
+        if (connection.responseCode !in 200..299) error("GitHub respondió ${connection.responseCode}.")
         return connection.inputStream.bufferedReader().use { it.readText() }
     }
 }

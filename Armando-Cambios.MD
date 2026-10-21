@@ -794,6 +794,42 @@ La **Fase 5** culmina la versión **v0.4.0 EX** con la máxima optimización, ro
 5. **Hito de Versión 0.6.1:**
    * Actualizado a `versionCode = 18`, `versionName = "0.6.1"` y empaquetado en el artefacto `pokemon-reloaded-0.6.1-release`.
 
+---
+
+## 20. Hito Versión 0.9.5 EX: Optimización Definitiva de Combate (60 FPS), Rueda Gengar 360°, Desacople de HUD, Rebind sin Bloqueos y Actualizador GitHub PAT
+* **Fecha:** 20 de Octubre de 2026
+* **Versión oficial:** `versionCode = 36`, `versionName = "0.9.5 EX"`.
+* **Archivos afectados:**
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/TouchEditorScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/TouchEditorScreen.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/SettingsScreen.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/AboutScreen.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/AboutScreen.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/ui/App.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/ui/App.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/Update.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Update.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/Preferences.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/Preferences.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/GameActivity.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/GameActivity.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/TouchLayouts.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/TouchLayouts.kt)
+  - [`android/app/src/main/java/com/klisee/reloaded/AppInfo.kt`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/src/main/java/com/klisee/reloaded/AppInfo.kt)
+  - [`android/app/build.gradle.kts`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/android/app/build.gradle.kts)
+  - [`.github/workflows/build.yml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/.github/workflows/build.yml)
+  - [`src/OpenGMK/gm8emulator/Cargo.toml`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/Cargo.toml)
+  - [`src/OpenGMK/gm8emulator/src/gml/kernel.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/gml/kernel.rs)
+  - [`src/OpenGMK/gm8emulator/src/game.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game.rs)
+  - [`src/OpenGMK/gm8emulator/src/game/rewind.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/game/rewind.rs)
+  - [`src/OpenGMK/gm8emulator/src/touch_controls.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/touch_controls.rs)
+  - [`src/OpenGMK/gm8emulator/src/android_main.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/android_main.rs)
+  - [`src/OpenGMK/gm8emulator/src/render/opengl.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl.rs)
+  - [`src/OpenGMK/gm8emulator/src/render/opengl/cache.rs`](file:///c:/Users/ADV/Desktop/pokemon-reloaded-android-main/src/OpenGMK/gm8emulator/src/render/opengl/cache.rs)
+
+### Resumen de Mejoras y Correcciones:
+1. **Modal de Asignación de Teclas en 2 Columnas (TouchEditorScreen.kt):** Sustitución del AlertDialog restrictivo por Dialog de ancho libre horizontal (94% ancho, 88% alto) con layout dividido: panel izquierdo con búsqueda reactiva, detector de tecla física en vivo y categorías; panel derecho con cuadrícula adaptativa y respuesta háptica.
+2. **Desacople Visual del HUD de FPS (opengl.rs):** Placa de badge ampliada a 112dp con píldora de backend (GL/VK) lateral independiente a la izquierda, dejando limpia la primera fila para la lectura estricta de FPS ("60.0 FPS") y la segunda para tiempos de frame.
+3. **Erradicación del Congelamiento en Rebind de Teclas (kernel.rs, touch_controls.rs, GameActivity.kt):** Control atómico `KEYBOARD_WAIT_ACTIVE` durante `keyboard_wait()`, bombeo de eventos de ventana `process_window_events()` y repintado de pantalla `screen_redraw()` para evitar pantallas negras en opciones. Liberación limpia de estados de teclas en transiciones de contexto (`on_context_change`) y recarga inmediata JNI (`nativeReloadLayout`).
+4. **Rueda Gengar de Selección de Equipo 360° (game.rs, touch_controls.rs, android_main.rs):** Lectura íntegra de los 6 Pokémon del equipo desde `global.pkmn1..6[0]`, detección angular continua `atan2` con origen relativo al punto táctil inicial y mapeo directo a los 6 sectores con zona muerta anti-fatiga.
+5. **Rendimiento de Combate de 35 a 60 FPS (rewind.rs, game.rs, opengl.rs):** Desactivación por defecto de `record_frame` de rebobinado, almacenamiento en atómicos de variables de entorno para evitar llamadas costosas en cada frame, suspensión de `glGetError()` en release mediante `debug_assert_eq!`, frameskip dinámico adaptativo durante combates en caídas de frametime y búfer de vértices ampliado a 16384 vértices.
+6. **Soporte de Repositorios Privados y Redirección S3 en Actualizador (Update.kt, Preferences.kt, SettingsScreen.kt):** Autenticación vía Personal Access Token (PAT) con endpoint de assets privados, descarga limpia a través de redirecciones 302 sin filtrado de headers de autorización a AWS S3 y selector con test de conectividad en vivo.
+7. **Empaquetado y Publicación CI:** Actualizado a `versionCode = 36` y `versionName = "0.9.5 EX"` con artefacto de compilación `pokemon-reloaded-0.9.5-release`.
+
+
 
 
 

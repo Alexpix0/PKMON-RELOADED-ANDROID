@@ -150,8 +150,8 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
     Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | BATTLE | SAFARI | MENU_NAV },
     Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD | SAFARI },
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI },
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI | MENU_NAV },
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI | MENU_NAV },
     Control { name: "dialogo", key: Key::Z, shape: Shape::Circle { cx: 0.940, cy: 0.880, r: 0.024 }, label: Label::Text("Z"), contexts: DIALOG },
     Control { name: LEFT_ARROW_NAME, key: Key::LeftArrow, shape: Shape::Circle { cx: LEFT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Left), contexts: CHARACTER },
     Control { name: RIGHT_ARROW_NAME, key: Key::RightArrow, shape: Shape::Circle { cx: RIGHT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Right), contexts: CHARACTER },
@@ -198,7 +198,7 @@ const CHARACTER_ROOM: i32 = 3;
 const PREFERENCES_MODAL: i32 = 7744;
 const DIFFICULTY_MODAL: i32 = 7836;
 const QUESTION_MODAL: i32 = 9673;
-const LIST_MODAL: i32 = 7778;
+pub const LIST_MODAL: i32 = 7778;
 
 /// The most characters the picker offers at once: one while choosing the player, two while choosing
 /// the rival. Anything beyond that is the whole roster drawn at once by the game's own trick.
@@ -793,8 +793,52 @@ fn log_state_change(room: i32) {
 #[cfg(not(target_os = "android"))]
 fn log_state_change(_room: i32) {}
 
+pub static KEYBOARD_WAIT_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub fn set_keyboard_wait_active(active: bool) {
+    KEYBOARD_WAIT_ACTIVE.store(active, Ordering::SeqCst);
+}
+
+pub fn is_keyboard_wait_active() -> bool {
+    KEYBOARD_WAIT_ACTIVE.load(Ordering::SeqCst)
+}
+
+pub fn force_dialogue_closed() {
+    DIALOGUE.clear();
+}
+
+static LAST_CONTEXT: AtomicU8 = AtomicU8::new(0);
+
+pub fn update_context() {
+    let new_ctx = current_context();
+    let old_ctx = LAST_CONTEXT.swap(new_ctx, Ordering::Relaxed);
+    if old_ctx != new_ctx && old_ctx != 0 {
+        on_context_change(old_ctx, new_ctx);
+    }
+}
+
+pub fn on_context_change(_old_ctx: u8, new_ctx: u8) {
+    let ctrl_list = controls();
+    for (i, ctrl) in ctrl_list.iter().enumerate() {
+        if is_pressed(i) {
+            // If the control was in old_ctx and is NOT active in new_ctx:
+            if (ctrl.contexts & new_ctx) == 0 {
+                set_pressed(i, false);
+                unregister_autofire(i);
+                #[cfg(target_os = "android")]
+                ramen::platform::android::push_input(ramen::platform::android::InputEvent::KeyUp {
+                    key: control_key(i),
+                });
+            }
+        }
+    }
+}
+
 /// Which group of controls the current game state needs.
 pub fn current_context() -> u8 {
+    if is_keyboard_wait_active() {
+        return MENU_NAV;
+    }
     // A dialogue box takes over the overlay: only the buttons that go with it are shown, so the text
     // 1. If an option list (e.g. PC storage list) or bag is open, MENU_NAV takes precedence immediately
     // over any lingering dialogue grace period, ensuring Z/X/A and joystick are active instantly.
@@ -825,7 +869,7 @@ pub fn current_context() -> u8 {
         return MENU
     }
     match ROOM.load(Ordering::Relaxed) {
-        // IntroROOM, InicioROOM, CargarPartida, MultijugadorMenu, CreditosInicioScreen, OptionsROOM:
+        // IntroROOM, InicioROOM, CargarPartida, MultijugadorMenu, CreditosInicioScreen:
         // these screens are fully clickable (once the game's own click boxes are fixed, see
         // `crate::patches`), so they need no on-screen controls at all.
         //
@@ -833,7 +877,9 @@ pub fn current_context() -> u8 {
         // are cutscenes the player watches before they can take a step, so nothing of the map's
         // overlay belongs over them. Their dialogues still get their own button, handled above.
         // Confirmed on the device - the two report as rooms 528 and 527.
-        22 | 30 | 43 | 461 | 465 | 466 | 527 | 528 => MENU,
+        22 | 30 | 43 | 461 | 527 | 528 => MENU,
+        // OptionsROOM: if keyboard_wait is active return MENU_NAV, else MENU
+        465 | 466 => if is_keyboard_wait_active() { MENU_NAV } else { MENU },
         // The screen where a new game asks you to pick your character, just after the title menu. It
         // has controls of its own (the two arrows) instead of the map's. Its room cannot be named
         // from the game's data - the names are not readable - so this is the room it reports.
@@ -1420,24 +1466,39 @@ pub fn wheel_item_center(index: usize, ww: f32, wh: f32) -> (f32, f32) {
     (cx + fx * 2.0 * half, cy + fy * 2.0 * half * SELECTOR_ASPECT)
 }
 
-/// Which slot the finger is pointing at, once it is far enough from the middle.
+static WHEEL_TOUCH_ORIGIN: Mutex<Option<(f32, f32)>> = Mutex::new(None);
+
+pub fn set_wheel_touch_origin(x: f32, y: f32) {
+    *WHEEL_TOUCH_ORIGIN.lock().unwrap() = Some((x, y));
+}
+
+pub fn wheel_touch_origin() -> Option<(f32, f32)> {
+    *WHEEL_TOUCH_ORIGIN.lock().unwrap()
+}
+
+pub fn clear_wheel_touch_origin() {
+    *WHEEL_TOUCH_ORIGIN.lock().unwrap() = None;
+}
+
+/// Which slot the finger is pointing at, relative to the touch origin of the Gengar button.
 pub fn wheel_item_at(nx: f32, ny: f32, ww: f32, wh: f32) -> Option<usize> {
-    let (cx, cy) = wheel_center(ww, wh);
-    let half = wheel_radius(ww, wh) / SELECTOR_SLOT_DISTANCE;
-    let (fx, fy) = ((nx * ww - cx) / (2.0 * half), (ny * wh - cy) / (2.0 * half * SELECTOR_ASPECT));
-    if fx * fx + fy * fy < 0.10 {
-        return None
+    let (ox, oy) = match wheel_touch_origin() {
+        Some((tx, ty)) => (tx * ww, ty * wh),
+        None => wheel_center(ww, wh),
+    };
+    let dx = nx * ww - ox;
+    let dy = ny * wh - oy;
+    // Deadzone of 16px (16^2 = 256.0)
+    if dx * dx + dy * dy < 256.0 {
+        return None;
     }
-    let mut best = None;
-    let mut closest = f32::MAX;
-    for (index, (ox, oy)) in WHEEL_OFFSETS.iter().enumerate() {
-        let apart = (fx - ox).powi(2) + (fy - oy).powi(2);
-        if apart < closest {
-            closest = apart;
-            best = Some(index);
-        }
+    let mut deg = dy.atan2(dx).to_degrees();
+    if deg < 0.0 {
+        deg += 360.0;
     }
-    best
+    let sector = (((deg + 30.0) % 360.0) / 60.0).floor() as usize % 6;
+    const SECTOR_TO_SLOT: [usize; 6] = [3, 5, 4, 2, 0, 1];
+    Some(SECTOR_TO_SLOT[sector])
 }
 
 #[cfg(test)]
@@ -1720,8 +1781,8 @@ pub fn tick_autofire() {
     // Cycle every 4 frames (2 frames pressed, 2 frames released) -> 15 pulses/sec at 60 FPS
     let phase = tick % 4;
     for index in buttons {
-        if index < CONTROLS.len() {
-            let key = CONTROLS[index].key;
+        if index < controls().len() {
+            let key = control_key(index);
             if phase == 0 {
                 ramen::platform::android::push_input(ramen::platform::android::InputEvent::KeyDown { key, text: None });
             } else if phase == 2 {

@@ -241,6 +241,7 @@ class GameActivity : NativeActivity() {
     external fun nativeEnter()
     external fun nativeImeInset(height: Int)
     external fun nativeAudioFocus(lost: Boolean)
+    external fun nativeReloadLayout(profile: Int)
 
     companion object {
         init {
@@ -251,6 +252,12 @@ class GameActivity : NativeActivity() {
         }
 
         private var instance: GameActivity? = null
+
+        /** Notifies the running engine to reload control layouts from storage without restarting. */
+        @JvmStatic
+        fun reloadLayout(profile: Int = 0) {
+            runCatching { instance?.nativeReloadLayout(profile) }
+        }
 
         /** Called from the engine when a touch control is pressed, to make it vibrate. */
         @JvmStatic
