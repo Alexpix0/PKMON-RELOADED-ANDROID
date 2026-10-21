@@ -105,6 +105,7 @@ fun SettingsScreen(
     onControls: () -> Unit,
     onTouchSettings: () -> Unit = {},
     onMySaves: () -> Unit,
+    onDiscord: () -> Unit = {},
     onUpdateFound: (Update.Release) -> Unit,
     onThemeChange: (String) -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
@@ -737,9 +738,17 @@ fun SettingsScreen(
                             icon = Icons.Filled.Info,
                             title = "Acerca de y Ayuda",
                             subtitle = "Versión de la app, logs técnicos y comprobador de actualizaciones",
-                            items = 6,
+                            items = 7,
                             index = 5,
                             onClick = { currentSubScreen = "about" },
+                        )
+                        NavRow(
+                            icon = Icons.Filled.Link,
+                            title = "Discord",
+                            subtitle = if (prefs.discordEnabled) "Rich Presence activado" else "Conecta tu cuenta y muestra lo que juegas",
+                            items = 7,
+                            index = 6,
+                            onClick = onDiscord,
                         )
                     }
 

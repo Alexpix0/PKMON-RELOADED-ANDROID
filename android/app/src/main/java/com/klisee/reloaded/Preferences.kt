@@ -324,6 +324,19 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("repelReminder", value).apply()
         }
 
+    /** Muestra en Discord que se está jugando y en qué ruta. */
+    var discordEnabled: Boolean
+        get() = prefs.getBoolean("discordEnabled", false)
+        set(value) {
+            prefs.edit().putBoolean("discordEnabled", value).apply()
+        }
+
+    var discordWarningDismissed: Boolean
+        get() = prefs.getBoolean("discordWarningDismissed", false)
+        set(value) {
+            prefs.edit().putBoolean("discordWarningDismissed", value).apply()
+        }
+
     /** Alerta Visual Perimetral de Pokémon Variocolor (Shiny Beacon) */
     var shinyBeacon: Boolean
         get() = prefs.getBoolean("shinyBeacon", false)

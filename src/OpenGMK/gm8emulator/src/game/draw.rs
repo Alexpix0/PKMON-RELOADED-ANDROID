@@ -284,9 +284,19 @@ impl Game {
             }
         }
 
-        fn draw_tile(game: &mut Game, idx: usize) {
+        fn draw_tile(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) {
             let tile = game.room.tile_list.get(idx);
             if tile.visible.get() {
+                // Viewport Frustum Culling: discard offscreen tiles (+32px safety margin)
+                let tx = tile.x.get().into_inner() as i32;
+                let ty = tile.y.get().into_inner() as i32;
+                let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
+                let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
+                const MARGIN: i32 = 32;
+                if tx + tw < src_x - MARGIN || tx > src_x + src_w + MARGIN || ty + th < src_y - MARGIN || ty > src_y + src_h + MARGIN {
+                    return;
+                }
+
                 if let Some(Some(background)) = game.assets.backgrounds.get(tile.background_index.get() as usize) {
                     if let Some(atlas) = background.atlas_ref {
                         game.renderer.set_depth(tile.depth.get().into_inner() as f32);
@@ -357,9 +367,9 @@ impl Game {
                     break
                 },
                 (None, Some(idx_tile), None) => {
-                    draw_tile(self, idx_tile);
+                    draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
-                        draw_tile(self, idx_tile);
+                        draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     }
                     break
                 },
@@ -376,7 +386,7 @@ impl Game {
                     let part_depth = idx_opt_part.map(|h| self.particles.get_system(h).unwrap().depth);
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
-                            draw_tile(self, idx_opt_tile.unwrap());
+                            draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
                             iter_tile_v = iter_tile.next(&self.room.tile_list);
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap())?;

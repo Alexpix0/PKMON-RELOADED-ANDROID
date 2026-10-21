@@ -603,8 +603,43 @@ pub fn jni_vibrate(duration_ms: i64) {
     })();
 }
 
+static CURSOR_POS: Mutex<(f32, f32)> = Mutex::new((400.0, 300.0));
+
+fn current_cursor_pos() -> (f32, f32) {
+    let (w, h) = android::window_size();
+    let mut pos = CURSOR_POS.lock().unwrap_or_else(|e| e.into_inner());
+    if pos.0 <= 0.0 || pos.1 <= 0.0 {
+        *pos = (w as f32 * 0.5, h as f32 * 0.5);
+    }
+    *pos
+}
+
+fn update_cursor_delta(dx: f32, dy: f32) {
+    let (w, h) = android::window_size();
+    let (wf, hf) = (w as f32, h as f32);
+    if wf <= 0.0 || hf <= 0.0 { return; }
+    let mut pos = CURSOR_POS.lock().unwrap_or_else(|e| e.into_inner());
+    pos.0 = (pos.0 + dx).clamp(0.0, wf);
+    pos.1 = (pos.1 + dy).clamp(0.0, hf);
+    android::push_input(ramen::platform::android::InputEvent::PointerMoved { x: pos.0, y: pos.1 });
+}
+
 fn control_key_down(index: usize) {
     crate::touch_controls::set_pressed(index, true);
+    let name = crate::touch_controls::control_at(index).name;
+    // Mouse button emulation (LMB = button 0, RMB = button 2)
+    if name == "lmb" {
+        let (x, y) = current_cursor_pos();
+        android::push_input(ramen::platform::android::InputEvent::PointerDown { x, y, button: 0 });
+        jni_vibrate(18);
+        return;
+    } else if name == "rmb" {
+        let (x, y) = current_cursor_pos();
+        android::push_input(ramen::platform::android::InputEvent::PointerDown { x, y, button: 2 });
+        jni_vibrate(18);
+        return;
+    }
+
     // The trick combination needs both keys held at once, so it is not one key like the rest.
     if crate::touch_controls::control_at(index).name == crate::touch_controls::COMBO_BUTTON_NAME {
         for key in [Key::LeftControl, Key::P] {
@@ -614,7 +649,6 @@ fn control_key_down(index: usize) {
         crate::touch_controls::set_combo_used();
         return
     }
-    let name = crate::touch_controls::control_at(index).name;
     if crate::touch_controls::is_autofire_enabled() && (name == "z" || name == "x" || name == "c" || name == "v" || name == "dialogo") {
         crate::touch_controls::register_autofire(index);
     }
@@ -640,6 +674,16 @@ fn control_key_down(index: usize) {
 fn control_key_up(index: usize) {
     crate::touch_controls::set_pressed(index, false);
     crate::touch_controls::unregister_autofire(index);
+    let name = crate::touch_controls::control_at(index).name;
+    if name == "lmb" {
+        let (x, y) = current_cursor_pos();
+        android::push_input(ramen::platform::android::InputEvent::PointerUp { x, y, button: 0 });
+        return;
+    } else if name == "rmb" {
+        let (x, y) = current_cursor_pos();
+        android::push_input(ramen::platform::android::InputEvent::PointerUp { x, y, button: 2 });
+        return;
+    }
     if crate::touch_controls::control_at(index).name == crate::touch_controls::COMBO_BUTTON_NAME {
         for key in [Key::LeftControl, Key::P] {
             android::push_input(ramen::platform::android::InputEvent::KeyUp { key });
@@ -1288,6 +1332,19 @@ fn translate(event: &InputEvent) {
                 crate::touch_controls::set_pad_active(true);
                 if STICK_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
                     let (mut x, mut y) = (axis_value(motion, Axis::X), axis_value(motion, Axis::Y));
+                    let (z, rz) = (axis_value(motion, Axis::Z), axis_value(motion, Axis::Rz));
+
+                    // Virtual Mouse in PC / Box mode: stick directly drives (x,y) pointer coordinates
+                    if crate::touch_controls::box_open() || crate::touch_controls::current_context() == crate::touch_controls::MENU {
+                        const CURSOR_SPEED: f32 = 14.0;
+                        let dead = 0.15;
+                        let mx = if x.abs() > dead { x } else if z.abs() > dead { z } else { 0.0 };
+                        let my = if y.abs() > dead { y } else if rz.abs() > dead { rz } else { 0.0 };
+                        if mx != 0.0 || my != 0.0 {
+                            update_cursor_delta(mx * CURSOR_SPEED, my * CURSOR_SPEED);
+                        }
+                    }
+
                     // A d-pad is usually reported as a hat axis rather than as keys, and it has to
                     // win over the stick when it is pressed: a resting stick is not always at exactly
                     // zero, and requiring that is what kept the d-pad from doing anything.

@@ -2881,8 +2881,17 @@ impl RendererTrait for RendererImpl {
                 let mut prev_tex2d = 0;
                 self.gl.GetIntegerv(gl::TEXTURE_BINDING_2D, &mut prev_tex2d);
 
-                self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.fbo_ids[rect.atlas_id as usize].unwrap());
-                self.gl.BindTexture(gl::TEXTURE_2D, self.texture_ids[new_rect.atlas_id as usize].unwrap());
+                let src_fbo = match self.fbo_ids.get(rect.atlas_id as usize).and_then(|&f| f) {
+                    Some(f) => f,
+                    None => return Err(format!("Invalid FBO for atlas {}", rect.atlas_id)),
+                };
+                let dst_tex = match self.texture_ids.get(new_rect.atlas_id as usize).and_then(|&t| t) {
+                    Some(t) => t,
+                    None => return Err(format!("Invalid texture for atlas {}", new_rect.atlas_id)),
+                };
+
+                self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, src_fbo);
+                self.gl.BindTexture(gl::TEXTURE_2D, dst_tex);
 
                 self.gl.CopyTexImage2D(gl::TEXTURE_2D, 0, gl::RGBA, rect.x, rect.y, rect.w as _, rect.h as _, 0);
 

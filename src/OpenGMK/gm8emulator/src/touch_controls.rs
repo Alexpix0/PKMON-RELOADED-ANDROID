@@ -158,6 +158,10 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: "eleccion_ok", key: Key::Return, shape: Shape::Circle { cx: 0.932, cy: 0.600, r: 0.036 }, label: Label::Text("OK"), contexts: CHARACTER },
     Control { name: "eleccion_atras", key: Key::X, shape: Shape::Circle { cx: 0.972, cy: 0.420, r: 0.028 }, label: Label::Text("X"), contexts: CHARACTER },
     Control { name: COMBO_BUTTON_NAME, key: Key::LeftControl, shape: Shape::Circle { cx: 0.500, cy: 0.060, r: 0.018 }, label: Label::Text("C+P"), contexts: CHARACTER },
+    Control { name: "lmb", key: Key::LeftControl, shape: Shape::Circle { cx: 0.850, cy: 0.350, r: 0.028 }, label: Label::Text("LMB"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
+    Control { name: "rmb", key: Key::LeftAlt, shape: Shape::Circle { cx: 0.920, cy: 0.350, r: 0.028 }, label: Label::Text("RMB"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
+    Control { name: "qty_plus", key: Key::UpArrow, shape: Shape::Circle { cx: 0.850, cy: 0.260, r: 0.022 }, label: Label::Text("+"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
+    Control { name: "qty_minus", key: Key::DownArrow, shape: Shape::Circle { cx: 0.920, cy: 0.260, r: 0.022 }, label: Label::Text("-"), contexts: WORLD | BATTLE | MENU_NAV | MENU },
 ];
 
 pub const CLASSIC_CONTROLS: &[Control] = MASTER_CONTROLS;
@@ -423,6 +427,11 @@ pub fn parse_key(name: &str) -> Option<Key> {
         "MANDO R2" | "R2" | "105" => Some(Key::O),
         "MANDO START" | "START" | "108" => Some(Key::Space),
         "MANDO SELECT" | "SELECT" | "109" => Some(Key::Return),
+        // Global mouse & quantity controls
+        "LMB" | "CLIC IZQUIERDO" | "CLICK IZQUIERDO" => Some(Key::LeftControl),
+        "RMB" | "CLIC DERECHO" | "CLICK DERECHO" => Some(Key::LeftAlt),
+        "+" | "MAS" | "QTY_PLUS" => Some(Key::UpArrow),
+        "-" | "MENOS" | "QTY_MINUS" => Some(Key::DownArrow),
         _ => None,
     }
 }

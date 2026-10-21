@@ -43,8 +43,9 @@ pokemon-reloaded-*.apk
 .MD/
 
 # Official reference sources (never commit)
+/SOURCE CODE DEL OFICIAL/
+SOURCE CODE DEL OFICIAL/**
 SOURCE CODE*/
-"SOURCE CODE DEL OFICIAL"/
 
 # Agent & IDE guidelines
 .agents/

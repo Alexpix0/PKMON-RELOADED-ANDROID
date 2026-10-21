@@ -7351,101 +7351,85 @@ impl Game {
         Ok(self.input.mouse_wheel_down().into())
     }
 
-    pub fn joystick_exists(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_exists"); Ok(Default::default()) }
-        // TODO
-        Ok(gml::FALSE.into())
+    pub fn joystick_exists(&mut self, args: &[Value]) -> gml::Result<Value> {
+        let id = expect_args!(args, [int])?;
+        // Mock valid primary joystick device for GameMaker 8 input configuration scene
+        if id == 1 || id == 2 {
+            Ok(gml::TRUE.into())
+        } else {
+            Ok(gml::FALSE.into())
+        }
     }
 
     pub fn joystick_direction(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_direction"); Ok(Default::default()) }
-        // TODO
         Ok(101.into())
     }
 
-    pub fn joystick_name(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_name"); Ok(Default::default()) }
-        // TODO
-        Ok("".into())
+    pub fn joystick_name(&mut self, args: &[Value]) -> gml::Result<Value> {
+        let id = expect_args!(args, [int])?;
+        if id == 1 || id == 2 {
+            Ok("Android Virtual Gamepad".into())
+        } else {
+            Ok("".into())
+        }
     }
 
-    pub fn joystick_axes(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_axes"); Ok(Default::default()) }
-        // TODO
-        Ok(0.into())
+    pub fn joystick_axes(&mut self, args: &[Value]) -> gml::Result<Value> {
+        let id = expect_args!(args, [int])?;
+        if id == 1 || id == 2 {
+            Ok(6.into())
+        } else {
+            Ok(0.into())
+        }
     }
 
-    pub fn joystick_buttons(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_buttons"); Ok(Default::default()) }
-        // TODO
-        Ok(0.into())
+    pub fn joystick_buttons(&mut self, args: &[Value]) -> gml::Result<Value> {
+        let id = expect_args!(args, [int])?;
+        if id == 1 || id == 2 {
+            Ok(14.into())
+        } else {
+            Ok(0.into())
+        }
     }
 
-    pub fn joystick_has_pov(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_has_pov"); Ok(Default::default()) }
-        // TODO
-        Ok(gml::FALSE.into())
+    pub fn joystick_has_pov(&mut self, args: &[Value]) -> gml::Result<Value> {
+        let id = expect_args!(args, [int])?;
+        if id == 1 || id == 2 {
+            Ok(gml::TRUE.into())
+        } else {
+            Ok(gml::FALSE.into())
+        }
     }
 
     pub fn joystick_check_button(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 2
-        //{ eprintln!("[gml] no implementada: joystick_check_button"); Ok(Default::default()) }
-        // TODO
         Ok(gml::FALSE.into())
     }
 
     pub fn joystick_xpos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_xpos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_ypos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_ypos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_zpos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_zpos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_rpos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_rpos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_upos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_upos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_vpos(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_vpos"); Ok(Default::default()) }
-        // TODO
         Ok(0.into())
     }
 
     pub fn joystick_pov(&mut self, _args: &[Value]) -> gml::Result<Value> {
-        // Expected arg count: 1
-        //{ eprintln!("[gml] no implementada: joystick_pov"); Ok(Default::default()) }
-        // TODO
         Ok((-1).into())
     }
 

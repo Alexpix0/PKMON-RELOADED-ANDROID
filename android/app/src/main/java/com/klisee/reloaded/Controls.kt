@@ -196,6 +196,12 @@ val AVAILABLE_KEY_CHOICES: List<PcKeyChoice> by lazy {
     list.add(PcKeyChoice(KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, "Modo Turbo", "Mando", "TURBO"))
     list.add(PcKeyChoice(KeyEvent.KEYCODE_MENU, "Rueda Radial", "Mando", "RADIAL"))
 
+    // Ratón y PC
+    list.add(PcKeyChoice(-101, "Clic Izquierdo (LMB)", "Ratón / PC", "LMB"))
+    list.add(PcKeyChoice(-102, "Clic Derecho (RMB)", "Ratón / PC", "RMB"))
+    list.add(PcKeyChoice(-103, "Cantidad / Scroll (+)", "Ratón / PC", "+"))
+    list.add(PcKeyChoice(-104, "Cantidad / Scroll (-)", "Ratón / PC", "-"))
+
     list
 }
 
