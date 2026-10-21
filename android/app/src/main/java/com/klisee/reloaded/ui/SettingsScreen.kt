@@ -1816,7 +1816,7 @@ fun SettingsScreen(
 
                     SettingsGroup("Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)") {
                                     SwitchRow(
-                                        icon = Icons.Filled.Layers,
+                                        icon = Icons.Filled.AutoAwesome,
                                         title = "Fusión de Superficies TBDR (Zero-Copy Battle FBO)",
                                         subtitle = "Unifica las capas de interfaz, sombras y efectos de combate en un solo pase de memoria para eliminar la subida a 35ms",
                                         checked = tbdrSurfaceFusion,
@@ -1842,7 +1842,7 @@ fun SettingsScreen(
                                         },
                                     )
                                     SwitchRow(
-                                        icon = Icons.Filled.Terrain,
+                                        icon = Icons.Filled.AspectRatio,
                                         title = "Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking)",
                                         subtitle = "Delega el orden de profundidad de edificios/NPCs a la GPU y pre-renderiza el suelo estático para evitar caídas a 30 FPS al caminar",
                                         checked = townZsortBaking,
@@ -1868,7 +1868,7 @@ fun SettingsScreen(
                                         },
                                     )
                                     SwitchRow(
-                                        icon = Icons.Filled.VisibilityOff,
+                                        icon = Icons.Filled.Tune,
                                         title = "Limitador Inteligente de Scripts Lejanos (NPC Tick Culling)",
                                         subtitle = "Pausa la evaluación de colisiones y animaciones de eventos que están fuera de la pantalla del jugador",
                                         checked = npcTickCulling,
