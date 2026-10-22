@@ -102,7 +102,7 @@ pub fn fast_point_distance(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
 #[inline(always)]
 pub fn fast_point_direction(x1: f32, y1: f32, x2: f32, y2: f32) -> f32 {
     let dx = x2 - x1;
-    let dy = y2 - y1;
+    let dy = y1 - y2;
     if dx.abs() < 0.0001 && dy.abs() < 0.0001 {
         return 0.0;
     }

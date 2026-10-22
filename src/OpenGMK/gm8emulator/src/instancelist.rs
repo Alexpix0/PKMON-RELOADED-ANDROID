@@ -393,6 +393,8 @@ impl InstanceList {
 pub struct TileList {
     chunks: ChunkList<Tile>,
     draw_order: Vec<usize>,
+    #[serde(skip)]
+    dirty: bool,
 }
 
 // generic purpose non-borrowing iterators
@@ -405,7 +407,7 @@ impl TLIterDrawOrder {
 
 impl TileList {
     pub fn new() -> Self {
-        Self { chunks: ChunkList::new(), draw_order: Vec::new() }
+        Self { chunks: ChunkList::new(), draw_order: Vec::new(), dirty: true }
     }
 
     pub fn get(&self, idx: usize) -> &Tile {
@@ -420,23 +422,33 @@ impl TileList {
         TLIterDrawOrder(0)
     }
 
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
     pub fn draw_sort(&mut self) {
+        if !self.dirty {
+            return;
+        }
         self.draw_order.sort_by(|&idx1, &idx2| {
             // TODO: (dupe) Bench if this is faster with unreachable_unchecked...
             let left = self.chunks.get(idx1).unwrap();
             let right = self.chunks.get(idx2).unwrap();
 
             right.depth.get().cmp_nan_first(&left.depth.get())
-        })
+        });
+        self.dirty = false;
     }
 
     pub fn insert(&mut self, el: Tile) -> usize {
+        self.dirty = true;
         let value = self.chunks.insert(el);
         self.draw_order.push(value);
         value
     }
 
     pub fn remove(&mut self, idx: usize) {
+        self.dirty = true;
         self.chunks.remove(idx);
         self.draw_order.retain(|&i| i != idx);
     }

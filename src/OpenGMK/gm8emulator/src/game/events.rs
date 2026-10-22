@@ -21,35 +21,43 @@ impl Game {
             let mut iter = self.room.instance_list.iter_by_object(object_id);
             while let Some(instance) = iter.next(&self.room.instance_list) {
                 if crate::touch_controls::npc_tick_culling_enabled() && event_id == gml::ev::STEP && self.room.views_enabled {
+                    let in_battle = matches!(self.room.id, 47 | 191 | 709);
                     let inst = self.room.instance_list.get(instance);
-                    let view = &self.room.views[self.view_current];
-                    let vx = view.source_x as f64;
-                    let vy = view.source_y as f64;
-                    let vw = view.source_w as f64;
-                    let vh = view.source_h as f64;
-                    let ix = inst.x.get().into_inner();
-                    let iy = inst.y.get().into_inner();
-                    const CULL_MARGIN: f64 = 384.0;
-                    if (ix < vx - CULL_MARGIN || ix > vx + vw + CULL_MARGIN || iy < vy - CULL_MARGIN || iy > vy + vh + CULL_MARGIN)
-                        && inst.visible.get()
-                        && inst.speed.get() == 0.into()
-                        && inst.hspeed.get() == 0.into()
-                        && inst.vspeed.get() == 0.into()
-                        && !inst.alarms.borrow().values().any(|&a| a >= 0)
-                    {
-                        continue;
+                    // Safe exclusion: NEVER cull if in battle, persistent, invisible, or missing sprite (controllers/weather/spawners)
+                    if !in_battle && !inst.persistent.get() && inst.visible.get() && inst.sprite_index.get() >= 0 {
+                        if let Some(view) = self.room.views.get(self.view_current).or_else(|| self.room.views.first()) {
+                            let vx = view.source_x as f64;
+                            let vy = view.source_y as f64;
+                            let vw = view.source_w as f64;
+                            let vh = view.source_h as f64;
+                            let ix = inst.x.get().into_inner();
+                            let iy = inst.y.get().into_inner();
+                            const CULL_MARGIN: f64 = 256.0;
+                            if (ix < vx - CULL_MARGIN || ix > vx + vw + CULL_MARGIN || iy < vy - CULL_MARGIN || iy > vy + vh + CULL_MARGIN)
+                                && inst.speed.get() == 0.into()
+                                && inst.hspeed.get() == 0.into()
+                                && inst.vspeed.get() == 0.into()
+                                && !inst.alarms.borrow().values().any(|&a| a >= 0)
+                            {
+                                continue;
+                            }
+                        }
                     }
                 }
                 if crate::touch_controls::active_static_partition_enabled() && event_id == gml::ev::STEP {
                     let inst = self.room.instance_list.get(instance);
-                    // Regla de Inmunidad Estricta para Controladores y Entidades Críticas (Infinix Hot 20i Blindaje):
+                    // Regla de Inmunidad Estricta para Controladores y Entidades Críticas:
                     // NUNCA omitir si:
-                    // 1. Es invisible (!visible)
-                    // 2. No tiene sprite asignado (sprite_index < 0)
-                    // 3. No es sólida (!solid)
-                    // 4. Tiene movimiento, aceleración o timeline activa
-                    // 5. Tiene alarmas activas
-                    let is_immune = !inst.visible.get()
+                    // 1. Es sala de combate (47, 191, 709)
+                    // 2. Es persistente (persistent)
+                    // 3. Es invisible (!visible)
+                    // 4. No tiene sprite asignado (sprite_index < 0)
+                    // 5. No es sólida (!solid)
+                    // 6. Tiene movimiento, aceleración o timeline activa
+                    // 7. Tiene alarmas activas
+                    let is_immune = matches!(self.room.id, 47 | 191 | 709)
+                        || inst.persistent.get()
+                        || !inst.visible.get()
                         || inst.sprite_index.get() < 0
                         || !inst.solid.get()
                         || inst.speed.get() != 0.into()

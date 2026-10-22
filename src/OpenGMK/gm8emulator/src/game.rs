@@ -3205,11 +3205,6 @@ impl Game {
             let angle1_zero = inst1.image_angle.get().into_inner() == 0.0;
             let angle2_zero = inst2.image_angle.get().into_inner() == 0.0;
 
-            // Fast-path: if both colliders are solid rectangular boxes and unrotated, AABB is sufficient
-            if angle1_zero && angle2_zero && collider1.is_solid_rect && collider2.is_solid_rect {
-                return true;
-            }
-
             // round x and y values, and get sin and cos of each angle...
             let x1 = inst1.x.get().round();
             let y1 = inst1.y.get().round();
@@ -3309,9 +3304,6 @@ impl Game {
                 return false;
             }
             let angle_deg = inst.image_angle.get().into_inner();
-            if collider.is_solid_rect && angle_deg == 0.0 {
-                return true;
-            }
             let (sin, cos) = if angle_deg == 0.0 {
                 (0.0, 1.0)
             } else {
@@ -3380,9 +3372,6 @@ impl Game {
                 return false;
             }
             let angle_deg = inst.image_angle.get().into_inner();
-            if collider.is_solid_rect && angle_deg == 0.0 {
-                return true;
-            }
 
             let inst_x = inst.x.get().round().to_i32();
             let inst_y = inst.y.get().round().to_i32();

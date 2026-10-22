@@ -2106,6 +2106,7 @@ impl Game {
         let (tile_id, depth) = expect_args!(args, [int, real])?;
         if let Some(handle) = self.room.tile_list.get_by_tileid(tile_id) {
             self.room.tile_list.get(handle).depth.set(depth);
+            self.room.tile_list.mark_dirty();
             Ok(Default::default())
         } else {
             Err(gml::Error::FunctionError("tile_set_depth".into(), format!("Tile with ID {} does not exist.", tile_id)))
@@ -4426,36 +4427,29 @@ impl Game {
 
     pub fn point_distance(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        let dist = crate::game::fast_lut::fast_point_distance(
-            x1.into_inner() as f32,
-            y1.into_inner() as f32,
-            x2.into_inner() as f32,
-            y2.into_inner() as f32,
-        );
-        Ok(Real::from(dist as f64).into())
+        let dx = x2.into_inner() - x1.into_inner();
+        let dy = y2.into_inner() - y1.into_inner();
+        Ok(Real::from(dx.hypot(dy)).into())
     }
 
     pub fn point_direction(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        let dir = crate::game::fast_lut::fast_point_direction(
-            x1.into_inner() as f32,
-            y1.into_inner() as f32,
-            x2.into_inner() as f32,
-            y2.into_inner() as f32,
-        );
-        Ok(Real::from(dir as f64).into())
+        let dy = y1.into_inner() - y2.into_inner();
+        let dx = x2.into_inner() - x1.into_inner();
+        let deg = dy.atan2(dx).to_degrees().rem_euclid(360.0);
+        Ok(Real::from(deg).into())
     }
 
     pub fn lengthdir_x(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        let cos_val = crate::game::fast_lut::fast_cos_deg(dir.into_inner() as f32) as f64;
-        Ok(Real::from(cos_val * len.into_inner()).into())
+        let rad = dir.into_inner().to_radians();
+        Ok(Real::from(rad.cos() * len.into_inner()).into())
     }
 
     pub fn lengthdir_y(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        let sin_val = crate::game::fast_lut::fast_sin_deg(dir.into_inner() as f32) as f64;
-        Ok(Real::from(sin_val * -len.into_inner()).into())
+        let rad = dir.into_inner().to_radians();
+        Ok(Real::from(rad.sin() * -len.into_inner()).into())
     }
 
 
