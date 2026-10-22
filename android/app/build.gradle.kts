@@ -71,6 +71,31 @@ android {
                     storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
                     keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "reloaded"
                     keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
+                } else {
+                    // Create an ephemeral release keystore for CI if external secrets were not configured
+                    val ciKeystore = rootProject.file("keystore/ci_auto_release.keystore")
+                    if (!ciKeystore.exists()) {
+                        ciKeystore.parentFile?.mkdirs()
+                        val cmd = arrayOf(
+                            "keytool", "-genkeypair", "-v",
+                            "-keystore", ciKeystore.absolutePath,
+                            "-alias", "alex_reloaded",
+                            "-keyalg", "RSA", "-keysize", "2048",
+                            "-validity", "10000",
+                            "-storepass", "pokemonreloaded",
+                            "-keypass", "pokemonreloaded",
+                            "-dname", "CN=Pokemon Reloaded, OU=Android, O=Alexpix, L=Madrid, ST=Madrid, C=ES"
+                        )
+                        runCatching {
+                            ProcessBuilder(*cmd).start().waitFor()
+                        }
+                    }
+                    if (ciKeystore.exists()) {
+                        storeFile = ciKeystore
+                        storePassword = "pokemonreloaded"
+                        keyAlias = "alex_reloaded"
+                        keyPassword = "pokemonreloaded"
+                    }
                 }
             }
         }
@@ -79,11 +104,20 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Always signed with the repository release key so all updates can install seamlessly over each other
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile?.exists() == true) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile?.exists() == true) {
+                releaseSigning
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
