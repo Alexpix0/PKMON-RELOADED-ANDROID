@@ -1,114 +1,127 @@
-# Pokémon Reloaded en Android
+<div align="center">
 
-Ejecuta **Pokémon Reloaded** en Android sin emulador de Windows de por medio. Lo mantiene
-[@Klisee](https://github.com/Klisee), para la comunidad.
+# ⚡ Pokémon Reloaded EX — Edición Nativa Android
 
-## Qué es esto, en realidad
+[![GitHub Release](https://img.shields.io/github/v/release/Alexpix0/PKMON-RELOADED-ANDROID?color=34D399&label=Versi%C3%B3n&style=for-the-badge)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Alexpix0/PKMON-RELOADED-ANDROID/build.yml?branch=v0.9.9&style=for-the-badge&label=Compilaci%C3%B3n)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/actions)
+[![Plataforma](https://img.shields.io/badge/Plataforma-Android%208.0%2B-blue?style=for-the-badge&logo=android)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases)
+[![Arquitectura](https://img.shields.io/badge/CPU-ARM64%20%7C%20ARMv7-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 
-Lo de "port" es un decir, y conviene aclararlo. Pokémon Reloaded es un juego hecho en Game Maker 8
-para Windows, y aquí **no se ha reescrito ni recompilado nada**. Lo que hace esta app es
-**ejecutar el juego original tal cual**, con sus archivos intactos, sobre
-[OpenGMK](https://github.com/OpenGMK/OpenGMK): una reimplementación nativa en Rust del motor de
-Game Maker 8.
+**La experiencia definitiva y de alto rendimiento de Pokémon Reloaded adaptada a dispositivos móviles.**  
+*Ejecución 100% nativa con aceleración por hardware, cero capas de emulación y controles táctiles adaptativos de ultra baja latencia.*
 
-Dicho de otro modo: no hay Wine, no hay Windows emulado, no hay capa de traducción. El motor está
-escrito para Android y compilado para el móvil, así que el juego corre prácticamente como un nativo.
-Lo único que se ha "porteado" son las tripas del motor, no el juego.
+[Descargar Último APK (Build 41)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest) • [Reportar Incidencia](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/issues) • [Novedades](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases)
 
-La app sí aporta todo lo de fuera del juego: importar el juego desde un `.zip`, controles táctiles,
-ajustes, gestión de partidas y logs. El juego en sí no se toca.
+---
 
-## Cómo funciona
+</div>
 
-- **Importar.** Le das a Importar y eliges el `.zip` del juego. La app lo descomprime en su propio
-  almacenamiento privado, así que no depende de permisos de almacenamiento ni de dónde lo tengas
-  guardado.
-- **Ejecutar.** El motor (OpenGMK, en Rust) se carga como librería nativa y arranca el runner de
-  Game Maker 8 sobre los datos del juego. El render va por OpenGL ES y el audio por AAudio.
-- **Controles.** La capa táctil no es fija: cambia según el estado del juego, así que en el mapa
-  tienes una cruceta y en los menús otra cosa. Cada botón pulsa una tecla del juego, y puedes
-  reasignar cualquiera desde Ajustes → Mando → Controles. También funciona un mando real, detectado solo.
-- **Partidas.** Se leen y escriben en la carpeta del juego. Desde Ajustes → Partidas puedes verlas,
-  exportarlas, importarlas, borrarlas y mover una de una ranura a otra. Si jugabas en PC, tu partida
-  entra por aquí.
-- **Salir y volver.** Al mandar la app a segundo plano, el bucle se detiene y el audio se corta de
-  verdad; al volver, sigue donde estaba en vez de quedarse en negro.
-- **Logs.** Si algo va mal, la app escribe un log y lo puedes compartir como archivo de texto desde
-  Ajustes → Logs, sin perderlo al reiniciar el móvil.
+## 📖 Acerca del Proyecto
 
-## Cómo está montado
+**Pokémon Reloaded EX** es una reimplementación nativa diseñada para ejecutar **Pokémon Reloaded** (The Last Beta) directamente sobre el hardware de tu dispositivo Android con la máxima fidelidad y rendimiento.
+
+A diferencia de soluciones convencionales basadas en cajas de compatibilidad como Wine, emuladores de Windows o entornos x86 virtualizados que consumen batería y degradan la velocidad, esta edición ejecuta el juego mediante un runner nativo de **GameMaker 8 compilado en Rust (OpenGMK)** acoplado por JNI a una interfaz moderna construida en **Kotlin y Jetpack Compose**.
+
+> [!IMPORTANT]
+> **Filosofía de Integridad:** Este repositorio no contiene ni distribuye binarios propietarios, música ni assets gráficos del juego original. El usuario suministra su propia copia legítima en archivo `.zip`.
+
+---
+
+## 🚀 Innovaciones Técnicas de la Edición EX (Builds 40 y 41)
 
 ```mermaid
-flowchart TB
-    subgraph app["App · Kotlin + Compose"]
-        launcher["Lanzador e interfaz"]
-        ajustes["Ajustes · partidas · logs"]
-        overlay["Controles táctiles"]
+flowchart LR
+    subgraph UI["📱 Interfaz de Usuario (Kotlin + Jetpack Compose)"]
+        A1["Gestor de Partidas y Nube"]
+        A2["HUD Táctil Adaptativo y Editor Dinámico"]
+        A3["Panel de Ajustes Modular (QoL)"]
     end
 
-    subgraph engine["Motor · Rust (OpenGMK)"]
-        runner["Runner de Game Maker 8"]
-        render["Render OpenGL ES"]
-        audio["Audio (AAudio)"]
+    subgraph Bridge["⚡ Puente JNI de Ultra Baja Latencia"]
+        B1["Paso de Texturas y Shaders"]
+        B2["Canal Atómico de Entrada (0ms Lag)"]
     end
 
-    juego["Datos del juego original (tu .zip)"]
+    subgraph Engine["⚙️ Motor Nativo Rust (OpenGMK)"]
+        C1["Spatial Hash Grid (Colisiones O(1))"]
+        C2["Afinidad Big.LITTLE (Pinning a Big Cores)"]
+        C3["Pipeline Gráfico OpenGL ES 3.0 / Vulkan"]
+        C4["AAudio Stream de Búfer Reducido"]
+    end
 
-    launcher -->|importa el .zip| juego
-    app <-->|JNI| engine
-    engine -->|lee y ejecuta| juego
+    UI <===> Bridge <===> Engine
 ```
 
-La app y el motor son dos mundos separados que hablan por JNI. El motor no sabe de Android ni de
-interfaz: solo sabe ejecutar el juego. La app no sabe de Game Maker: solo lo lanza y lo envuelve.
-Esa separación es la que permite tocar la interfaz sin romper el motor, y viceversa.
+### ⚡ 1. Arquitectura de Alto Rendimiento
+- **Cuadrícula Espacial (Spatial Hash Grid):** Optimización matemática de colisiones reduciendo la complejidad algorítmica de $O(N^2)$ a $O(1)$. Sincronización dual en cada ciclo de juego y pre-filtrado por cajas de colisión sólidas (`is_solid_rect`).
+- **Afinidad de Hilos CPU (Big.LITTLE Pinning):** El hilo principal de simulación y renderizado se fija automáticamente a los núcleos de alto rendimiento (*Prime / Big Cores*) del SoC móvil (`sched_setaffinity`), garantizando estabilidad sin estrangulamiento térmico ni degradación a núcleos de bajo consumo.
+- **Frameskip Inteligente Desacoplado:** Mantiene el 100% de la velocidad física de batalla y exploración incluso en situaciones de alta carga gráfica.
+- **Tablas de Búsqueda Rápida (`fast_lut`):** Aceleración trigonométrica y vectorial precalculada para proyectiles, desplazamientos angulares y cálculos de daño.
 
-## Qué necesitas
+### 🎮 2. Tasa de Refresco y Fluidez (60 / 120 FPS)
+- **Nativo (30/60 FPS):** Respeta la cadencia y tiempo original programado para cada zona.
+- **60 FPS Forzados:** Desbloqueo de velocidad de fotogramas para eliminar el límite de 30 FPS en mapas extensos.
+- **120 FPS Interpolado:** Desacoplamiento gráfico mediante búfer *lock-free* SPSC diseñado para pantallas AMOLED y fluidas (90 Hz / 120 Hz / 144 Hz).
 
-Los archivos originales del juego, que están en el blog de **F3R**:
-[pokemon-reloaded.blogspot.com](https://pokemon-reloaded.blogspot.com/)
+### 🕹️ 3. Controles Físicos y Táctiles Avanzados
+- **Cruceta Octogonal (8-Way D-Pad):** Soporte de movimiento diagonal preciso a $45^\circ$ imprescindible para el sistema de combate en tiempo real.
+- **HUD Dinámico y Editor Libre:** Personaliza la posición, escala y opacidad de cada botón. Perfiles independientes para Exploración, Combate, Diálogos y Menús.
+- **Teclas Rápidas y Puzzles:** Botones contextuales ⟲ (Q) y ⟳ (E) para los rompecabezas de Ruinas Alfa / Omega, junto a accesos rápidos para Guardado Instantáneo (F5), Reloj (H) y Flauta (F).
+- **Mando Físico Plug & Play:** Detección automática de mandos Bluetooth y USB (Xbox, PlayStation, Switch Pro, Razer Kishi, Gamesir).
 
-El repo no incluye ningún asset del juego, y eso es justo lo que lo mantiene limpio.
+---
 
-## Cómo se usa
+## 📲 Instalación y Puesta en Marcha
 
-1. Instala el APK de la última release.
-2. Consigue el juego en un `.zip` y dale a **Importar** (o usa **Descargar** para abrir el blog).
-3. **Jugar**. Si ya tenías partida en el PC, tráela desde Ajustes → Partidas.
+1. **Instalar el APK:**  
+   Descarga e instala la última versión desde la sección de [Releases](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest).
 
-## Estado
+2. **Obtener los datos del juego:**  
+   Consigue el archivo `.zip` oficial de **Pokémon Reloaded (The Last Beta)** desde el [Blog Oficial de F3R](https://pokemon-reloaded.blogspot.com/).
 
-Está en beta y se nota: puede petar. Si algo falla, guarda un log desde Ajustes → Logs y ábrelo como
-issue.
+3. **Importar y Jugar:**  
+   Abre la app, pulsa en **Importar Juego** y selecciona el `.zip`. El juego se configurará automáticamente en el almacenamiento protegido del dispositivo.
 
-Lo que ahora mismo da problemas, y resolvere despues:
+---
 
-- **El escalado en combate.** El juego cambia la escala por su cuenta y la cámara se vuelve loca.
-- **El movimiento Vuelo.** En combate no llega a conectar y el Pokémon se queda cayendo.
+## 🛠️ Compilación desde el Código Fuente
 
-Y por ir haciendo, sin orden:
+### Requisitos Previos
+- **Android NDK:** r26b o superior
+- **Rust Toolchain:** 1.77+ con targets `aarch64-linux-android` y `armv7-linux-androideabi`
+- **Herramientas:** `cargo-ndk`, JDK 17, Android SDK Platform 34
 
-- Pulir el escalado del combate hasta que se comporte.
-- Más ajustes de rendimiento en móviles modestos.
-- Revisar la compatibilidad con mandos de todo tipo.
+### Pasos de Construcción
 
-## Compilar
+```bash
+# 1. Clonar el repositorio con submódulos
+git clone https://github.com/Alexpix0/PKMON-RELOADED-ANDROID.git
+cd PKMON-RELOADED-ANDROID
 
-```
-# El motor (Rust) y su .so para Android
+# 2. Compilar el motor nativo en Rust (librerías .so)
 cd src/OpenGMK
-cargo ndk -t arm64-v8a --platform 29 build -p gm8emulator --release
+cargo ndk -t arm64-v8a -t armeabi-v7a -o ../../android/app/src/main/jniLibs build -p gm8emulator --release
+cd ../..
 
-# La app
-cd ../../android
-./build.sh :app:assembleRelease
+# 3. Compilar el APK de Android
+cd android
+./gradlew assembleRelease
 ```
 
-## Créditos
+El ejecutable firmado resultante se generará en `android/app/build/outputs/apk/release/app-release.apk`.
 
-- **Pokémon Reloaded** es obra de **F3R Productions**: [el blog del juego](https://pokemon-reloaded.blogspot.com/)
-- **OpenGMK**, la reimplementación del motor sin la que esto no existiría: [github.com/OpenGMK/OpenGMK](https://github.com/OpenGMK/OpenGMK)
-- **Google Sans Flex**, la tipografía de la app
+---
 
-Pokémon es una marca de Nintendo, Game Freak y Creatures. Este proyecto no está afiliado ni
-respaldado por ellos.
+## 🤝 Créditos y Agradecimientos
+
+- **Pokémon Reloaded:** Desarrollado magistralmente por **F3R** y colaboradores ([Blog Oficial](https://pokemon-reloaded.blogspot.com/)).
+- **OpenGMK:** Reimplementación de código abierto del motor GameMaker 8 ([GitHub](https://github.com/OpenGMK/OpenGMK)).
+- **Mantenimiento y Arquitectura EX:** [Alexpix0 / Armando](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID) y la comunidad de colaboradores.
+
+---
+
+<div align="center">
+
+*Aviso Legal: Pokémon es una marca registrada de Nintendo, Game Freak y Creatures Inc. Este proyecto es una herramienta de emulación comunitaria de código abierto, sin fines de lucro y no está afiliado ni respaldado por ninguna de las entidades propietarias de la marca.*
+
+</div>

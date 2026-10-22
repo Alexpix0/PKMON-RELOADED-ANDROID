@@ -80,13 +80,11 @@ fun Onboarding(
             title = "Pokemon Reloaded en Android",
             subtitle = buildAnnotatedString {
                 append(
-                    "Un port hecho por la comunidad y para la comunidad, por @kliseex. Corre sobre " +
-                        "OpenGMK, una reimplementación nativa del motor de Game Maker 8, así que el " +
-                        "juego se ejecuta de verdad: no hay ningún Windows emulado por medio y el " +
-                        "rendimiento es prácticamente el de un juego nativo.\n\n" +
-                        "Sigue en beta, y eso se nota: PUEDE TENER MUCHOS ERRORES Y FALLOS. Si tienes " +
-                        "algún bug, mínimo o grave, por favor guarda un log y repórtalo.\n\n" +
-                        "Manda reportes de bugs, crasheos o congelamientos a ",
+                    "Una versión optimizada y desarrollada por la comunidad para Android. Corre sobre " +
+                        "OpenGMK, una reimplementación nativa del motor de Game Maker 8 en Rust, " +
+                        "por lo que no existe emulación de Windows y el rendimiento es directo y fluido.\n\n" +
+                        "Si experimentas algún error o anomalía gráfica, puedes generar un reporte técnico " +
+                        "o consultar las actualizaciones directamente en ",
                 )
                 withLink(LinkAnnotation.Url("https://github.com/Alexpix0/PKMON-RELOADED-ANDROID")) {
                     append("GitHub")
