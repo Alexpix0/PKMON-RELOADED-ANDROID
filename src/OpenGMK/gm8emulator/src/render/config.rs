@@ -86,12 +86,15 @@ impl RenderConfig {
         self.generation.fetch_add(1, Ordering::Release);
     }
 
+    pub const GL_NEAREST: u32 = 0x2600;
+    pub const GL_LINEAR: u32 = 0x2601;
+
     #[inline]
-    pub fn filter_gl_enum(&self, interpolate_pixels: bool) -> gl::types::GLenum {
+    pub fn filter_gl_enum(&self, interpolate_pixels: bool) -> u32 {
         match self.filter_mode.load(Ordering::Relaxed) {
-            1 | 2 | 3 => gl::LINEAR,
-            0 => if interpolate_pixels { gl::LINEAR } else { gl::NEAREST },
-            _ => gl::NEAREST,
+            1 | 2 | 3 => Self::GL_LINEAR,
+            0 => if interpolate_pixels { Self::GL_LINEAR } else { Self::GL_NEAREST },
+            _ => Self::GL_NEAREST,
         }
     }
 }
