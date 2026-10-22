@@ -706,7 +706,7 @@ impl Game {
 
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
-                    let target_instances: smallvec::SmallVec<[usize; 8]> = if use_spatial {
+                    let target_instances: Vec<usize> = if use_spatial {
                         candidates[..cand_count]
                             .iter()
                             .copied()
@@ -718,7 +718,7 @@ impl Game {
                             })
                             .collect()
                     } else {
-                        let mut list = smallvec::SmallVec::new();
+                        let mut list = Vec::new();
                         let mut it = self.room.instance_list.iter_by_object(target_obj);
                         while let Some(t) = it.next(&self.room.instance_list) {
                             list.push(t);

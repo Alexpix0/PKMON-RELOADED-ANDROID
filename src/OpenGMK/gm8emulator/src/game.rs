@@ -1583,7 +1583,7 @@ impl Game {
             game.overlay_box_field = game.compiler.find_field_id(b"ENCAJA");
             for (id, room_opt) in game.assets.rooms.iter().enumerate() {
                 if let Some(r) = room_opt {
-                    let name = r.name.to_ascii_lowercase();
+                    let name = r.name.decode_utf8().to_ascii_lowercase();
                     if name.contains("mochila") || name.contains("bagroom") {
                         game.bag_rooms.insert(id as i32);
                     }
