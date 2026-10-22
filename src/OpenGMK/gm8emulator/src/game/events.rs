@@ -100,8 +100,14 @@ impl Game {
         // Running instance events is not allowed if a room change is pending. This appears to be
         // how GM8 is implemented as well, given the related room creation bug and collision/solid bugs.
         if self.scene_change.is_none() {
-            let original_object_id =
-                if let Some(id) = as_object { id } else { self.room.instance_list.get(instance).object_index.get() };
+            let original_object_id = if let Some(id) = as_object {
+                id
+            } else {
+                match self.room.instance_list.try_get(instance) {
+                    Some(inst) if inst.is_active() => inst.object_index.get(),
+                    _ => return Ok(()),
+                }
+            };
             let mut object_id = original_object_id;
             let event = loop {
                 if object_id < 0 {
@@ -647,29 +653,10 @@ impl Game {
 
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
-        let cull_bounds = if self.room.views_enabled {
-            let mut min_x = i32::MAX;
-            let mut max_x = i32::MIN;
-            let mut min_y = i32::MAX;
-            let mut max_y = i32::MIN;
-            let mut any_visible = false;
-            for view in &self.room.views {
-                if view.visible {
-                    any_visible = true;
-                    min_x = min_x.min(view.source_x - 300);
-                    max_x = max_x.max(view.source_x + view.source_w + 300);
-                    min_y = min_y.min(view.source_y - 300);
-                    max_y = max_y.max(view.source_y + view.source_h + 300);
-                }
-            }
-            if any_visible {
-                Some((Real::from(min_x), Real::from(max_x), Real::from(min_y), Real::from(max_y)))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        if self.scene_change.is_some() || self.room.instance_list.len() == 0 {
+            self.spatial_hash.clear();
+            return Ok(());
+        }
 
         // Populate spatial hash ONLY for candidate targets of registered collision events (1 single pass, zero decorative instances)
         self.spatial_hash.clear();
@@ -681,21 +668,26 @@ impl Game {
                     if populated_targets.insert(target_obj) {
                         let mut it = self.room.instance_list.iter_by_object(target_obj);
                         while let Some(handle) = it.next(&self.room.instance_list) {
-                            let inst = self.room.instance_list.get(handle);
-                            if inst.is_active() {
-                                let sprite = self
-                                    .assets
-                                    .sprites
-                                    .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
-                                    .map(|x| x.as_ref());
-                                inst.update_bbox(sprite);
-                                self.spatial_hash.insert(
-                                    handle,
-                                    inst.bbox_left.get(),
-                                    inst.bbox_top.get(),
-                                    inst.bbox_right.get(),
-                                    inst.bbox_bottom.get(),
-                                );
+                            if let Some(inst) = self.room.instance_list.try_get(handle) {
+                                if inst.is_active() && inst.sprite_index.get() >= 0 {
+                                    let sprite = self
+                                        .assets
+                                        .sprites
+                                        .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
+                                        .map(|x| x.as_ref());
+                                    if sprite.is_some() {
+                                        inst.update_bbox(sprite);
+                                        if inst.bbox_left.get() > -50000 {
+                                            self.spatial_hash.insert(
+                                                handle,
+                                                inst.bbox_left.get(),
+                                                inst.bbox_top.get(),
+                                                inst.bbox_right.get(),
+                                                inst.bbox_bottom.get(),
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -708,15 +700,23 @@ impl Game {
         while let Some((object, target_list)) =
             self.event_holders[gml::ev::COLLISION].get_index(i).map(|(x, y)| (*x, y.clone()))
         {
+            if self.scene_change.is_some() {
+                break;
+            }
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
-                let inst1 = self.room.instance_list.get(instance);
-                if !inst1.is_active() {
-                    continue;
+                if self.scene_change.is_some() {
+                    break 'iter1;
                 }
+                let inst1 = match self.room.instance_list.try_get(instance) {
+                    Some(inst) if inst.is_active() => inst,
+                    _ => continue,
+                };
 
-                let use_spatial = self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0;
+                let use_spatial = self.spatial_hash.is_enabled()
+                    && self.spatial_hash.entry_count() > 0
+                    && inst1.bbox_left.get() > -50000;
                 let mut candidates = [0usize; 64];
                 let mut cand_count = 0;
                 if use_spatial {
@@ -738,19 +738,25 @@ impl Game {
 
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
-                    let target_instances: Vec<usize> = if use_spatial {
+                    if self.scene_change.is_some() {
+                        break 'iter1;
+                    }
+                    let target_instances: smallvec::SmallVec<[usize; 8]> = if use_spatial {
                         candidates[..cand_count]
                             .iter()
                             .copied()
                             .filter(|&cand| {
-                                let c_inst = self.room.instance_list.get(cand);
-                                c_inst.is_active()
-                                    && (c_inst.object_index.get() == target_obj
-                                        || c_inst.parents.borrow().contains(&target_obj))
+                                if let Some(c_inst) = self.room.instance_list.try_get(cand) {
+                                    c_inst.is_active()
+                                        && (c_inst.object_index.get() == target_obj
+                                            || c_inst.parents.borrow().contains(&target_obj))
+                                } else {
+                                    false
+                                }
                             })
                             .collect()
                     } else {
-                        let mut list = Vec::new();
+                        let mut list = smallvec::SmallVec::new();
                         let mut it = self.room.instance_list.iter_by_object(target_obj);
                         while let Some(t) = it.next(&self.room.instance_list) {
                             list.push(t);
@@ -759,37 +765,32 @@ impl Game {
                     };
 
                     for target in target_instances {
+                        if self.scene_change.is_some() {
+                            break 'iter1;
+                        }
                         if instance == target {
                             continue;
                         }
-                        let inst1 = self.room.instance_list.get(instance);
-                        let inst2 = self.room.instance_list.get(target);
-
-                        // Coarse proximity culling: instances more than 256px apart cannot collide
-                        if (inst1.x.get() - inst2.x.get()).abs() > Real::from(256.0)
-                            || (inst1.y.get() - inst2.y.get()).abs() > Real::from(256.0)
-                        {
-                            continue;
-                        }
-
-                        // Off-screen culling: skip if both instances are outside active camera views + margin
-                        if let Some((cx1, cx2, cy1, cy2)) = cull_bounds {
-                            let x1 = inst1.x.get();
-                            let y1 = inst1.y.get();
-                            let x2 = inst2.x.get();
-                            let y2 = inst2.y.get();
-                            if (x1 < cx1 || x1 > cx2 || y1 < cy1 || y1 > cy2)
-                                && (x2 < cx1 || x2 > cx2 || y2 < cy1 || y2 > cy2)
-                            {
-                                continue;
-                            }
-                        }
+                        let inst1 = match self.room.instance_list.try_get(instance) {
+                            Some(inst) if inst.is_active() => inst,
+                            _ => break,
+                        };
+                        let inst2 = match self.room.instance_list.try_get(target) {
+                            Some(inst) if inst.is_active() => inst,
+                            _ => continue,
+                        };
 
                         // And finally, check if the two instances collide
                         if self.check_collision(instance, target) {
                             // If either instance is solid, move both back to their previous positions
-                            let inst1 = self.room.instance_list.get(instance);
-                            let inst2 = self.room.instance_list.get(target);
+                            let inst1 = match self.room.instance_list.try_get(instance) {
+                                Some(inst) if inst.is_active() => inst,
+                                _ => break,
+                            };
+                            let inst2 = match self.room.instance_list.try_get(target) {
+                                Some(inst) if inst.is_active() => inst,
+                                _ => continue,
+                            };
                             if inst1.solid.get() || inst2.solid.get() {
                                 for inst in [inst1, inst2] {
                                     inst.x.set(inst.xprevious.get());
@@ -801,11 +802,23 @@ impl Game {
 
                             // Run both collision events
                             self.run_instance_event(gml::ev::COLLISION, target_obj as u32, instance, target, None)?;
+                            if self.scene_change.is_some() {
+                                break 'iter1;
+                            }
                             self.run_instance_event(gml::ev::COLLISION, object as u32, target, instance, None)?;
+                            if self.scene_change.is_some() {
+                                break 'iter1;
+                            }
 
                             // If either instance is solid, apply both instances' hspeed and vspeed
-                            let inst1 = self.room.instance_list.get(instance);
-                            let inst2 = self.room.instance_list.get(target);
+                            let inst1 = match self.room.instance_list.try_get(instance) {
+                                Some(inst) if inst.is_active() => inst,
+                                _ => break,
+                            };
+                            let inst2 = match self.room.instance_list.try_get(target) {
+                                Some(inst) if inst.is_active() => inst,
+                                _ => continue,
+                            };
                             if inst1.solid.get() || inst2.solid.get() {
                                 self.apply_speeds(instance);
                                 self.apply_speeds(target);
@@ -821,12 +834,6 @@ impl Game {
                                     inst2.bbox_is_stale.set(true);
                                     inst2.path_position.set(inst2.path_positionprevious.get());
                                 }
-                            }
-
-                            // If inst1 doesn't exist anymore, we don't want to use it for any further collisions,
-                            // so skip using it for anything else
-                            if !inst1.is_active() {
-                                continue 'iter1
                             }
                         }
                     }

@@ -1735,6 +1735,8 @@ impl Game {
 
         // Update this early so the other events run
         self.scene_change = None;
+        self.spatial_hash.clear();
+        crate::touch_controls::flush_held_inputs();
 
         // Initialize room transition surface
         let transition_kind = self.transition_kind;
@@ -1863,20 +1865,30 @@ impl Game {
         }
 
         for (handle, instance) in &new_handles {
-            if self.room.instance_list.get(*handle).is_active() {
-                if self.swap_creation_events {
-                    // Run create event for this instance
-                    self.run_instance_event(ev::CREATE, 0, *handle, *handle, None)?;
-                }
+            if let Some(inst) = self.room.instance_list.try_get(*handle) {
+                if inst.is_active() {
+                    if self.swap_creation_events {
+                        // Run create event for this instance
+                        self.run_instance_event(ev::CREATE, 0, *handle, *handle, None)?;
+                    }
 
-                // Run this instance's room creation code
-                let mut new_context = Context::with_single_instance(*handle);
-                new_context.event_object = instance.object;
-                self.execute(&instance.creation.clone()?, &mut new_context)?;
+                    if let Some(inst) = self.room.instance_list.try_get(*handle) {
+                        if inst.is_active() {
+                            // Run this instance's room creation code
+                            let mut new_context = Context::with_single_instance(*handle);
+                            new_context.event_object = instance.object;
+                            self.execute(&instance.creation.clone()?, &mut new_context)?;
+                        }
+                    }
 
-                if !self.swap_creation_events {
-                    // Run create event for this instance
-                    self.run_instance_event(ev::CREATE, 0, *handle, *handle, None)?;
+                    if !self.swap_creation_events {
+                        if let Some(inst) = self.room.instance_list.try_get(*handle) {
+                            if inst.is_active() {
+                                // Run create event for this instance
+                                self.run_instance_event(ev::CREATE, 0, *handle, *handle, None)?;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1919,6 +1931,7 @@ impl Game {
 
         if self.scene_change.is_some() {
             // GM8 would have a memory leak here. We're not doing that.
+            self.renderer.reset_target();
             if let Some(surf) = self.surfaces.remove(trans_surf_old) {
                 self.renderer.delete_sprite(surf.atlas_ref);
             }
@@ -1933,6 +1946,7 @@ impl Game {
             // Draw "frame 0", perform transition if applicable, and then return
             if self.auto_draw {
                 self.draw()?;
+                self.renderer.reset_target();
                 if let Some(transition) = self.get_transition(transition_kind) {
                     let (width, height) = self.window_inner_size;
                     self.renderer.reset_target();
@@ -1991,6 +2005,7 @@ impl Game {
             if let Some(surf) = self.surfaces.remove(trans_surf_new) {
                 self.renderer.delete_sprite(surf.atlas_ref);
             }
+            self.renderer.reset_target();
             self.renderer.trim_vram();
             self.transition_kind = 0;
             Ok(())
@@ -2392,33 +2407,25 @@ impl Game {
                 update_cached_env_settings();
             }
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let in_battle = matches!(self.room.id, 47 | 191 | 709);
-            let last_micros = LAST_FRAME_MICROS.load(std::sync::atomic::Ordering::Relaxed);
-            let battle_lag = (in_battle && last_micros > 17_500) || (last_micros > 22_000);
-            if battle_lag {
-                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                (c % 2) == 1
-            } else {
-                let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
-                match fs_mode {
-                    1 => {
+            let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
+            match fs_mode {
+                1 => {
+                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    (c % 2) == 1
+                },
+                2 => {
+                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    (c % 3) != 0
+                },
+                3 => {
+                    if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
                         let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         (c % 2) == 1
-                    },
-                    2 => {
-                        let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        (c % 3) != 0
-                    },
-                    3 => {
-                        if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
-                            let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            (c % 2) == 1
-                        } else {
-                            false
-                        }
-                    },
-                    _ => false,
-                }
+                    } else {
+                        false
+                    }
+                },
+                _ => false,
             }
         };
         #[cfg(not(target_os = "android"))]
@@ -3659,30 +3666,6 @@ impl Game {
         }
     }
 
-    /// Rebuilds the spatial hash grid from all currently active instances.
-    pub fn rebuild_spatial_hash(&mut self) {
-        self.spatial_hash.clear();
-        let mut iter = self.room.instance_list.iter_by_drawing();
-        while let Some(handle) = iter.next(&self.room.instance_list) {
-            let inst = self.room.instance_list.get(handle);
-            if inst.is_active() {
-                let sprite = self
-                    .assets
-                    .sprites
-                    .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
-                    .map(|x| x.as_ref());
-                inst.update_bbox(sprite);
-                self.spatial_hash.insert(
-                    handle,
-                    inst.bbox_left.get(),
-                    inst.bbox_top.get(),
-                    inst.bbox_right.get(),
-                    inst.bbox_bottom.get(),
-                );
-            }
-        }
-    }
-
     // Checks if an instance is colliding with any solid, returning the solid if it is, otherwise None
     pub fn check_collision_solid(&self, inst: usize) -> Option<usize> {
         let mut iter = self.room.instance_list.iter_by_drawing();
@@ -3707,31 +3690,6 @@ impl Game {
             }
         }
         None
-    }
-
-    /// Finds a candidate instance near the specified box. Uses spatial_hash when available, falling back to find_instance_with.
-    pub fn find_instance_near(&self, object_id: i32, x1: i32, y1: i32, x2: i32, y2: i32, pred: impl Fn(usize) -> bool) -> Option<usize> {
-        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
-            let mut found = None;
-            self.spatial_hash.query_candidates(x1, y1, x2, y2, |handle| {
-                let matches_obj = match object_id {
-                    gml::ALL => true,
-                    _ if object_id < 0 => false,
-                    target_obj if target_obj < 100000 => {
-                        let inst = self.room.instance_list.get(handle);
-                        inst.object_index.get() == target_obj || inst.parents.borrow().contains(&target_obj)
-                    },
-                    instance_id => self.room.instance_list.get(handle).id.get() == instance_id,
-                };
-                if matches_obj && self.room.instance_list.get(handle).is_active() && pred(handle) {
-                    found = Some(handle);
-                    return false;
-                }
-                true
-            });
-            return found;
-        }
-        self.find_instance_with(object_id, pred)
     }
 
     /// Finds an instance that matches the predicate.

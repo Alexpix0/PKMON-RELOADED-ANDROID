@@ -62,13 +62,13 @@ impl SpatialHashGrid {
             return;
         }
 
-        let min_cx = ((x1.max(0)) / CELL_SIZE) as usize;
-        let max_cx = ((x2.max(0)) / CELL_SIZE) as usize;
-        let min_cy = ((y1.max(0)) / CELL_SIZE) as usize;
-        let max_cy = ((y2.max(0)) / CELL_SIZE) as usize;
+        let min_cx = (((x1.max(0)) / CELL_SIZE) as usize).min(GRID_COLS - 1);
+        let max_cx = (((x2.max(0)) / CELL_SIZE) as usize).min(GRID_COLS - 1);
+        let min_cy = (((y1.max(0)) / CELL_SIZE) as usize).min(GRID_ROWS - 1);
+        let max_cy = (((y2.max(0)) / CELL_SIZE) as usize).min(GRID_ROWS - 1);
 
-        let max_cx = max_cx.min(min_cx + 2).min(GRID_COLS - 1);
-        let max_cy = max_cy.min(min_cy + 2).min(GRID_ROWS - 1);
+        let max_cx = max_cx.max(min_cx).min(min_cx + 2);
+        let max_cy = max_cy.max(min_cy).min(min_cy + 2);
 
         for cy in min_cy..=max_cy {
             for cx in min_cx..=max_cx {
@@ -93,13 +93,13 @@ impl SpatialHashGrid {
     where
         F: FnMut(usize) -> bool, // return false to stop early
     {
-        let min_cx = ((x1.max(0)) / CELL_SIZE) as usize;
-        let max_cx = ((x2.max(0)) / CELL_SIZE) as usize;
-        let min_cy = ((y1.max(0)) / CELL_SIZE) as usize;
-        let max_cy = ((y2.max(0)) / CELL_SIZE) as usize;
+        let min_cx = (((x1.max(0)) / CELL_SIZE) as usize).min(GRID_COLS - 1);
+        let max_cx = (((x2.max(0)) / CELL_SIZE) as usize).min(GRID_COLS - 1);
+        let min_cy = (((y1.max(0)) / CELL_SIZE) as usize).min(GRID_ROWS - 1);
+        let max_cy = (((y2.max(0)) / CELL_SIZE) as usize).min(GRID_ROWS - 1);
 
-        let max_cx = max_cx.min(min_cx + 2).min(GRID_COLS - 1);
-        let max_cy = max_cy.min(min_cy + 2).min(GRID_ROWS - 1);
+        let max_cx = max_cx.max(min_cx).min(min_cx + 2);
+        let max_cy = max_cy.max(min_cy).min(min_cy + 2);
 
         // Stack buffer for deduplication (handles up to 128 candidates with 0 heap alloc)
         let mut seen = [0usize; 128];
