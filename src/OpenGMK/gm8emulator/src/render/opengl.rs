@@ -4438,8 +4438,8 @@ impl RendererTrait for RendererImpl {
             }
 
             // Reset target surface to avoid black screen if GM8 script didn't call surface_reset_target
-            if self.bound_fbo != 0 {
-                self.bound_fbo = 0;
+            if self.current_draw_fbo.is_some() {
+                self.current_draw_fbo = None;
                 self.gl.BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer.fbo);
             }
 

@@ -85,6 +85,15 @@ impl RenderConfig {
         self.fallback_active.store(fallback, Ordering::Relaxed);
         self.generation.fetch_add(1, Ordering::Release);
     }
+
+    #[inline]
+    pub fn filter_gl_enum(&self, interpolate_pixels: bool) -> gl::types::GLenum {
+        match self.filter_mode.load(Ordering::Relaxed) {
+            1 | 2 | 3 => gl::LINEAR,
+            0 => if interpolate_pixels { gl::LINEAR } else { gl::NEAREST },
+            _ => gl::NEAREST,
+        }
+    }
 }
 
 pub static CONFIG: RenderConfig = RenderConfig::new();

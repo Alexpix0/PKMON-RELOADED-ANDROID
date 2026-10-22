@@ -132,7 +132,7 @@ const IDX_MASK: u8 = 0b0011;
 
 /// Truly lock-free, zero-mutex triple-buffered snapshot queue.
 pub struct SpscSnapshotQueue {
-    slots: [std::cell::UnsafeCell<RenderStateSnapshot>; 3],
+    slots: [std::cell::UnsafeCell<Option<RenderStateSnapshot>>; 3],
     middle: std::sync::atomic::AtomicU8,
     back_idx: std::sync::atomic::AtomicU8,
     front_idx: std::sync::atomic::AtomicU8,
@@ -142,27 +142,9 @@ unsafe impl Sync for SpscSnapshotQueue {}
 
 impl SpscSnapshotQueue {
     pub const fn new() -> Self {
+        const INIT: std::cell::UnsafeCell<Option<RenderStateSnapshot>> = std::cell::UnsafeCell::new(None);
         Self {
-            slots: [
-                std::cell::UnsafeCell::new(RenderStateSnapshot {
-                    timestamp: Instant::now(),
-                    view_x: 0.0,
-                    view_y: 0.0,
-                    entities: Vec::new(),
-                }),
-                std::cell::UnsafeCell::new(RenderStateSnapshot {
-                    timestamp: Instant::now(),
-                    view_x: 0.0,
-                    view_y: 0.0,
-                    entities: Vec::new(),
-                }),
-                std::cell::UnsafeCell::new(RenderStateSnapshot {
-                    timestamp: Instant::now(),
-                    view_x: 0.0,
-                    view_y: 0.0,
-                    entities: Vec::new(),
-                }),
-            ],
+            slots: [INIT, INIT, INIT],
             middle: std::sync::atomic::AtomicU8::new(1),
             back_idx: std::sync::atomic::AtomicU8::new(0),
             front_idx: std::sync::atomic::AtomicU8::new(2),
@@ -173,7 +155,7 @@ impl SpscSnapshotQueue {
     pub fn publish(&self, snapshot: RenderStateSnapshot) {
         let back = self.back_idx.load(Ordering::Relaxed);
         unsafe {
-            *self.slots[back as usize].get() = snapshot;
+            *self.slots[back as usize].get() = Some(snapshot);
         }
         let prev = self.middle.swap(back | DIRTY_BIT, Ordering::AcqRel);
         self.back_idx.store(prev & IDX_MASK, Ordering::Release);
@@ -189,7 +171,7 @@ impl SpscSnapshotQueue {
         let new_front = prev & IDX_MASK;
         self.front_idx.store(new_front, Ordering::Release);
         unsafe {
-            Some((*self.slots[new_front as usize].get()).clone())
+            (*self.slots[new_front as usize].get()).clone()
         }
     }
 }
