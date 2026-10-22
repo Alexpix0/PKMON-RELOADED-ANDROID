@@ -148,7 +148,9 @@ class GameActivity : NativeActivity() {
     private fun installImeAnchor() {
         val anchor = object : EditText(this) {
             override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-                outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                outAttrs.inputType = InputType.TYPE_CLASS_TEXT or 
+                    InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or 
+                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 // No fullscreen/extract editor and no suggestion strip: in landscape the system
                 // would otherwise cover the game with its own text box.
                 outAttrs.imeOptions = EditorInfo.IME_ACTION_DONE or

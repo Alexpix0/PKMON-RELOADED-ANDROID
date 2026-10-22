@@ -141,17 +141,17 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: "t", key: Key::T, shape: Shape::Circle { cx: 0.588, cy: 0.145, r: 0.022 }, label: Label::Text("T"), contexts: WORLD | SAFARI },
     Control { name: "l", key: Key::L, shape: Shape::Circle { cx: 0.660, cy: 0.145, r: 0.022 }, label: Label::Text("L"), contexts: WORLD | SAFARI },
     Control { name: "p", key: Key::P, shape: Shape::Circle { cx: 0.732, cy: 0.145, r: 0.022 }, label: Label::Text("P"), contexts: WORLD | SAFARI },
-    Control { name: "z", key: Key::Z, shape: Shape::Circle { cx: 0.865, cy: 0.851, r: 0.033 }, label: Label::Text("Z"), contexts: WORLD | BATTLE | CHOICE | MENU_NAV },
-    Control { name: "x", key: Key::X, shape: Shape::Circle { cx: 0.933, cy: 0.700, r: 0.033 }, label: Label::Text("X"), contexts: WORLD | BATTLE | CHOICE | MENU_NAV },
-    Control { name: "c", key: Key::C, shape: Shape::Circle { cx: 0.797, cy: 0.700, r: 0.033 }, label: Label::Text("C"), contexts: WORLD | BATTLE },
+    Control { name: "z", key: Key::Z, shape: Shape::Circle { cx: 0.865, cy: 0.851, r: 0.033 }, label: Label::Text("Z"), contexts: WORLD | BATTLE | CHOICE | MENU_NAV | MENU },
+    Control { name: "x", key: Key::X, shape: Shape::Circle { cx: 0.933, cy: 0.700, r: 0.033 }, label: Label::Text("X"), contexts: WORLD | BATTLE | CHOICE | MENU_NAV | MENU },
+    Control { name: "c", key: Key::C, shape: Shape::Circle { cx: 0.797, cy: 0.700, r: 0.033 }, label: Label::Text("C"), contexts: WORLD | BATTLE | MENU },
     Control { name: "v", key: Key::V, shape: Shape::Circle { cx: 0.865, cy: 0.549, r: 0.033 }, label: Label::Text("V"), contexts: WORLD | BATTLE },
     Control { name: "b", key: Key::B, shape: Shape::Circle { cx: 0.712, cy: 0.840, r: 0.026 }, label: Label::Text("B"), contexts: BATTLE | SAFARI },
     Control { name: "s", key: Key::S, shape: Shape::Circle { cx: 0.712, cy: 0.700, r: 0.026 }, label: Label::Text("S"), contexts: BATTLE },
     Control { name: PARTY_NAME, key: Key::Alpha1, shape: Shape::Circle { cx: 0.300, cy: 0.760, r: 0.038 }, label: Label::Text("SEL"), contexts: BATTLE },
-    Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | BATTLE | SAFARI | MENU_NAV },
+    Control { name: "a", key: Key::A, shape: Shape::Circle { cx: 0.640, cy: 0.900, r: 0.024 }, label: Label::Text("A"), contexts: WORLD | BATTLE | SAFARI | MENU_NAV | MENU },
     Control { name: "n", key: Key::N, shape: Shape::Circle { cx: 0.640, cy: 0.760, r: 0.024 }, label: Label::Text("N"), contexts: WORLD | SAFARI },
-    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI | MENU_NAV },
-    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI | MENU_NAV },
+    Control { name: "return", key: Key::Return, shape: Shape::Circle { cx: 0.500, cy: 0.945, r: 0.032 }, label: Label::Text("OK"), contexts: WORLD | SAFARI | MENU_NAV | MENU },
+    Control { name: "escape", key: Key::Escape, shape: Shape::Circle { cx: 0.400, cy: 0.905, r: 0.026 }, label: Label::Text("ESC"), contexts: WORLD | SAFARI | MENU_NAV | MENU },
     Control { name: "dialogo", key: Key::Z, shape: Shape::Circle { cx: 0.940, cy: 0.880, r: 0.024 }, label: Label::Text("Z"), contexts: DIALOG },
     Control { name: LEFT_ARROW_NAME, key: Key::LeftArrow, shape: Shape::Circle { cx: LEFT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Left), contexts: CHARACTER },
     Control { name: RIGHT_ARROW_NAME, key: Key::RightArrow, shape: Shape::Circle { cx: RIGHT_ARROW_CX, cy: ARROW_CY, r: ARROW_R }, label: Label::Arrow(Dir::Right), contexts: CHARACTER },
@@ -162,6 +162,12 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: "rmb", key: Key::LeftAlt, shape: Shape::Circle { cx: 0.920, cy: 0.350, r: 0.028 }, label: Label::Text("RMB"), contexts: 0 },
     Control { name: "qty_plus", key: Key::UpArrow, shape: Shape::Circle { cx: 0.850, cy: 0.260, r: 0.022 }, label: Label::Text("+"), contexts: 0 },
     Control { name: "qty_minus", key: Key::DownArrow, shape: Shape::Circle { cx: 0.920, cy: 0.260, r: 0.022 }, label: Label::Text("-"), contexts: 0 },
+    Control { name: "rotate_l", key: Key::Q, shape: Shape::Circle { cx: 0.730, cy: 0.400, r: 0.028 }, label: Label::Text("⟲"), contexts: WORLD | MENU_NAV },
+    Control { name: "rotate_r", key: Key::E, shape: Shape::Circle { cx: 0.810, cy: 0.400, r: 0.028 }, label: Label::Text("⟳"), contexts: WORLD | MENU_NAV },
+    Control { name: "h", key: Key::H, shape: Shape::Circle { cx: 0.050, cy: 0.145, r: 0.022 }, label: Label::Text("H"), contexts: WORLD },
+    Control { name: "f", key: Key::F, shape: Shape::Circle { cx: 0.120, cy: 0.145, r: 0.022 }, label: Label::Text("F"), contexts: WORLD },
+    Control { name: "f1", key: Key::F1, shape: Shape::Circle { cx: 0.190, cy: 0.145, r: 0.022 }, label: Label::Text("F1"), contexts: WORLD },
+    Control { name: "f5", key: Key::F5, shape: Shape::Circle { cx: 0.260, cy: 0.145, r: 0.022 }, label: Label::Text("F5"), contexts: WORLD },
 ];
 
 pub const CLASSIC_CONTROLS: &[Control] = MASTER_CONTROLS;
@@ -1234,6 +1240,17 @@ pub fn stale_pressed() -> Vec<usize> {
     (0..controls().len()).filter(|&index| is_pressed(index) && !is_active(index)).collect()
 }
 
+/// Forcibly releases all held virtual touch controls and stick directions.
+/// Called upon room changes, faint transitions, or state switches to prevent sticky inputs.
+pub fn flush_held_inputs() {
+    let pressed_mask = PRESSED.swap(0, Ordering::Relaxed);
+    for index in 0..controls().len() {
+        if pressed_mask & (1 << index) != 0 {
+            crate::touch_appearance::set_pressed(index, false);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Movement (joystick or D-pad). It presses the arrow keys depending on which way it is pushed.
 
@@ -1300,15 +1317,24 @@ pub fn movement_dirs(nx: f32, ny: f32, ww: f32, wh: f32) -> [bool; 4] {
     // The D-pad is four discrete zones, not an analog stick: the strongest arm wins and the centre
     // does nothing. That is what makes it feel (and light up) like a real cross.
     if move_mode() == MoveMode::Dpad {
-        const DPAD_DEAD: f32 = 0.26;
-        if dx.abs().max(dy.abs()) < DPAD_DEAD {
-            return [false; 4]
+        const DPAD_DEAD: f32 = 0.22;
+        const DIAG_THRESHOLD: f32 = 0.4142; // Umbral trigonométrico tan(22.5°) para diagonales de 45°
+
+        let ax = dx.abs();
+        let ay = dy.abs();
+
+        if ax.max(ay) < DPAD_DEAD {
+            return [false; 4];
         }
-        return if dx.abs() > dy.abs() {
-            [false, false, dx < 0.0, dx > 0.0]
-        } else {
-            [dy < 0.0, dy > 0.0, false, false]
-        }
+
+        let is_diagonal = (ax.min(ay) / ax.max(ay)) > DIAG_THRESHOLD;
+
+        let up = dy < 0.0 && (ay > ax || is_diagonal);
+        let down = dy > 0.0 && (ay > ax || is_diagonal);
+        let left = dx < 0.0 && (ax > ay || is_diagonal);
+        let right = dx > 0.0 && (ax > ay || is_diagonal);
+
+        return [up, down, left, right];
     }
     stick_dirs(dx, dy)
 }

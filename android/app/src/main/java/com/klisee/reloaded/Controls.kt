@@ -39,7 +39,13 @@ enum class ControlAction(val key: String, val defaultCode: Int, val label: Strin
     UP("UP", 19, "Mover Arriba (↑)"),
     DOWN("DOWN", 20, "Mover Abajo (↓)"),
     LEFT("LEFT", 21, "Mover Izquierda (←)"),
-    RIGHT("RIGHT", 22, "Mover Derecha (→)");
+    RIGHT("RIGHT", 22, "Mover Derecha (→)"),
+    ROTATE_L("Q", KeyEvent.KEYCODE_Q, "Girar Pieza Izquierda (Q / L)"),
+    ROTATE_R("E", KeyEvent.KEYCODE_E, "Girar Pieza Derecha (E / R)"),
+    H("H", KeyEvent.KEYCODE_H, "Mostrar Hora (H)"),
+    F("F", KeyEvent.KEYCODE_F, "Flauta (F)"),
+    F1("F1", KeyEvent.KEYCODE_F1, "Ayuda / Opciones (F1)"),
+    F5("F5", KeyEvent.KEYCODE_F5, "Guardado Rápido (F5)");
 }
 
 /** What the key does in the game, for the ones that are known. */

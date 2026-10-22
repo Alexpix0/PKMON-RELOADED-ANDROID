@@ -200,6 +200,10 @@ extern "C" fn data_callback(
     // SAFETY: AAudio guarantees `audio_data` points to `num_frames * channels` f32 samples.
     let buffer = unsafe { std::slice::from_raw_parts_mut(audio_data as *mut Sample, len) };
 
+    if crate::android_main::SHUTDOWN.load(Ordering::Relaxed) {
+        return AAUDIO_CALLBACK_RESULT_STOP;
+    }
+
     if STREAM_PAUSED.load(Ordering::Relaxed) {
         buffer.fill(0.0);
         return AAUDIO_CALLBACK_RESULT_CONTINUE;

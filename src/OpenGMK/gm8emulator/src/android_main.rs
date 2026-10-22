@@ -16,6 +16,9 @@ use android_activity::{
 
 use ramen::{input::Key, platform::android};
 
+pub static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static WORKER_HANDLE: std::sync::Mutex<Option<std::thread::JoinHandle<()>>> = std::sync::Mutex::new(None);
+
 /// `AKEYCODE_*`, from <android/keycodes.h>. Letters are contiguous from `A`.
 type AKeyCode = i32;
 const AKEYCODE_A: AKeyCode = 29;
@@ -1932,7 +1935,8 @@ pub fn android_entry(app: AndroidApp) {
     let game_over = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let game_over_thread = game_over.clone();
 
-    std::thread::spawn(move || {
+    SHUTDOWN.store(false, std::sync::atomic::Ordering::SeqCst);
+    let handle = std::thread::spawn(move || {
         // The activity asks for landscape in the manifest, so the window is normally already the right
         // way round; the rotate still takes a moment on some phones. The engine lays its screens out
         // from the size of the window it is given, and whatever it gets here is what the whole session
@@ -1974,6 +1978,9 @@ pub fn android_entry(app: AndroidApp) {
         }
         game_over_thread.store(true, std::sync::atomic::Ordering::SeqCst);
     });
+    if let Ok(mut worker_slot) = WORKER_HANDLE.lock() {
+        *worker_slot = Some(handle);
+    }
 
     let mut destroying = false;
     let mut ime_check = Instant::now();
@@ -2074,6 +2081,21 @@ pub fn android_entry(app: AndroidApp) {
             PollEvent::Timeout => {},
             _ => {},
         });
+    }
+
+    if !game_over.load(std::sync::atomic::Ordering::SeqCst) {
+        SHUTDOWN.store(true, std::sync::atomic::Ordering::SeqCst);
+        android::push_input(ramen::platform::android::InputEvent::CloseRequest);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        while !game_over.load(std::sync::atomic::Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        if !game_over.load(std::sync::atomic::Ordering::SeqCst) {
+            eprintln!("[LIFECYCLE] Worker thread no respondió a SHUTDOWN tras 2s. Terminando proceso de forma segura.");
+            std::process::exit(0);
+        }
     }
 
     let last = PUBLISHED_WINDOW.swap(std::ptr::null_mut(), std::sync::atomic::Ordering::Relaxed);

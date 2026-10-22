@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pokemon Reloaded EX</string>
+    <string name="play">Play</string>
+    <string name="import_game">Import game</string>
+    <string name="log">Log</string>
+    <string name="about">About</string>
+    <string name="profile_world_title">Profile: Exploration</string>
+    <string name="profile_world_desc">Controls for walking around the world.</string>
+    <string name="profile_battle_title">Profile: Battle</string>
+    <string name="profile_battle_desc">Shared profile for wild Pokémon and trainer battles.</string>
+    <string name="profile_dialog_title">Profile: Dialogues</string>
+    <string name="profile_dialog_desc">Dialogue controls; by default, the button to advance.</string>
+    <string name="profile_character_title">Profile: Character</string>
+    <string name="profile_character_desc">Character selection.</string>
+    <string name="profile_choice_title">Profile: Options</string>
+    <string name="profile_choice_desc">Joystick and Z/X to answer choice lists.</string>
+    <string name="profile_safari_title">Profile: Safari</string>
+    <string name="profile_safari_desc">Catching controls in Safari Zone.</string>
+    <string name="profile_menu_nav_title">Profile: Navigation</string>
+    <string name="profile_menu_nav_desc">Bag and lists: joystick, X and touch gestures.</string>
+    <string name="profile_menu_title">Profile: Menus and box</string>
+    <string name="profile_menu_desc">Hybrid mode: direct touch and configurable overlay buttons.</string>
+    <string name="dpad_label">D-pad</string>
+    <string name="style_modern">Modern</string>
+    <string name="style_classic">Classic</string>
+    <string name="size_format">Size: %1$d%%</string>
+    <string name="editor_tip_banner">💡 You can add, reposition, resize, and hide any button in this profile. Tap any element to customize it or use \'Add button\'.</string>
+</resources>

@@ -284,8 +284,9 @@ impl InstanceList {
             let left = self.chunks.get(idx1).unwrap();
             let right = self.chunks.get(idx2).unwrap();
 
-            // Draw order is sorted by depth (higher is lowest...)
+            // Draw order is sorted by depth (higher is lowest...) deterministically disambiguated by ID
             right.depth.get().cmp_nan_first(&left.depth.get())
+                .then_with(|| left.id.get().cmp(&right.id.get()))
         })
     }
 

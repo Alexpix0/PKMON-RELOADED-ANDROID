@@ -198,6 +198,19 @@ fun TouchEditorScreen(prefs: Preferences, filesDir: File, onExit: () -> Unit) {
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Personalizar controles", style = MaterialTheme.typography.titleMedium)
 
+                        // Guía de uso rápido del editor (Issue #104)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Text(
+                                text = androidx.compose.ui.res.stringResource(com.klisee.reloaded.R.string.editor_tip_banner),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+
                         // Botón Agregar nuevo botón (habilitado en todos los perfiles, incluido Menús y caja)
                         Button(
                             onClick = { keyPickerMode = "add" },

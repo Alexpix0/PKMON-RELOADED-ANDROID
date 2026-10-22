@@ -4,4 +4,25 @@
     <string name="import_game">Importar juego</string>
     <string name="log">Registro</string>
     <string name="about">Acerca de</string>
+    <string name="profile_world_title">Perfil: Exploración</string>
+    <string name="profile_world_desc">Controles para caminar por el mundo.</string>
+    <string name="profile_battle_title">Perfil: Combate</string>
+    <string name="profile_battle_desc">Perfil compartido por Pokémon salvajes y entrenadores.</string>
+    <string name="profile_dialog_title">Perfil: Diálogos</string>
+    <string name="profile_dialog_desc">Controles de los diálogos; por defecto, el botón para avanzar.</string>
+    <string name="profile_character_title">Perfil: Personaje</string>
+    <string name="profile_character_desc">Selección de personaje.</string>
+    <string name="profile_choice_title">Perfil: Opciones</string>
+    <string name="profile_choice_desc">Joystick y Z/X para responder las listas de opciones.</string>
+    <string name="profile_safari_title">Perfil: Safari</string>
+    <string name="profile_safari_desc">Controles de captura en la Zona Safari.</string>
+    <string name="profile_menu_nav_title">Perfil: Navegación</string>
+    <string name="profile_menu_nav_desc">Mochila y listas: joystick, X y gestos táctiles.</string>
+    <string name="profile_menu_title">Perfil: Menús y caja</string>
+    <string name="profile_menu_desc">Modo híbrido: toque directo y botones superpuestos configurables.</string>
+    <string name="dpad_label">Cruceta</string>
+    <string name="style_modern">Moderno</string>
+    <string name="style_classic">Clásico</string>
+    <string name="size_format">Tamaño: %1$d%%</string>
+    <string name="editor_tip_banner">💡 Puedes añadir, mover, cambiar tamaño y ocultar cualquier botón en este perfil. Toca cualquier elemento para personalizarlo o usa \'Añadir botón\'.</string>
 </resources>
