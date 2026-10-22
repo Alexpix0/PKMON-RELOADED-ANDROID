@@ -161,7 +161,6 @@ fun SettingsScreen(
     var lighting2d by remember { mutableStateOf(prefs.lighting2d) }
     var adaptiveLtpo by remember { mutableStateOf(prefs.adaptiveLtpo) }
     var colorblindMode by remember { mutableStateOf(prefs.colorblindMode) }
-    var jitArm64 by remember { mutableStateOf(prefs.jitArm64) }
     var bigLittleAffinity by remember { mutableStateOf(prefs.bigLittleAffinity) }
     var megaAtlas by remember { mutableStateOf(prefs.megaAtlas) }
     var activeStaticPartition by remember { mutableStateOf(prefs.activeStaticPartition) }
@@ -667,7 +666,9 @@ fun SettingsScreen(
                             "video" -> "Vídeo y Pantalla"
                             "audio" -> "Audio y Sonido"
                             "controls" -> "Mandos y Controles"
+                            "gameplay" -> "Jugabilidad y Asistencias"
                             "performance" -> "Rendimiento y Motor"
+                            "appearance" -> "Personalización"
                             "security" -> "Seguridad y Partidas"
                             "about" -> "Acerca de y Ayuda"
                             else -> "Ajustes"
@@ -709,7 +710,7 @@ fun SettingsScreen(
                             icon = Icons.Filled.Fullscreen,
                             title = "Vídeo y Pantalla",
                             subtitle = "Backend Vulkan/OpenGL ES, resolución, FSR, filtros y bezels",
-                            items = 6,
+                            items = 9,
                             index = 0,
                             onClick = { currentSubScreen = "video" },
                         )
@@ -717,7 +718,7 @@ fun SettingsScreen(
                             icon = Icons.Filled.Spa,
                             title = "Audio y Sonido",
                             subtitle = "Volúmenes BGM/SFX, audio 3D binaural HRTF y WSOLA",
-                            items = 6,
+                            items = 9,
                             index = 1,
                             onClick = { currentSubScreen = "audio" },
                         )
@@ -725,40 +726,56 @@ fun SettingsScreen(
                             icon = Icons.Filled.SportsEsports,
                             title = "Mandos y Controles",
                             subtitle = "Controles táctiles, D-Pad dinámico, rueda radial y gamepads",
-                            items = 6,
+                            items = 9,
                             index = 2,
                             onClick = { currentSubScreen = "controls" },
                         )
                         NavRow(
+                            icon = Icons.Filled.AutoAwesome,
+                            title = "Jugabilidad y Asistencias",
+                            subtitle = "Auto-run, avance de diálogos, shiny beacon, reloj de bayas y QoL",
+                            items = 9,
+                            index = 3,
+                            onClick = { currentSubScreen = "gameplay" },
+                        )
+                        NavRow(
                             icon = Icons.Filled.Speed,
                             title = "Rendimiento y Motor",
-                            subtitle = "Compilador JIT ARM64 Tier-2, afinidad Big.LITTLE y DRS",
-                            items = 6,
-                            index = 3,
+                            subtitle = "Selector 60/120 FPS, afinidad Big.LITTLE de CPU, TBDR y DRS",
+                            items = 9,
+                            index = 4,
                             onClick = { currentSubScreen = "performance" },
+                        )
+                        NavRow(
+                            icon = Icons.Filled.Palette,
+                            title = "Personalización",
+                            subtitle = "Temas (Claro/Oscuro/AMOLED), estilos Glassmorphism y PiP",
+                            items = 9,
+                            index = 5,
+                            onClick = { currentSubScreen = "appearance" },
                         )
                         NavRow(
                             icon = Icons.Filled.Shield,
                             title = "Seguridad y Partidas",
                             subtitle = "Scoped Storage Shield, snapshots, diagnóstico y mods",
-                            items = 6,
-                            index = 4,
+                            items = 9,
+                            index = 6,
                             onClick = { currentSubScreen = "security" },
                         )
                         NavRow(
                             icon = Icons.Filled.Info,
                             title = "Acerca de y Ayuda",
                             subtitle = "Versión de la app, logs técnicos y comprobador de actualizaciones",
-                            items = 7,
-                            index = 5,
+                            items = 9,
+                            index = 7,
                             onClick = { currentSubScreen = "about" },
                         )
                         NavRow(
                             icon = Icons.Filled.Link,
                             title = "Discord",
                             subtitle = if (prefs.discordEnabled) "Rich Presence activado" else "Conecta tu cuenta y muestra lo que juegas",
-                            items = 7,
-                            index = 6,
+                            items = 9,
+                            index = 8,
                             onClick = onDiscord,
                         )
                     }
@@ -828,7 +845,7 @@ fun SettingsScreen(
                                         title = "Perfil Combate Extremo Mali/Infinix (1 Toque)",
                                         subtitle = "Fija 60 FPS estables en combates: escala 0.85x con nitidez CAS al 60%, FPK Early-Z activo y 40 partículas",
                                         checked = extremeCombat,
-                                        items = 15,
+                                        items = 11,
                                         index = 0,
                                         onCheckedChange = {
                                             extremeCombat = it
@@ -850,7 +867,7 @@ fun SettingsScreen(
                                         title = "AMD FSR 1.0: Desactivado",
                                         subtitle = "Renderizado a resolución nativa estándar sin upscaling espacial",
                                         selected = fsrMode == 0,
-                                        items = 15,
+                                        items = 11,
                                         index = 1,
                                         onSelect = {
                                             fsrMode = 0
@@ -863,7 +880,7 @@ fun SettingsScreen(
                                         title = "AMD FSR 1.0: Ultra Calidad (0.77x)",
                                         subtitle = "Edge-Adaptive Spatial Upsampling (EASU) + Robust Contrast Adaptive Sharpening (RCAS)",
                                         selected = fsrMode == 1,
-                                        items = 15,
+                                        items = 11,
                                         index = 2,
                                         onSelect = {
                                             fsrMode = 1
@@ -880,7 +897,7 @@ fun SettingsScreen(
                                         title = "AMD FSR 1.0: Equilibrado (0.67x)",
                                         subtitle = "Balance ideal entre nitidez visual reconstruida y ganancia de fotogramas",
                                         selected = fsrMode == 2,
-                                        items = 15,
+                                        items = 11,
                                         index = 3,
                                         onSelect = {
                                             fsrMode = 2
@@ -897,7 +914,7 @@ fun SettingsScreen(
                                         title = "AMD FSR 1.0: Máximo Rendimiento (0.50x)",
                                         subtitle = "Reconstruye la imagen desde la mitad de resolución para máxima tasa de cuadros",
                                         selected = fsrMode == 3,
-                                        items = 15,
+                                        items = 11,
                                         index = 4,
                                         onSelect = {
                                             fsrMode = 3
@@ -914,7 +931,7 @@ fun SettingsScreen(
                                         title = "Iluminación 2D Dinámica por Ataques",
                                         subtitle = "Ataques como Lanzallamas, Rayo o Bola Sombra emiten luces puntuales y sombras en tiempo real",
                                         checked = lighting2d,
-                                        items = 15,
+                                        items = 11,
                                         index = 5,
                                         onCheckedChange = {
                                             lighting2d = it
@@ -923,72 +940,12 @@ fun SettingsScreen(
                                         },
                                     )
                                     ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Filtro Gráfico: Original (Sharp Bilinear)",
-                                        subtitle = "Aspecto fiel y nítido original de Pokémon Reloaded",
-                                        selected = videoFilter == "sharp" && !xbrzEnabled,
-                                        items = 15,
-                                        index = 6,
-                                        onSelect = {
-                                            videoFilter = "sharp"
-                                            prefs.videoFilter = "sharp"
-                                            xbrzEnabled = false
-                                            prefs.xbrzEnabled = false
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Filtro Gráfico: Super-Resolución xBRZ 4x HD",
-                                        subtitle = "Vectorización neuronal en tiempo real de curvas de pixel-art para pantallas 1080p",
-                                        selected = xbrzEnabled && videoFilter == "xbrz_4x",
-                                        items = 15,
-                                        index = 7,
-                                        onSelect = {
-                                            videoFilter = "xbrz_4x"
-                                            prefs.videoFilter = "xbrz_4x"
-                                            xbrzEnabled = true
-                                            prefs.xbrzEnabled = true
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Filtro Gráfico: Super-Resolución xBRZ 6x HD",
-                                        subtitle = "Máxima definición de contornos pixel-art para pantallas 2K/AMOLED",
-                                        selected = xbrzEnabled && videoFilter == "xbrz_6x",
-                                        items = 15,
-                                        index = 8,
-                                        onSelect = {
-                                            videoFilter = "xbrz_6x"
-                                            prefs.videoFilter = "xbrz_6x"
-                                            xbrzEnabled = true
-                                            prefs.xbrzEnabled = true
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Filtro Gráfico: AMD FidelityFX FSR Shader",
-                                        subtitle = "Aplica pase de nitidez RCAS adaptativo al contraste en la composición final",
-                                        selected = videoFilter == "fsr",
-                                        items = 15,
-                                        index = 9,
-                                        onSelect = {
-                                            videoFilter = "fsr"
-                                            prefs.videoFilter = "fsr"
-                                            xbrzEnabled = false
-                                            prefs.xbrzEnabled = false
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
                                         icon = Icons.Filled.Tune,
                                         title = "Accesibilidad Cromática: Desactivado",
                                         subtitle = "Gama de colores RGB natural sin transformaciones",
                                         selected = colorblindMode == 0,
-                                        items = 15,
-                                        index = 10,
+                                        items = 11,
+                                        index = 6,
                                         onSelect = {
                                             colorblindMode = 0
                                             prefs.colorblindMode = 0
@@ -1000,8 +957,8 @@ fun SettingsScreen(
                                         title = "Accesibilidad Cromática: Protanopía",
                                         subtitle = "Matriz de corrección GPU para deficiencia en conos rojos",
                                         selected = colorblindMode == 1,
-                                        items = 15,
-                                        index = 11,
+                                        items = 11,
+                                        index = 7,
                                         onSelect = {
                                             colorblindMode = 1
                                             prefs.colorblindMode = 1
@@ -1013,8 +970,8 @@ fun SettingsScreen(
                                         title = "Accesibilidad Cromática: Deuteranopía",
                                         subtitle = "Matriz de corrección GPU para deficiencia en conos verdes",
                                         selected = colorblindMode == 2,
-                                        items = 15,
-                                        index = 12,
+                                        items = 11,
+                                        index = 8,
                                         onSelect = {
                                             colorblindMode = 2
                                             prefs.colorblindMode = 2
@@ -1026,8 +983,8 @@ fun SettingsScreen(
                                         title = "Accesibilidad Cromática: Tritanopía",
                                         subtitle = "Matriz de corrección GPU para deficiencia en conos azules",
                                         selected = colorblindMode == 3,
-                                        items = 15,
-                                        index = 13,
+                                        items = 11,
+                                        index = 9,
                                         onSelect = {
                                             colorblindMode = 3
                                             prefs.colorblindMode = 3
@@ -1039,8 +996,8 @@ fun SettingsScreen(
                                         title = "Tasa de Refresco Adaptativa LTPO / VRR",
                                         subtitle = "Modula la pantalla entre 10 Hz/30 Hz en diálogos y 60 Hz/120 Hz en movimiento con Surface.setFrameRate",
                                         checked = adaptiveLtpo,
-                                        items = 15,
-                                        index = 14,
+                                        items = 11,
+                                        index = 10,
                                         onCheckedChange = {
                                             adaptiveLtpo = it
                                             prefs.adaptiveLtpo = it
@@ -1188,13 +1145,15 @@ fun SettingsScreen(
                                     ChoiceRow(
                                         icon = Icons.Filled.Palette,
                                         title = "Sharp Bilinear (Recomendado)",
-                                        subtitle = "Suavizado limpio que evita deformaciones de píxeles en pantallas panorámicas",
-                                        selected = videoFilter == "sharp",
-                                        items = 4,
+                                        subtitle = "Suavizado limpio original de Pokémon Reloaded que evita deformaciones",
+                                        selected = videoFilter == "sharp" && !xbrzEnabled,
+                                        items = 7,
                                         index = 0,
                                         onSelect = {
                                             videoFilter = "sharp"
                                             prefs.videoFilter = "sharp"
+                                            xbrzEnabled = false
+                                            prefs.xbrzEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1202,12 +1161,59 @@ fun SettingsScreen(
                                         icon = Icons.Filled.Palette,
                                         title = "Pixel-Perfect (Nearest Neighbor)",
                                         subtitle = "Píxeles retro 100% nítidos sin filtrado",
-                                        selected = videoFilter == "nearest",
-                                        items = 4,
+                                        selected = videoFilter == "nearest" && !xbrzEnabled,
+                                        items = 7,
                                         index = 1,
                                         onSelect = {
                                             videoFilter = "nearest"
                                             prefs.videoFilter = "nearest"
+                                            xbrzEnabled = false
+                                            prefs.xbrzEnabled = false
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    ChoiceRow(
+                                        icon = Icons.Filled.Palette,
+                                        title = "Super-Resolución xBRZ 4x HD",
+                                        subtitle = "Vectorización neuronal en tiempo real de curvas de pixel-art para pantallas 1080p",
+                                        selected = xbrzEnabled && videoFilter == "xbrz_4x",
+                                        items = 7,
+                                        index = 2,
+                                        onSelect = {
+                                            videoFilter = "xbrz_4x"
+                                            prefs.videoFilter = "xbrz_4x"
+                                            xbrzEnabled = true
+                                            prefs.xbrzEnabled = true
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    ChoiceRow(
+                                        icon = Icons.Filled.Palette,
+                                        title = "Super-Resolución xBRZ 6x HD",
+                                        subtitle = "Máxima definición de contornos pixel-art para pantallas 2K/AMOLED",
+                                        selected = xbrzEnabled && videoFilter == "xbrz_6x",
+                                        items = 7,
+                                        index = 3,
+                                        onSelect = {
+                                            videoFilter = "xbrz_6x"
+                                            prefs.videoFilter = "xbrz_6x"
+                                            xbrzEnabled = true
+                                            prefs.xbrzEnabled = true
+                                            prefs.writeVideo(context.filesDir)
+                                        },
+                                    )
+                                    ChoiceRow(
+                                        icon = Icons.Filled.Palette,
+                                        title = "AMD FidelityFX FSR Shader (RCAS)",
+                                        subtitle = "Aplica pase de nitidez RCAS adaptativo al contraste en la composición final",
+                                        selected = videoFilter == "fsr" && !xbrzEnabled,
+                                        items = 7,
+                                        index = 4,
+                                        onSelect = {
+                                            videoFilter = "fsr"
+                                            prefs.videoFilter = "fsr"
+                                            xbrzEnabled = false
+                                            prefs.xbrzEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1215,12 +1221,14 @@ fun SettingsScreen(
                                         icon = Icons.Filled.Palette,
                                         title = "CRT Retro Scanlines",
                                         subtitle = "Líneas de barrido nostálgicas de monitor clásico",
-                                        selected = videoFilter == "crt",
-                                        items = 4,
-                                        index = 2,
+                                        selected = videoFilter == "crt" && !xbrzEnabled,
+                                        items = 7,
+                                        index = 5,
                                         onSelect = {
                                             videoFilter = "crt"
                                             prefs.videoFilter = "crt"
+                                            xbrzEnabled = false
+                                            prefs.xbrzEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1228,12 +1236,14 @@ fun SettingsScreen(
                                         icon = Icons.Filled.Palette,
                                         title = "Anti-Aliasing FXAA Ligero",
                                         subtitle = "Suaviza bordes irregulares con impacto mínimo en GPU",
-                                        selected = videoFilter == "fxaa",
-                                        items = 4,
-                                        index = 3,
+                                        selected = videoFilter == "fxaa" && !xbrzEnabled,
+                                        items = 7,
+                                        index = 6,
                                         onSelect = {
                                             videoFilter = "fxaa"
                                             prefs.videoFilter = "fxaa"
+                                            xbrzEnabled = false
+                                            prefs.xbrzEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1318,22 +1328,6 @@ fun SettingsScreen(
                                         onSelect = {
                                             weatherOpt = "minimal"
                                             prefs.weatherOpt = "minimal"
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                }
-
-                    SettingsGroup("Tasa de Refresco y Rendimiento (60 FPS)") {
-                                    SwitchRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Desbloquear 60 FPS (Forzar en zonas a 30 FPS)",
-                                        subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
-                                        checked = force60Fps,
-                                        items = 1,
-                                        index = 0,
-                                        onCheckedChange = {
-                                            force60Fps = it
-                                            prefs.force60Fps = it
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1460,7 +1454,7 @@ fun SettingsScreen(
                                         icon = Icons.Filled.Tune,
                                         title = "Controles táctiles",
                                         subtitle = "Estilo (Moderno/Clásico), movimiento (Joystick/Cruceta), opacidad y editor",
-                                        items = 4,
+                                        items = 3,
                                         index = 0,
                                         onClick = onTouchSettings,
                                     )
@@ -1468,7 +1462,7 @@ fun SettingsScreen(
                                         icon = Icons.Filled.SportsEsports,
                                         title = "Configuración de Mando Físico",
                                         subtitle = "Mapeo de botones de mandos Bluetooth/USB y prueba de entrada",
-                                        items = 4,
+                                        items = 3,
                                         index = 1,
                                         onClick = onControls,
                                     )
@@ -1477,24 +1471,11 @@ fun SettingsScreen(
                                         title = "Autofire / Disparo continuo rápido (15 pulsaciones/s)",
                                         subtitle = "Mantén pulsado Z o X para avanzar textos automáticamente o atacar en ráfagas",
                                         checked = autofireEnabled,
-                                        items = 4,
+                                        items = 3,
                                         index = 2,
                                         onCheckedChange = {
                                             autofireEnabled = it
                                             prefs.autofireEnabled = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.SportsEsports,
-                                        title = "D-Pad Flotante Dinámico",
-                                        subtitle = "El joystick aparece dinámicamente donde apoyes el pulgar izquierdo en la pantalla",
-                                        checked = dynamicDpad,
-                                        items = 4,
-                                        index = 3,
-                                        onCheckedChange = {
-                                            dynamicDpad = it
-                                            prefs.dynamicDpad = it
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1594,7 +1575,10 @@ fun SettingsScreen(
                                     )
                                 }
 
-                    SettingsGroup("Juego (Comodidad Externa y Opcional)") {
+                }
+
+                "gameplay" -> {
+                    SettingsGroup("Jugabilidad y Asistencias") {
                                     SwitchRow(
                                         icon = Icons.Filled.Spa,
                                         title = "Reloj de Cosecha de Bayas (10 min)",
@@ -1743,27 +1727,62 @@ fun SettingsScreen(
                 }
 
                 "performance" -> {
+                    SettingsGroup("Tasa de Refresco y Fluidez de Cuadros") {
+                        ChoiceRow(
+                            icon = Icons.Filled.Speed,
+                            title = "Nativo (30/60 FPS Original)",
+                            subtitle = "Mantiene los límites nativos del juego (30 FPS en menús/salas fijas, 60 FPS en combates)",
+                            selected = !force60Fps && !asyncRenderThread,
+                            items = 3,
+                            index = 0,
+                            onSelect = {
+                                force60Fps = false
+                                prefs.force60Fps = false
+                                asyncRenderThread = false
+                                prefs.asyncRenderThread = false
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.Speed,
+                            title = "60 FPS Forzados (Desbloquear zonas a 30 FPS)",
+                            subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
+                            selected = force60Fps && !asyncRenderThread,
+                            items = 3,
+                            index = 1,
+                            onSelect = {
+                                force60Fps = true
+                                prefs.force60Fps = true
+                                asyncRenderThread = false
+                                prefs.asyncRenderThread = false
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.Speed,
+                            title = "120 FPS (Interpolación Ultra Suave)",
+                            subtitle = "Activa renderizado desacoplado e interpolación de cuadros para pantallas de 90/120 Hz",
+                            selected = asyncRenderThread,
+                            items = 3,
+                            index = 2,
+                            onSelect = {
+                                force60Fps = true
+                                prefs.force60Fps = true
+                                asyncRenderThread = true
+                                prefs.asyncRenderThread = true
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                    }
+
                     SettingsGroup("Ajustes de Rendimiento (v0.9.0 & Bajo Nivel)") {
-                                    SwitchRow(
-                                        icon = Icons.Filled.Memory,
-                                        title = "Compilador JIT Tier-2 ARM64 (AArch64 Nativo)",
-                                        subtitle = "Recompilador JIT en Rust que emite código máquina nativo en páginas seguras W^X puenteando el intérprete GML",
-                                        checked = jitArm64,
-                                        items = 5,
-                                        index = 0,
-                                        onCheckedChange = {
-                                            jitArm64 = it
-                                            prefs.jitArm64 = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
                                     SwitchRow(
                                         icon = Icons.Filled.Speed,
                                         title = "Afinidad Big.LITTLE de CPU (sched_setaffinity)",
                                         subtitle = "Ancla los hilos de Lógica y Render a núcleos Cortex-A7x/X y tareas auxiliares a núcleos Cortex-A5x",
                                         checked = bigLittleAffinity,
-                                        items = 5,
-                                        index = 1,
+                                        items = 4,
+                                        index = 0,
                                         onCheckedChange = {
                                             bigLittleAffinity = it
                                             prefs.bigLittleAffinity = it
@@ -1775,8 +1794,8 @@ fun SettingsScreen(
                                         title = "Resolución Dinámica DRS con Controlador PID",
                                         subtitle = "Muestrea el frametime cada 20 cuadros: modula la resolución entre 0.85x y 1.0x para garantizar 60 FPS",
                                         checked = drsEnabled,
-                                        items = 5,
-                                        index = 2,
+                                        items = 4,
+                                        index = 1,
                                         onCheckedChange = {
                                             drsEnabled = it
                                             prefs.drsEnabled = it
@@ -1794,8 +1813,8 @@ fun SettingsScreen(
                                         title = "Despertador de Frecuencia GPU Mali (Anti-Downclock)",
                                         subtitle = "Sincroniza eglPresentationTimeANDROID y frame-pacing adaptable sin bloqueos síncronos de pipeline",
                                         checked = gpuWakeup,
-                                        items = 5,
-                                        index = 3,
+                                        items = 4,
+                                        index = 2,
                                         onCheckedChange = {
                                             gpuWakeup = it
                                             prefs.gpuWakeup = it
@@ -1807,8 +1826,8 @@ fun SettingsScreen(
                                         title = "Mega-Atlas Virtual Zero Draw Calls",
                                         subtitle = "Fusiona quads y texturas en un VBO mapeado persistente reduciendo las llamadas de dibujo a 1-3 por frame",
                                         checked = megaAtlas,
-                                        items = 5,
-                                        index = 4,
+                                        items = 4,
+                                        index = 3,
                                         onCheckedChange = {
                                             megaAtlas = it
                                             prefs.megaAtlas = it
@@ -1823,7 +1842,7 @@ fun SettingsScreen(
                                         title = "Fusión de Superficies TBDR (Zero-Copy Battle FBO)",
                                         subtitle = "Unifica las capas de interfaz, sombras y efectos de combate en un solo pase de memoria para eliminar la subida a 35ms",
                                         checked = tbdrSurfaceFusion,
-                                        items = 5,
+                                        items = 4,
                                         index = 0,
                                         onCheckedChange = {
                                             tbdrSurfaceFusion = it
@@ -1832,25 +1851,12 @@ fun SettingsScreen(
                                         },
                                     )
                                     SwitchRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Hilo de Renderizado Desacoplado (Async Render + Frame Interpolation)",
-                                        subtitle = "Separa el motor lógico del hilo de dibujo OpenGL/Vulkan e interpola movimiento a 60 FPS constantes en pueblos y combates",
-                                        checked = asyncRenderThread,
-                                        items = 5,
-                                        index = 1,
-                                        onCheckedChange = {
-                                            asyncRenderThread = it
-                                            prefs.asyncRenderThread = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
                                         icon = Icons.Filled.AspectRatio,
                                         title = "Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking)",
                                         subtitle = "Delega el orden de profundidad de edificios/NPCs a la GPU y pre-renderiza el suelo estático para evitar caídas a 30 FPS al caminar",
                                         checked = townZsortBaking,
-                                        items = 5,
-                                        index = 2,
+                                        items = 4,
+                                        index = 1,
                                         onCheckedChange = {
                                             townZsortBaking = it
                                             prefs.townZsortBaking = it
@@ -1862,8 +1868,8 @@ fun SettingsScreen(
                                         title = "Caché Binaria Precompilada de Shaders (Vulkan PSO / GL Program Binary)",
                                         subtitle = "Guarda los shaders de ataques y efectos en disco para eliminar tirones y errores gráficos al iniciar combates",
                                         checked = shaderBinaryPrecache,
-                                        items = 5,
-                                        index = 3,
+                                        items = 4,
+                                        index = 2,
                                         onCheckedChange = {
                                             shaderBinaryPrecache = it
                                             prefs.shaderBinaryPrecache = it
@@ -1875,8 +1881,8 @@ fun SettingsScreen(
                                         title = "Limitador Inteligente de Scripts Lejanos (NPC Tick Culling)",
                                         subtitle = "Pausa la evaluación de colisiones y animaciones de eventos que están fuera de la pantalla del jugador",
                                         checked = npcTickCulling,
-                                        items = 5,
-                                        index = 4,
+                                        items = 4,
+                                        index = 3,
                                         onCheckedChange = {
                                             npcTickCulling = it
                                             prefs.npcTickCulling = it
@@ -2025,6 +2031,181 @@ fun SettingsScreen(
 
                 }
 
+                "appearance" -> {
+                    SettingsGroup("Tema y Paleta de Colores") {
+                        ChoiceRow(
+                            icon = Icons.Filled.BrightnessAuto,
+                            title = "Automático (Sistema)",
+                            subtitle = "Sigue el modo claro u oscuro configurado en Android",
+                            selected = currentTheme == "system",
+                            items = 4,
+                            index = 0,
+                            onSelect = {
+                                currentTheme = "system"
+                                prefs.themeMode = "system"
+                                onThemeChange("system")
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.LightMode,
+                            title = "Tema Claro",
+                            subtitle = "Interfaz clara y luminosa",
+                            selected = currentTheme == "light",
+                            items = 4,
+                            index = 1,
+                            onSelect = {
+                                currentTheme = "light"
+                                prefs.themeMode = "light"
+                                onThemeChange("light")
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.DarkMode,
+                            title = "Tema Oscuro",
+                            subtitle = "Interfaz oscura relajante para la vista",
+                            selected = currentTheme == "dark",
+                            items = 4,
+                            index = 2,
+                            onSelect = {
+                                currentTheme = "dark"
+                                prefs.themeMode = "dark"
+                                onThemeChange("dark")
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.Nightlight,
+                            title = "Negro Puro (AMOLED)",
+                            subtitle = "Fondo negro absoluto (#000000) para ahorrar batería en pantallas OLED",
+                            selected = currentTheme == "amoled",
+                            items = 4,
+                            index = 3,
+                            onSelect = {
+                                currentTheme = "amoled"
+                                prefs.themeMode = "amoled"
+                                onThemeChange("amoled")
+                            },
+                        )
+                    }
+
+                    SettingsGroup("Estilo Visual & Interfaz") {
+                        ChoiceRow(
+                            icon = Icons.Filled.Palette,
+                            title = "Estilo de Interfaz: Moderno Glassmorphism",
+                            subtitle = "Paneles traslúcidos con desenfoque Gaussiano/Dual-Kawase del juego en vivo y paleta Material You",
+                            selected = uiStyle == "glassmorphic",
+                            items = 9,
+                            index = 0,
+                            onSelect = {
+                                uiStyle = "glassmorphic"
+                                prefs.uiStyle = "glassmorphic"
+                            },
+                        )
+                        ChoiceRow(
+                            icon = Icons.Filled.Palette,
+                            title = "Estilo de Interfaz: Clásico Sólido",
+                            subtitle = "Diseño opaco tradicional con bordes redondeados y estilo clásico",
+                            selected = uiStyle == "classic",
+                            items = 9,
+                            index = 1,
+                            onSelect = {
+                                uiStyle = "classic"
+                                prefs.uiStyle = "classic"
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Save,
+                            title = "Carrusel de Guardados Rápidos (WebP)",
+                            subtitle = "Muestra capturas WebP ultraligeras (160x120) con estado del equipo y mapa en ranuras de guardado",
+                            checked = quickSave,
+                            items = 9,
+                            index = 2,
+                            onCheckedChange = {
+                                quickSave = it
+                                prefs.quickSave = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Info,
+                            title = "Asistente Flotante de Debilidades de Pokédex",
+                            subtitle = "Widget compacto en combate que calcula y muestra debilidades (x2, x4), resistencias e inmunidades del rival",
+                            checked = berryTracker,
+                            items = 9,
+                            index = 3,
+                            onCheckedChange = {
+                                berryTracker = it
+                                prefs.berryTracker = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Fullscreen,
+                            title = "Modo Ventana Flotante / Picture-in-Picture (PiP)",
+                            subtitle = "Continúa farmeando o caminando con el emulador en miniatura sobre otras aplicaciones",
+                            checked = pipMode,
+                            items = 9,
+                            index = 4,
+                            onCheckedChange = {
+                                pipMode = it
+                                prefs.pipMode = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Alarm,
+                            title = "Notificación Dinámica en Segundo Plano (Live Activity)",
+                            subtitle = "Aviso en vivo de Android 14/15/16 en barra de estado con pasos restantes para huevos y repelente",
+                            checked = liveActivity,
+                            items = 9,
+                            index = 5,
+                            onCheckedChange = {
+                                liveActivity = it
+                                prefs.liveActivity = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Speed,
+                            title = "Salto de Intro de Batalla (Smart Pre-Roll Skip)",
+                            subtitle = "Omite la animación del remolino al entrar en combate en hierba alta para entrar directo a la acción",
+                            checked = smartPrerollSkip,
+                            items = 9,
+                            index = 6,
+                            onCheckedChange = {
+                                smartPrerollSkip = it
+                                prefs.smartPrerollSkip = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Article,
+                            title = "Caja Negra de Repetición Determinista (<30 KB)",
+                            subtitle = "Graba la semilla RNG y las pulsaciones por cuadro para exportar y reproducir batallas a 60/120 FPS",
+                            checked = replayBlackbox,
+                            items = 9,
+                            index = 7,
+                            onCheckedChange = {
+                                replayBlackbox = it
+                                prefs.replayBlackbox = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Star,
+                            title = "Sistema de Logros Retro con Banners Animados",
+                            subtitle = "Notificaciones emergentes a 60 FPS al cumplir hitos de gimnasio, variocolores o retos especiales",
+                            checked = achievements,
+                            items = 9,
+                            index = 8,
+                            onCheckedChange = {
+                                achievements = it
+                                prefs.achievements = it
+                                prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                    }
+                }
+
                 "security" -> {
                     SettingsGroup("Seguridad y Partidas") {
                                     NavRow(
@@ -2035,7 +2216,7 @@ fun SettingsScreen(
                                         } else {
                                             "Consulta, exporta o gestiona tus archivos de guardado"
                                         },
-                                        items = 5,
+                                        items = if (installed != null) 6 else 5,
                                         index = 0,
                                         enabled = installed != null,
                                         onClick = onMySaves,
@@ -2045,7 +2226,7 @@ fun SettingsScreen(
                                         title = "Escudo Scoped Storage Shield",
                                         subtitle = "Réplica en Documents/PokemonReloadedSaves/ para no perder partidas si desinstalas el APK",
                                         checked = persistentShield,
-                                        items = 5,
+                                        items = if (installed != null) 6 else 5,
                                         index = 1,
                                         onCheckedChange = { enabled ->
                                             persistentShield = enabled
@@ -2062,7 +2243,7 @@ fun SettingsScreen(
                                         icon = Icons.Filled.CameraAlt,
                                         title = "Puntos de Retorno (Instant Snapshots)",
                                         subtitle = "Crea copias de seguridad instantáneas antes de eventos clave o combates difíciles",
-                                        items = 5,
+                                        items = if (installed != null) 6 else 5,
                                         index = 2,
                                         enabled = installed != null,
                                         onClick = {
@@ -2074,7 +2255,7 @@ fun SettingsScreen(
                                         icon = Icons.Filled.HealthAndSafety,
                                         title = "Diagnóstico de Integridad del Juego",
                                         subtitle = "Verifica los más de 34.000 archivos, sprites de combate, MIDIs y ejecutables",
-                                        items = 5,
+                                        items = if (installed != null) 6 else 5,
                                         index = 3,
                                         enabled = installed != null,
                                         onClick = {
@@ -2085,244 +2266,22 @@ fun SettingsScreen(
                                         icon = Icons.Filled.Extension,
                                         title = "Instalar Mod o Parche (.zip)",
                                         subtitle = if (installingMod) "Instalando parche/mod..." else "Aplica packs de música, sprites .gif o parches a custom_assets/ sin reinstalar",
-                                        items = 5,
+                                        items = if (installed != null) 6 else 5,
                                         index = 4,
                                         enabled = installed != null && !installingMod,
                                         onClick = { modPickerLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                                     )
-                                }
-
-                    SettingsGroup("Ajustes de Interfaz & QoL (v0.9.0)") {
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Estilo de Interfaz: Moderno Glassmorphism",
-                                        subtitle = "Paneles traslúcidos con desenfoque Gaussiano/Dual-Kawase del juego en vivo y paleta Material You",
-                                        selected = uiStyle == "glassmorphic",
-                                        items = 9,
-                                        index = 0,
-                                        onSelect = {
-                                            uiStyle = "glassmorphic"
-                                            prefs.uiStyle = "glassmorphic"
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Palette,
-                                        title = "Estilo de Interfaz: Clásico Sólido",
-                                        subtitle = "Diseño opaco tradicional con bordes redondeados y estilo clásico",
-                                        selected = uiStyle == "classic",
-                                        items = 9,
-                                        index = 1,
-                                        onSelect = {
-                                            uiStyle = "classic"
-                                            prefs.uiStyle = "classic"
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Save,
-                                        title = "Carrusel de Guardados Rápidos (WebP)",
-                                        subtitle = "Muestra capturas WebP ultraligeras (160x120) con estado del equipo y mapa en ranuras de guardado",
-                                        checked = quickSave,
-                                        items = 9,
-                                        index = 2,
-                                        onCheckedChange = {
-                                            quickSave = it
-                                            prefs.quickSave = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Info,
-                                        title = "Asistente Flotante de Debilidades de Pokédex",
-                                        subtitle = "Widget compacto en combate que calcula y muestra debilidades (x2, x4), resistencias e inmunidades del rival",
-                                        checked = berryTracker,
-                                        items = 9,
-                                        index = 3,
-                                        onCheckedChange = {
-                                            berryTracker = it
-                                            prefs.berryTracker = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Fullscreen,
-                                        title = "Modo Ventana Flotante / Picture-in-Picture (PiP)",
-                                        subtitle = "Continúa farmeando o caminando con el emulador en miniatura sobre otras aplicaciones",
-                                        checked = pipMode,
-                                        items = 9,
-                                        index = 4,
-                                        onCheckedChange = {
-                                            pipMode = it
-                                            prefs.pipMode = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Alarm,
-                                        title = "Notificación Dinámica en Segundo Plano (Live Activity)",
-                                        subtitle = "Aviso en vivo de Android 14/15/16 en barra de estado con pasos restantes para huevos y repelente",
-                                        checked = liveActivity,
-                                        items = 9,
-                                        index = 5,
-                                        onCheckedChange = {
-                                            liveActivity = it
-                                            prefs.liveActivity = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Salto de Intro de Batalla (Smart Pre-Roll Skip)",
-                                        subtitle = "Omite la animación del remolino al entrar en combate en hierba alta para entrar directo a la acción",
-                                        checked = smartPrerollSkip,
-                                        items = 9,
-                                        index = 6,
-                                        onCheckedChange = {
-                                            smartPrerollSkip = it
-                                            prefs.smartPrerollSkip = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Article,
-                                        title = "Caja Negra de Repetición Determinista (<30 KB)",
-                                        subtitle = "Graba la semilla RNG y las pulsaciones por cuadro para exportar y reproducir batallas a 60/120 FPS",
-                                        checked = replayBlackbox,
-                                        items = 9,
-                                        index = 7,
-                                        onCheckedChange = {
-                                            replayBlackbox = it
-                                            prefs.replayBlackbox = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.Star,
-                                        title = "Sistema de Logros Retro con Banners Animados",
-                                        subtitle = "Notificaciones emergentes a 60 FPS al cumplir hitos de gimnasio, variocolores o retos especiales",
-                                        checked = achievements,
-                                        items = 9,
-                                        index = 8,
-                                        onCheckedChange = {
-                                            achievements = it
-                                            prefs.achievements = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                }
-
-                    SettingsGroup("Apariencia") {
-                                    ChoiceRow(
-                                        icon = Icons.Filled.BrightnessAuto,
-                                        title = "Automático (Sistema)",
-                                        subtitle = "Sigue el modo claro u oscuro configurado en Android",
-                                        selected = currentTheme == "system",
-                                        items = 4,
-                                        index = 0,
-                                        onSelect = {
-                                            currentTheme = "system"
-                                            prefs.themeMode = "system"
-                                            onThemeChange("system")
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.LightMode,
-                                        title = "Tema Claro",
-                                        subtitle = "Interfaz clara y luminosa",
-                                        selected = currentTheme == "light",
-                                        items = 4,
-                                        index = 1,
-                                        onSelect = {
-                                            currentTheme = "light"
-                                            prefs.themeMode = "light"
-                                            onThemeChange("light")
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.DarkMode,
-                                        title = "Tema Oscuro",
-                                        subtitle = "Interfaz oscura relajante para la vista",
-                                        selected = currentTheme == "dark",
-                                        items = 4,
-                                        index = 2,
-                                        onSelect = {
-                                            currentTheme = "dark"
-                                            prefs.themeMode = "dark"
-                                            onThemeChange("dark")
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Nightlight,
-                                        title = "Negro Puro (AMOLED)",
-                                        subtitle = "Fondo negro absoluto (#000000) para ahorrar batería en pantallas OLED",
-                                        selected = currentTheme == "amoled",
-                                        items = 4,
-                                        index = 3,
-                                        onSelect = {
-                                            currentTheme = "amoled"
-                                            prefs.themeMode = "amoled"
-                                            onThemeChange("amoled")
-                                        },
-                                    )
-                                }
-
-                    SettingsGroup("Juego y Almacenamiento") {
-                                    if (installed == null) {
-                                        InfoRow(
-                                            icon = Icons.Filled.Info,
-                                            title = "Sin juego instalado",
-                                            value = "Descárgalo o impórtalo desde la pantalla principal",
-                                            items = 1,
-                                            index = 0,
-                                        )
-                                    } else {
-                                        InfoRow(Icons.Filled.VideogameAsset, "Versión del juego", installed.version ?: "1.9.2.2 Full", items = 4, index = 0)
-                                        InfoRow(Icons.Filled.Storage, "Espacio ocupado", formatBytes(installed.sizeBytes), items = 4, index = 1)
-                                        InfoRow(Icons.Filled.CalendarMonth, "Instalado el", formatDate(installed.installedAt), items = 4, index = 2)
+                                    if (installed != null) {
                                         NavRow(
                                             icon = Icons.Filled.Delete,
                                             title = "Borrar el juego",
                                             subtitle = "Libera ${formatBytes(installed.sizeBytes)} del almacenamiento",
-                                            items = 4,
-                                            index = 3,
+                                            items = 6,
+                                            index = 5,
                                             onClick = { confirmingDelete = true },
                                         )
                                     }
                                 }
-
-                    SettingsGroup("Actualizaciones de la Aplicación") {
-                        NavRow(
-                            icon = Icons.Filled.SystemUpdate,
-                            title = "🔄 Buscar actualizaciones de versión (GitHub)",
-                            subtitle = "Instalada: v$appVersion (build 36) · Toca para comprobar GitHub Releases",
-                            items = 2,
-                            index = 0,
-                            enabled = !checking,
-                            onClick = {
-                                checking = true
-                                scope.launch {
-                                    val result = Update.check(appVersion, prefs.githubToken)
-                                    checking = false
-                                    val found = result.getOrNull()
-                                    if (found != null) {
-                                        onUpdateFound(found)
-                                    } else {
-                                        snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v$appVersion EX).")
-                                    }
-                                }
-                            },
-                        )
-                        NavRow(
-                            icon = Icons.Filled.Key,
-                            title = "🔑 Vincular Token de GitHub (Repo Privado)",
-                            subtitle = if (prefs.githubToken.isNotBlank()) "Token configurado (••••••••) · Toca para gestionar o probar" else "Introduce un Personal Access Token para acceder a releases privados",
-                            items = 2,
-                            index = 1,
-                            onClick = {
-                                githubTokenInput = prefs.githubToken
-                                showGithubTokenDialog = true
-                            },
-                        )
-                    }
                 }
 
                 "about" -> {

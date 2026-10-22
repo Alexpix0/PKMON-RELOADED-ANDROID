@@ -37,6 +37,11 @@ impl SpatialHashGrid {
         self.enabled = enabled;
     }
 
+    #[inline(always)]
+    pub fn entry_count(&self) -> usize {
+        self.entry_count
+    }
+
     /// Clears the spatial hash grid for the current frame with zero memory allocation.
     #[inline(always)]
     pub fn clear(&mut self) {
@@ -96,8 +101,8 @@ impl SpatialHashGrid {
         let max_cx = max_cx.min(min_cx + 2).min(GRID_COLS - 1);
         let max_cy = max_cy.min(min_cy + 2).min(GRID_ROWS - 1);
 
-        // Small stack buffer for deduplication (handles up to 32 candidates with 0 heap alloc)
-        let mut seen = [0usize; 32];
+        // Stack buffer for deduplication (handles up to 128 candidates with 0 heap alloc)
+        let mut seen = [0usize; 128];
         let mut seen_count = 0;
 
         for cy in min_cy..=max_cy {

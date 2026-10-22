@@ -565,13 +565,6 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("achievements", value).apply()
         }
 
-    /** Compilador JIT Tier-2 Nativo ARM64 (Desactivado por defecto por seguridad) */
-    var jitArm64: Boolean
-        get() = prefs.getBoolean("jitArm64", false)
-        set(value) {
-            prefs.edit().putBoolean("jitArm64", value).apply()
-        }
-
     /** Afinidad Big.LITTLE de CPU */
     var bigLittleAffinity: Boolean
         get() = prefs.getBoolean("bigLittleAffinity", true)
@@ -675,7 +668,6 @@ class Preferences(context: Context) {
         oneHanded = oneHanded,
         replayBlackbox = replayBlackbox,
         achievements = achievements,
-        jitArm64 = jitArm64,
         bigLittleAffinity = bigLittleAffinity,
         tbdrSurfaceFusion = tbdrSurfaceFusion,
         asyncRenderThread = asyncRenderThread,

@@ -679,11 +679,54 @@ impl Game {
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
+                let inst1 = self.room.instance_list.get(instance);
+                if !inst1.is_active() {
+                    continue;
+                }
+
+                let use_spatial = self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0;
+                let mut candidates = [0usize; 64];
+                let mut cand_count = 0;
+                if use_spatial {
+                    let q_x1 = inst1.bbox_left.get() - 16;
+                    let q_y1 = inst1.bbox_top.get() - 16;
+                    let q_x2 = inst1.bbox_right.get() + 16;
+                    let q_y2 = inst1.bbox_bottom.get() + 16;
+                    self.spatial_hash.query_candidates(q_x1, q_y1, q_x2, q_y2, |cand| {
+                        if cand != instance && cand_count < candidates.len() {
+                            candidates[cand_count] = cand;
+                            cand_count += 1;
+                        }
+                        true
+                    });
+                    if cand_count == 0 {
+                        continue;
+                    }
+                }
+
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
-                    // And iter every instance of the target object
-                    let mut iter2 = self.room.instance_list.iter_by_object(target_obj);
-                    while let Some(target) = iter2.next(&self.room.instance_list) {
+                    let target_instances: smallvec::SmallVec<[usize; 8]> = if use_spatial {
+                        candidates[..cand_count]
+                            .iter()
+                            .copied()
+                            .filter(|&cand| {
+                                let c_inst = self.room.instance_list.get(cand);
+                                c_inst.is_active()
+                                    && (c_inst.object_index.get() == target_obj
+                                        || c_inst.parents.borrow().contains(&target_obj))
+                            })
+                            .collect()
+                    } else {
+                        let mut list = smallvec::SmallVec::new();
+                        let mut it = self.room.instance_list.iter_by_object(target_obj);
+                        while let Some(t) = it.next(&self.room.instance_list) {
+                            list.push(t);
+                        }
+                        list
+                    };
+
+                    for target in target_instances {
                         if instance == target {
                             continue;
                         }

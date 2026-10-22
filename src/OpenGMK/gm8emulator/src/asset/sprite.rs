@@ -44,6 +44,8 @@ pub struct Collider {
     pub data: Box<[bool]>,
     #[serde(default)]
     pub is_empty_mask: bool,
+    #[serde(default)]
+    pub is_solid_rect: bool,
 }
 
 pub enum ColliderShape {
@@ -159,6 +161,19 @@ fn make_bbox(coll: impl Fn(u32, u32) -> bool, frame_width: u32, frame_height: u3
 fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
     let bbox = make_bbox(|x, y| data[(y * width + x) as usize], width, height);
     let is_empty_mask = !data.iter().any(|&px| px);
+    let mut is_solid_rect = !is_empty_mask;
+    if is_solid_rect {
+        for y in bbox.top..=bbox.bottom {
+            for x in bbox.left..=bbox.right {
+                let idx = (y * width + x) as usize;
+                if idx >= data.len() || !data[idx] {
+                    is_solid_rect = false;
+                    break;
+                }
+            }
+            if !is_solid_rect { break; }
+        }
+    }
     Collider {
         width,
         height,
@@ -167,6 +182,7 @@ fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
         bbox_top: bbox.top,
         bbox_bottom: bbox.bottom,
         is_empty_mask,
+        is_solid_rect,
         data,
     }
 }
@@ -269,6 +285,19 @@ pub fn make_colliders_shaped(
                 },
             }
             let is_empty_mask = !data.iter().any(|&px| px);
+            let mut is_solid_rect = !is_empty_mask;
+            if is_solid_rect {
+                for y in bbox.top..=bbox.bottom {
+                    for x in bbox.left..=bbox.right {
+                        let idx = (y * width + x) as usize;
+                        if idx >= data.len() || !data[idx] {
+                            is_solid_rect = false;
+                            break;
+                        }
+                    }
+                    if !is_solid_rect { break; }
+                }
+            }
             Collider {
                 width,
                 height,
@@ -277,6 +306,7 @@ pub fn make_colliders_shaped(
                 bbox_top: bbox.top,
                 bbox_bottom: bbox.bottom,
                 is_empty_mask,
+                is_solid_rect,
                 data,
             }
         })
@@ -340,10 +370,9 @@ impl Collider {
         if !within_bbox {
             return false;
         }
-        // A collision map with no set pixel means the sprite has no precise mask (GM8 then does
-        // a plain bounding-box collision). We use the precomputed O(1) is_empty_mask flag instead of
-        // scanning thousands of booleans on every pixel check!
         if self.is_empty_mask {
+            false
+        } else if self.is_solid_rect {
             true
         } else {
             if x < 0 || y < 0 {

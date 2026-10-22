@@ -338,9 +338,6 @@ fn load_video() {
             } else if name == "achievements" {
                 let ach = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::game::achievements::set_achievements_enabled(ach);
-            } else if name == "jit_arm64" {
-                let jit = value == "1" || value.eq_ignore_ascii_case("true");
-                crate::gml::jit_arm64::set_jit_arm64_enabled(jit);
             } else if name == "big_little_affinity" {
                 let bla = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::game::big_little::set_big_little_affinity_enabled(bla);
@@ -1937,6 +1934,8 @@ pub fn android_entry(app: AndroidApp) {
 
     SHUTDOWN.store(false, std::sync::atomic::Ordering::SeqCst);
     let handle = std::thread::spawn(move || {
+        crate::game::big_little::get_cpu_topology().pin_current_thread_to_big();
+
         // The activity asks for landscape in the manifest, so the window is normally already the right
         // way round; the rotate still takes a moment on some phones. The engine lays its screens out
         // from the size of the window it is given, and whatever it gets here is what the whole session
@@ -2045,6 +2044,7 @@ pub fn android_entry(app: AndroidApp) {
                         if crate::render::opengl::egl::has_surface() {
                             ramen::platform::android::set_paused(false);
                             crate::game::audio::set_output_paused(false);
+                            crate::game::big_little::get_cpu_topology().pin_current_thread_to_big();
                         }
                     }
                 },

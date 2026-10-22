@@ -57,7 +57,6 @@ fun writeVideoFile(
     oneHanded: Boolean = false,
     replayBlackbox: Boolean = false,
     achievements: Boolean = false,
-    jitArm64: Boolean = false,
     bigLittleAffinity: Boolean = true,
     // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
     tbdrSurfaceFusion: Boolean = true,
@@ -118,7 +117,6 @@ fun writeVideoFile(
         appendLine("one_handed=${if (oneHanded) 1 else 0}")
         appendLine("replay_blackbox=${if (replayBlackbox) 1 else 0}")
         appendLine("achievements=${if (achievements) 1 else 0}")
-        appendLine("jit_arm64=${if (jitArm64) 1 else 0}")
         appendLine("big_little_affinity=${if (bigLittleAffinity) 1 else 0}")
         // Complementos v9.7 Ultra Engine
         appendLine("tbdr_surface_fusion=${if (tbdrSurfaceFusion) 1 else 0}")

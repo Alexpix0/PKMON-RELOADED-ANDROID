@@ -39,11 +39,21 @@ impl GmlJitEngine {
         }
     }
 
-    /// Fast-path calculation for Pokémon battle damage formula:
+    /// Fast-path calculation for Pokémon battle damage formula with memoization:
     /// Damage = ((((2 * Level / 5 + 2) * Power * (A / D)) / 50) + 2) * Modifier
     #[inline(always)]
     pub fn eval_damage_fast(&self, level: f64, power: f64, attack: f64, defense: f64, modifier: f64) -> f64 {
-        let base = (((2.0 * level / 5.0 + 2.0) * power * (attack / defense.max(1.0))) / 50.0 + 2.0);
+        let key = crate::game::damage_memo::DamageKey {
+            attacker_id: attack as i32,
+            defender_id: defense as i32,
+            move_id: power as i32,
+            weather: (level as u32 & 0xFF) as u8,
+        };
+        if let Some(cached) = crate::game::damage_memo::query_damage_memo(key) {
+            return (cached as f64 * modifier).max(1.0);
+        }
+        let base = ((2.0 * level / 5.0 + 2.0) * power * (attack / defense.max(1.0))) / 50.0 + 2.0;
+        crate::game::damage_memo::store_damage_memo(key, base as f32);
         (base * modifier).max(1.0)
     }
 

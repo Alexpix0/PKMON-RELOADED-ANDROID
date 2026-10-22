@@ -217,6 +217,18 @@ pub struct Game {
     pub swap_creation_events: bool,
 
     pub spatial_hash: spatial_hash::SpatialHashGrid,
+    #[cfg(target_os = "android")]
+    pub overlay_pkmn_fields: [Option<usize>; 6],
+    #[cfg(target_os = "android")]
+    pub overlay_modal_field: Option<usize>,
+    #[cfg(target_os = "android")]
+    pub overlay_box_field: Option<usize>,
+    #[cfg(target_os = "android")]
+    pub bag_rooms: std::collections::HashSet<i32>,
+    #[cfg(target_os = "android")]
+    pub cached_picker_boxes: std::cell::RefCell<Vec<(f32, f32, f32, f32)>>,
+    #[cfg(target_os = "android")]
+    pub picker_frame_throttle: std::cell::Cell<u32>,
     pub rewind_manager: rewind::RewindManager,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
@@ -957,6 +969,19 @@ impl Game {
                             .into_iter()
                             .map(|c| {
                                 let is_empty_mask = !c.data.iter().any(|&px| px);
+                                let mut is_solid_rect = !is_empty_mask;
+                                if is_solid_rect {
+                                    for y in c.bbox_top..=c.bbox_bottom {
+                                        for x in c.bbox_left..=c.bbox_right {
+                                            let idx = (y * c.width + x) as usize;
+                                            if idx >= c.data.len() || !c.data[idx] {
+                                                is_solid_rect = false;
+                                                break;
+                                            }
+                                        }
+                                        if !is_solid_rect { break; }
+                                    }
+                                }
                                 Collider {
                                     width: c.width,
                                     height: c.height,
@@ -965,6 +990,7 @@ impl Game {
                                     bbox_top: c.bbox_top,
                                     bbox_bottom: c.bbox_bottom,
                                     is_empty_mask,
+                                    is_solid_rect,
                                     data: c.data,
                                 }
                             })
@@ -1420,6 +1446,18 @@ impl Game {
             uninit_args_are_zero: !settings.error_on_uninitialized_args,
             swap_creation_events: settings.swap_creation_events,
             spatial_hash: spatial_hash::SpatialHashGrid::new(),
+            #[cfg(target_os = "android")]
+            overlay_pkmn_fields: [None; 6],
+            #[cfg(target_os = "android")]
+            overlay_modal_field: None,
+            #[cfg(target_os = "android")]
+            overlay_box_field: None,
+            #[cfg(target_os = "android")]
+            bag_rooms: std::collections::HashSet::new(),
+            #[cfg(target_os = "android")]
+            cached_picker_boxes: std::cell::RefCell::new(Vec::new()),
+            #[cfg(target_os = "android")]
+            picker_frame_throttle: std::cell::Cell::new(0),
             rewind_manager: rewind::RewindManager::new(),
             potential_step_settings: Default::default(),
             transition_kind: 0,
@@ -1530,6 +1568,28 @@ impl Game {
         game.globalvars.clear();
 
         game.window.set_visible(true);
+
+        #[cfg(target_os = "android")]
+        {
+            game.overlay_pkmn_fields = [
+                game.compiler.find_field_id(b"pkmn1"),
+                game.compiler.find_field_id(b"pkmn2"),
+                game.compiler.find_field_id(b"pkmn3"),
+                game.compiler.find_field_id(b"pkmn4"),
+                game.compiler.find_field_id(b"pkmn5"),
+                game.compiler.find_field_id(b"pkmn6"),
+            ];
+            game.overlay_modal_field = game.compiler.find_field_id(b"drawModalSystem");
+            game.overlay_box_field = game.compiler.find_field_id(b"ENCAJA");
+            for (id, room_opt) in game.assets.rooms.iter().enumerate() {
+                if let Some(r) = room_opt {
+                    let name = r.name.to_ascii_lowercase();
+                    if name.contains("mochila") || name.contains("bagroom") {
+                        game.bag_rooms.insert(id as i32);
+                    }
+                }
+            }
+        }
 
         Ok(game)
     }
@@ -1754,6 +1814,8 @@ impl Game {
         self.input.step();
         self.particles.effect_clear();
         self.cursor_sprite_frame = 0;
+        self.spatial_hash.clear();
+        crate::touch_controls::flush_held_inputs();
 
         // Load all tiles in new room
         for tile in room.tiles.iter() {
@@ -1982,18 +2044,25 @@ impl Game {
     /// one.
     #[cfg(target_os = "android")]
     pub(crate) fn sync_overlay(&self) {
-        // The touch overlay tells taps from drags in the bag by knowing which room/modal it is in.
-        let room_name = self.assets.rooms.get_asset(self.room.id).map(|r| r.name.to_string().to_ascii_lowercase()).unwrap_or_default();
-        crate::touch_navigation::report(self.room.id, self.modal_system(), room_name.contains("mochila") || room_name.contains("bagroom"));
+        let is_bag = self.bag_rooms.contains(&self.room.id);
+        let modal = self.modal_system();
+        crate::touch_navigation::report(self.room.id, modal, is_bag);
         crate::touch_controls::set_room(self.room.id);
         crate::touch_controls::set_dialogue(self.dialogue_open());
         crate::touch_controls::set_box_open(self.inside_box());
         crate::touch_controls::set_party(self.party_species());
         crate::touch_controls::set_text_entry(self.text_entry_open());
-        crate::touch_controls::set_picker_boxes(self.picker_boxes());
-        crate::touch_controls::set_modal_open(self.modal_system() > 0);
-        crate::touch_controls::set_modal_id(self.modal_system());
-        if self.modal_system() == crate::touch_controls::LIST_MODAL || self.inside_box() {
+        if self.picker_frame_throttle.get() % 4 == 0 {
+            let boxes = self.picker_boxes();
+            if !boxes.is_empty() || !self.cached_picker_boxes.borrow().is_empty() {
+                *self.cached_picker_boxes.borrow_mut() = boxes;
+                crate::touch_controls::set_picker_boxes(self.cached_picker_boxes.borrow().clone());
+            }
+        }
+        self.picker_frame_throttle.set(self.picker_frame_throttle.get().wrapping_add(1));
+        crate::touch_controls::set_modal_open(modal > 0);
+        crate::touch_controls::set_modal_id(modal);
+        if modal == crate::touch_controls::LIST_MODAL || self.inside_box() {
             crate::touch_controls::force_dialogue_closed();
         }
         crate::touch_controls::update_context();
@@ -2048,10 +2117,15 @@ impl Game {
     /// Each party slot's stored species value (0 = empty) from `global.pkmn1..6[0]`.
     #[cfg(target_os = "android")]
     fn party_species(&self) -> [i32; crate::touch_controls::PICKER_SLOTS] {
-        let pkmn_names: [&[u8]; crate::touch_controls::PICKER_SLOTS] = [b"pkmn1", b"pkmn2", b"pkmn3", b"pkmn4", b"pkmn5", b"pkmn6"];
         let mut species = [0; crate::touch_controls::PICKER_SLOTS];
-        for (index, slot) in species.iter_mut().enumerate() {
-            *slot = self.global_number(pkmn_names[index], 0).unwrap_or(0);
+        for (index, opt_field) in self.overlay_pkmn_fields.iter().enumerate() {
+            if let Some(field_id) = opt_field {
+                if let Some(field) = self.globals.fields.get(field_id) {
+                    if let Some(crate::gml::Value::Real(n)) = field.get(0) {
+                        species[index] = n.into_inner() as i32;
+                    }
+                }
+            }
         }
         species
     }
@@ -2070,7 +2144,7 @@ impl Game {
     /// -1 nothing open, -2 the variable is unknown to the compiler, -3 not present in the globals.
     #[cfg(target_os = "android")]
     fn modal_system(&self) -> i32 {
-        let Some(field_id) = self.compiler.find_field_id(b"drawModalSystem") else {
+        let Some(field_id) = self.overlay_modal_field else {
             return -2
         };
         let Some(field) = self.globals.fields.get(&field_id) else {
@@ -2101,7 +2175,14 @@ impl Game {
     /// while it is showing, and that is what tells it apart.
     #[cfg(target_os = "android")]
     fn inside_box(&self) -> bool {
-        self.global_number(b"ENCAJA", 0).is_some_and(|value| value != 0)
+        if let Some(field_id) = self.overlay_box_field {
+            if let Some(field) = self.globals.fields.get(&field_id) {
+                if let Some(crate::gml::Value::Real(n)) = field.get(0) {
+                    return n.into_inner() as i32 != 0;
+                }
+            }
+        }
+        false
     }
 
     /// Runs a frame loop and draws the screen. Exits immediately, without waiting for any FPS limitation.
@@ -2265,6 +2346,9 @@ impl Game {
             return Ok(());
         }
 
+        // Rebuild spatial hash before Step event so GML collision checks have updated positions
+        self.rebuild_spatial_hash();
+
         // Step event
         self.run_object_event(ev::STEP, 0, None)?;
         if self.scene_change.is_some() {
@@ -2280,6 +2364,9 @@ impl Game {
                 self.run_instance_event(ev::OTHER, 8, handle, handle, None)?;
             }
         }
+
+        // Rebuild spatial hash after movement so bound events and collision events see current AABBs
+        self.rebuild_spatial_hash();
 
         // Outside room, intersect boundary, outside/intersect view
         self.run_bound_events()?;
@@ -2312,7 +2399,8 @@ impl Game {
             }
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let in_battle = matches!(self.room.id, 47 | 191 | 709);
-            let battle_lag = in_battle && LAST_FRAME_MICROS.load(std::sync::atomic::Ordering::Relaxed) > 17_500;
+            let last_micros = LAST_FRAME_MICROS.load(std::sync::atomic::Ordering::Relaxed);
+            let battle_lag = (in_battle && last_micros > 17_500) || (last_micros > 22_000);
             if battle_lag {
                 let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 (c % 2) == 1
@@ -2660,6 +2748,9 @@ impl Game {
 
     // Plays the game normally
     pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "android")]
+        crate::game::big_little::get_cpu_topology().pin_current_thread_to_big();
+
         self.init()?;
         handle_scene_change!(self);
 
@@ -3102,17 +3193,35 @@ impl Game {
                 None => return false,
             };
 
+            if collider1.is_empty_mask || collider2.is_empty_mask {
+                return false;
+            }
+
+            let angle1_zero = inst1.image_angle.get().into_inner() == 0.0;
+            let angle2_zero = inst2.image_angle.get().into_inner() == 0.0;
+
+            // Fast-path: if both colliders are solid rectangular boxes and unrotated, AABB is sufficient
+            if angle1_zero && angle2_zero && collider1.is_solid_rect && collider2.is_solid_rect {
+                return true;
+            }
+
             // round x and y values, and get sin and cos of each angle...
             let x1 = inst1.x.get().round();
             let y1 = inst1.y.get().round();
             let x2 = inst2.x.get().round();
             let y2 = inst2.y.get().round();
-            let (sin1, cos1) = inst1.image_angle.get().to_radians().sin_cos();
-            let sin1 = sin1.into_inner();
-            let cos1 = cos1.into_inner();
-            let (sin2, cos2) = inst2.image_angle.get().to_radians().sin_cos();
-            let sin2 = sin2.into_inner();
-            let cos2 = cos2.into_inner();
+            let (sin1, cos1) = if angle1_zero {
+                (0.0, 1.0)
+            } else {
+                let (s, c) = crate::game::fast_lut::fast_sin_cos_deg(inst1.image_angle.get().into_inner() as f32);
+                (s as f64, c as f64)
+            };
+            let (sin2, cos2) = if angle2_zero {
+                (0.0, 1.0)
+            } else {
+                let (s, c) = crate::game::fast_lut::fast_sin_cos_deg(inst2.image_angle.get().into_inner() as f32);
+                (s as f64, c as f64)
+            };
 
             // Get intersect rectangle
             let intersect_top = inst1.bbox_top.get().max(inst2.bbox_top.get());
@@ -3191,7 +3300,19 @@ impl Game {
                 Some(c) => c,
                 None => return false,
             };
-            let angle = inst.image_angle.get().to_radians();
+            if collider.is_empty_mask {
+                return false;
+            }
+            let angle_deg = inst.image_angle.get().into_inner();
+            if collider.is_solid_rect && angle_deg == 0.0 {
+                return true;
+            }
+            let (sin, cos) = if angle_deg == 0.0 {
+                (0.0, 1.0)
+            } else {
+                let (s, c) = crate::game::fast_lut::fast_sin_cos_deg(angle_deg as f32);
+                (s as f64, c as f64)
+            };
             collider.check_collision_point_precise(
                 x.round().to_i32(),
                 y.round().to_i32(),
@@ -3201,8 +3322,8 @@ impl Game {
                 sprite.origin_y,
                 inst.image_xscale.get(),
                 inst.image_yscale.get(),
-                angle.sin().into_inner(),
-                angle.cos().into_inner(),
+                sin,
+                cos,
             )
         } else {
             false
@@ -3250,12 +3371,22 @@ impl Game {
                 Some(c) => c,
                 None => return false,
             };
+            if collider.is_empty_mask {
+                return false;
+            }
+            let angle_deg = inst.image_angle.get().into_inner();
+            if collider.is_solid_rect && angle_deg == 0.0 {
+                return true;
+            }
 
             let inst_x = inst.x.get().round().to_i32();
             let inst_y = inst.y.get().round().to_i32();
-            let angle = inst.image_angle.get().to_radians();
-            let sin = angle.sin().into_inner();
-            let cos = angle.cos().into_inner();
+            let (sin, cos) = if angle_deg == 0.0 {
+                (0.0, 1.0)
+            } else {
+                let (s, c) = crate::game::fast_lut::fast_sin_cos_deg(angle_deg as f32);
+                (s as f64, c as f64)
+            };
 
             // Get intersect rectangle
             let intersect_top = inst.bbox_top.get().max(rect_top);
@@ -3530,13 +3661,67 @@ impl Game {
         }
     }
 
+    /// Rebuilds the spatial hash grid from all currently active instances.
+    pub fn rebuild_spatial_hash(&mut self) {
+        self.spatial_hash.clear();
+        let mut iter = self.room.instance_list.iter_by_drawing();
+        while let Some(handle) = iter.next(&self.room.instance_list) {
+            let inst = self.room.instance_list.get(handle);
+            if inst.is_active() {
+                let sprite = self
+                    .assets
+                    .sprites
+                    .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
+                    .map(|x| x.as_ref());
+                inst.update_bbox(sprite);
+                self.spatial_hash.insert(
+                    handle,
+                    inst.bbox_left.get(),
+                    inst.bbox_top.get(),
+                    inst.bbox_right.get(),
+                    inst.bbox_bottom.get(),
+                );
+            }
+        }
+    }
+
     // Checks if an instance is colliding with any solid, returning the solid if it is, otherwise None
     pub fn check_collision_solid(&self, inst: usize) -> Option<usize> {
-        let mut iter = self.room.instance_list.iter_by_drawing();
-        while let Some(target) = iter.next(&self.room.instance_list) {
-            if self.room.instance_list.get(target).solid.get() {
-                if self.check_collision(inst, target) {
-                    return Some(target);
+        let inst_obj = self.room.instance_list.get(inst);
+        let sprite = self
+            .assets
+            .sprites
+            .get_asset(if inst_obj.mask_index.get() < 0 { inst_obj.sprite_index.get() } else { inst_obj.mask_index.get() })
+            .map(|x| x.as_ref());
+        inst_obj.update_bbox(sprite);
+
+        let q_x1 = inst_obj.bbox_left.get();
+        let q_y1 = inst_obj.bbox_top.get();
+        let q_x2 = inst_obj.bbox_right.get();
+        let q_y2 = inst_obj.bbox_bottom.get();
+
+        let mut found = None;
+        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
+            self.spatial_hash.query_candidates(q_x1, q_y1, q_x2, q_y2, |target| {
+                if inst != target {
+                    let t_inst = self.room.instance_list.get(target);
+                    if t_inst.is_active() && t_inst.solid.get() {
+                        if self.check_collision(inst, target) {
+                            found = Some(target);
+                            return false;
+                        }
+                    }
+                }
+                true
+            });
+            return found;
+        } else {
+            let mut iter = self.room.instance_list.iter_by_drawing();
+            while let Some(target) = iter.next(&self.room.instance_list) {
+                if inst != target && self.room.instance_list.get(target).solid.get() {
+                    if self.check_collision(inst, target) {
+                        return Some(target);
+                    }
                 }
             }
         }
@@ -3545,15 +3730,70 @@ impl Game {
 
     // Checks if an instance is colliding with any instance, returning the target if it is, otherwise None
     pub fn check_collision_any(&self, inst: usize) -> Option<usize> {
-        let mut iter = self.room.instance_list.iter_by_drawing();
-        while let Some(target) = iter.next(&self.room.instance_list) {
-            if inst != target {
-                if self.check_collision(inst, target) {
-                    return Some(target);
+        let inst_obj = self.room.instance_list.get(inst);
+        let sprite = self
+            .assets
+            .sprites
+            .get_asset(if inst_obj.mask_index.get() < 0 { inst_obj.sprite_index.get() } else { inst_obj.mask_index.get() })
+            .map(|x| x.as_ref());
+        inst_obj.update_bbox(sprite);
+
+        let q_x1 = inst_obj.bbox_left.get();
+        let q_y1 = inst_obj.bbox_top.get();
+        let q_x2 = inst_obj.bbox_right.get();
+        let q_y2 = inst_obj.bbox_bottom.get();
+
+        let mut found = None;
+        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
+            self.spatial_hash.query_candidates(q_x1, q_y1, q_x2, q_y2, |target| {
+                if inst != target {
+                    let t_inst = self.room.instance_list.get(target);
+                    if t_inst.is_active() {
+                        if self.check_collision(inst, target) {
+                            found = Some(target);
+                            return false;
+                        }
+                    }
+                }
+                true
+            });
+            return found;
+        } else {
+            let mut iter = self.room.instance_list.iter_by_drawing();
+            while let Some(target) = iter.next(&self.room.instance_list) {
+                if inst != target {
+                    if self.check_collision(inst, target) {
+                        return Some(target);
+                    }
                 }
             }
         }
         None
+    }
+
+    /// Finds a candidate instance near the specified box. Uses spatial_hash when available, falling back to find_instance_with.
+    pub fn find_instance_near(&self, object_id: i32, x1: i32, y1: i32, x2: i32, y2: i32, pred: impl Fn(usize) -> bool) -> Option<usize> {
+        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
+            let mut found = None;
+            self.spatial_hash.query_candidates(x1, y1, x2, y2, |handle| {
+                let matches_obj = match object_id {
+                    gml::ALL => true,
+                    _ if object_id < 0 => false,
+                    target_obj if target_obj < 100000 => {
+                        let inst = self.room.instance_list.get(handle);
+                        inst.object_index.get() == target_obj || inst.parents.borrow().contains(&target_obj)
+                    },
+                    instance_id => self.room.instance_list.get(handle).id.get() == instance_id,
+                };
+                if matches_obj && self.room.instance_list.get(handle).is_active() && pred(handle) {
+                    found = Some(handle);
+                    return false;
+                }
+                true
+            });
+            return found;
+        }
+        self.find_instance_with(object_id, pred)
     }
 
     /// Finds an instance that matches the predicate.

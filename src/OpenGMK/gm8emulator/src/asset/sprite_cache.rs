@@ -148,6 +148,19 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
         .iter()
         .map(|c| {
             let is_empty_mask = !c.data.iter().any(|&px| px);
+            let mut is_solid_rect = !is_empty_mask;
+            if is_solid_rect {
+                for y in c.bbox_top..=c.bbox_bottom {
+                    for x in c.bbox_left..=c.bbox_right {
+                        let idx = (y * c.width + x) as usize;
+                        if idx >= c.data.len() || !c.data[idx] {
+                            is_solid_rect = false;
+                            break;
+                        }
+                    }
+                    if !is_solid_rect { break; }
+                }
+            }
             crate::asset::sprite::Collider {
                 width: c.width,
                 height: c.height,
@@ -156,6 +169,7 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
                 bbox_top: c.bbox_top,
                 bbox_bottom: c.bbox_bottom,
                 is_empty_mask,
+                is_solid_rect,
                 data: c.data.clone(),
             }
         })
