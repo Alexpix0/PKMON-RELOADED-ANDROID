@@ -66,6 +66,12 @@ val ControlAction.hint: String
         ControlAction.DOWN -> "Caminar o navegar hacia abajo"
         ControlAction.LEFT -> "Caminar o navegar hacia la izquierda"
         ControlAction.RIGHT -> "Caminar o navegar hacia la derecha"
+        ControlAction.ROTATE_L -> "Girar pieza hacia la izquierda (Ruinas Alfa/Omega)"
+        ControlAction.ROTATE_R -> "Girar pieza hacia la derecha (Ruinas Alfa/Omega)"
+        ControlAction.H -> "Mostrar reloj y hora actual en pantalla"
+        ControlAction.F -> "Tocar la flauta"
+        ControlAction.F1 -> "Abrir menú de ayuda u opciones rápidas"
+        ControlAction.F5 -> "Guardado rápido del progreso"
     }
 
 /** The name of a pad button or PC keyboard key, for showing it on screen. */
