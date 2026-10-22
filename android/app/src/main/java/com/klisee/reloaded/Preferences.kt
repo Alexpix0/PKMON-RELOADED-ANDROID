@@ -565,9 +565,9 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("achievements", value).apply()
         }
 
-    /** Compilador JIT Tier-2 Nativo ARM64 */
+    /** Compilador JIT Tier-2 Nativo ARM64 (Desactivado por defecto por seguridad) */
     var jitArm64: Boolean
-        get() = prefs.getBoolean("jitArm64", true)
+        get() = prefs.getBoolean("jitArm64", false)
         set(value) {
             prefs.edit().putBoolean("jitArm64", value).apply()
         }

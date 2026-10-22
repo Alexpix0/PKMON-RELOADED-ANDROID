@@ -80,8 +80,15 @@ object TouchLayouts {
     fun key(profile: TouchProfile, spec: TouchControlSpec) = "${profile.id}/${spec.id}"
     fun availableFor(profile: TouchProfile) =
         controls.filter { (!it.joystick || profile in it.profiles || profile == TouchProfile.MENU) && (it.id != "sel_world" || profile == TouchProfile.WORLD) && (it.id != "pkmn" || profile == TouchProfile.BATTLE) }
+    private val MOUSE_SPEC_IDS = setOf("lmb", "rmb", "qty_plus", "qty_minus")
     fun controlsFor(profile: TouchProfile, values: Map<String, TouchPlacement> = emptyMap()) =
-        availableFor(profile).filter { profile in it.profiles || key(profile, it) in values }
+        availableFor(profile).filter {
+            if (it.id in MOUSE_SPEC_IDS) {
+                values[key(profile, it)]?.visible == true
+            } else {
+                profile in it.profiles || key(profile, it) in values
+            }
+        }
     fun added(profile: TouchProfile, spec: TouchControlSpec) = profile !in spec.profiles
 
     val profileDefaults = mapOf(

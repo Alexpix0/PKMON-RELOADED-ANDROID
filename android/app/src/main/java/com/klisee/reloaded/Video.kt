@@ -57,7 +57,7 @@ fun writeVideoFile(
     oneHanded: Boolean = false,
     replayBlackbox: Boolean = false,
     achievements: Boolean = false,
-    jitArm64: Boolean = true,
+    jitArm64: Boolean = false,
     bigLittleAffinity: Boolean = true,
     // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
     tbdrSurfaceFusion: Boolean = true,

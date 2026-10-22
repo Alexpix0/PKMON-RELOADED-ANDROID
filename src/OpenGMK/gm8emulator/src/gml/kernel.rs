@@ -6686,13 +6686,18 @@ impl Game {
     pub fn ini_open(&mut self, args: &[Value]) -> gml::Result<Value> {
         let name = expect_args!(args, [bytes])?;
         let name_str = self.decode_str(name.as_ref());
-        if file::file_exists(&file::to_path(&name_str)) {
-            match ini::Ini::load_from_file(name_str.as_ref()) {
+        let path = file::to_path(&name_str);
+        if file::file_exists(&path) {
+            match ini::Ini::load_from_file(path.as_ref()) {
                 Ok(ini) => {
                     self.open_ini = Some((ini, name));
                     Ok(Default::default())
                 },
-                Err(e) => Err(gml::Error::FunctionError("ini_open".into(), format!("{}", e))),
+                Err(e) => {
+                    eprintln!("[gml] ini_open load error: {}", e);
+                    self.open_ini = Some((ini::Ini::new(), name));
+                    Ok(Default::default())
+                }
             }
         } else {
             self.open_ini = Some((ini::Ini::new(), name));
@@ -6702,16 +6707,17 @@ impl Game {
 
     pub fn ini_close(&mut self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
-        match self.open_ini.as_ref() {
-            Some((ini, path)) => match ini.write_to_file(self.decode_str(path.as_ref()).as_ref()) {
-                Ok(()) => {
-                    self.open_ini = None;
-                    Ok(Default::default())
-                },
-                Err(e) => Err(gml::Error::FunctionError("ini_close".into(), format!("{}", e))),
-            },
-            None => Ok(Default::default()),
+        if let Some((ini, path)) = self.open_ini.take() {
+            let decoded = self.decode_str(path.as_ref());
+            let target_path = file::to_path(&decoded);
+            if let Some(parent) = std::path::Path::new(target_path.as_ref()).parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = ini.write_to_file(target_path.as_ref()) {
+                eprintln!("[gml] ini_close write error: {}", e);
+            }
         }
+        Ok(Default::default())
     }
 
     pub fn ini_read_string(&self, args: &[Value]) -> gml::Result<Value> {
@@ -7472,12 +7478,18 @@ impl Game {
             crate::touch_controls::set_keyboard_wait_active(true);
 
             self.input.set_keyboard_lastkey(0);
+            let wait_start = std::time::Instant::now();
             while self.input.keyboard_lastkey() == 0 {
                 datetime::sleep(std::time::Duration::from_millis(16));
                 self.process_window_events();
                 #[cfg(target_os = "android")]
                 {
                     let _ = self.screen_redraw(&[]);
+                }
+                // Watchdog to prevent freeze / black screen if no key received within 10 seconds
+                if wait_start.elapsed().as_secs() >= 10 {
+                    self.input.set_keyboard_lastkey(ramen::input::Key::Escape as u8);
+                    break;
                 }
             }
 

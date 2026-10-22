@@ -242,6 +242,7 @@ class GameActivity : NativeActivity() {
     external fun nativeImeInset(height: Int)
     external fun nativeAudioFocus(lost: Boolean)
     external fun nativeReloadLayout(profile: Int)
+    external fun nativeBackendInfo(): String
 
     companion object {
         init {
@@ -252,6 +253,12 @@ class GameActivity : NativeActivity() {
         }
 
         private var instance: GameActivity? = null
+
+        /** Returns JSON string with native backend info (requested, actual, fallback, reason). */
+        @JvmStatic
+        fun getBackendInfo(): String {
+            return runCatching { instance?.nativeBackendInfo() }.getOrNull() ?: "{}"
+        }
 
         /** Notifies the running engine to reload control layouts from storage without restarting. */
         @JvmStatic

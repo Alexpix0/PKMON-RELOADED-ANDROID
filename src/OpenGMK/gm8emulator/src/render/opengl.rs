@@ -2299,8 +2299,8 @@ impl RendererImpl {
 
         // Bezel art decoration on 4:3 pillarbox side bars
         let dyn_bezel = touch_controls::current_bezel();
-        let env_bezel = std::env::var("OPENGMK_BEZEL").unwrap_or_else(|_| "oled".to_string());
-        let bezel = if dyn_bezel != "oled" { dyn_bezel } else { env_bezel.as_str() };
+        let bezel_active = crate::render::config::CONFIG.is_bezel_active();
+        let bezel = if dyn_bezel != "oled" { dyn_bezel } else if bezel_active { "reloaded_blue" } else { "oled" };
         if bezel != "oled" && bezel != "black" && (ww / wh) > 1.4 {
             let fw = self.framebuffer.width as f32;
             let fh = self.framebuffer.height as f32;
@@ -4437,6 +4437,12 @@ impl RendererTrait for RendererImpl {
                 }
             }
 
+            // Reset target surface to avoid black screen if GM8 script didn't call surface_reset_target
+            if self.bound_fbo != 0 {
+                self.bound_fbo = 0;
+                self.gl.BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer.fbo);
+            }
+
             // On Intel, glBlitFrameBuffer just does nothing if the scissor box is too big, which it
             // very well could be. So just disable the scissor test for now.
             self.gl.Disable(gl::SCISSOR_TEST);
@@ -4470,16 +4476,7 @@ impl RendererTrait for RendererImpl {
                 blit_y + w_h,
                 gl::COLOR_BUFFER_BIT,
                 if cfg!(target_os = "android") {
-                    let filter_mode = std::env::var("OPENGMK_FILTER").unwrap_or_default();
-                    if filter_mode == "sharp" || filter_mode == "linear" || filter_mode == "fxaa" {
-                        gl::LINEAR
-                    } else if filter_mode == "nearest" {
-                        gl::NEAREST
-                    } else if self.next_render_state.interpolate_pixels.into() {
-                        gl::LINEAR
-                    } else {
-                        gl::NEAREST
-                    }
+                    crate::render::config::CONFIG.filter_gl_enum(self.next_render_state.interpolate_pixels.into())
                 } else if self.next_render_state.interpolate_pixels.into() {
                     gl::LINEAR
                 } else {

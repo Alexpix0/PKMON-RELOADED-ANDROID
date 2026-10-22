@@ -1720,6 +1720,17 @@ pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeReloadLayout<
     load_controls();
 }
 
+/// Returns backend status and fallback reason in JSON.
+#[no_mangle]
+pub unsafe extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeBackendInfo<'local>(
+    mut env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+) -> jni::sys::jstring {
+    let json = crate::render::get_backend_info_json();
+    let s = env.new_string(json).unwrap_or_else(|_| env.new_string("").unwrap());
+    s.into_raw()
+}
+
 /// Whether the system keyboard is up, so it is only raised or dropped on a change.
 static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

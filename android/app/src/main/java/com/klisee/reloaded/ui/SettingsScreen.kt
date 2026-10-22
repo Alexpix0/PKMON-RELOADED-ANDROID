@@ -91,6 +91,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.klisee.reloaded.GameRepository
+import com.klisee.reloaded.GameActivity
 import com.klisee.reloaded.Preferences
 import com.klisee.reloaded.Update
 import kotlinx.coroutines.launch
@@ -114,6 +115,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
+    val backendInfo = remember { GameActivity.getBackendInfo() }
+    val isVulkanFallback = remember { backendInfo.contains("\"fallback\":true") }
     var status by remember(revision) { mutableStateOf(repo.status()) }
     var keepScreenOn by remember { mutableStateOf(prefs.keepScreenOn) }
     var keepAspect by remember { mutableStateOf(prefs.keepAspect) }
@@ -686,7 +689,7 @@ fun SettingsScreen(
         bottomBar = bottomBar,
         // Lifted clear of the floating bar, which otherwise sits on top of the message.
         snackbarHost = { SnackbarHost(snackbar, modifier = Modifier.padding(bottom = BottomNavSpace)) },
-        contentWindowInsets = WindowInsets(0.dp),
+        contentWindowInsets = androidx.compose.material3.ScaffoldDefaults.contentWindowInsets,
     ) { padding ->
         Column(
             modifier = Modifier
@@ -694,7 +697,7 @@ fun SettingsScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 120.dp),
+                .padding(bottom = BottomNavSpace + 32.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Spacer(Modifier.height(4.dp))
@@ -794,8 +797,8 @@ fun SettingsScreen(
                                     )
                                     ChoiceRow(
                                         icon = Icons.Filled.Speed,
-                                        title = "Vulkan",
-                                        subtitle = "Pipeline gráfico de bajo nivel de alto rendimiento",
+                                        title = if (isVulkanFallback && graphicsBackend == "vulkan") "Vulkan (Fallback activo a OpenGL ES)" else "Vulkan",
+                                        subtitle = if (isVulkanFallback && graphicsBackend == "vulkan") "El driver de GPU falló al crear la superficie Vulkan. El motor está ejecutándose en OpenGL ES." else "Pipeline gráfico de bajo nivel de alto rendimiento",
                                         selected = graphicsBackend == "vulkan",
                                         items = 2,
                                         index = 1,

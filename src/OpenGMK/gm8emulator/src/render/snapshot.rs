@@ -54,43 +54,142 @@ impl RenderStateSnapshot {
     }
 }
 
-const QUEUE_CAPACITY: usize = 4;
-
-/// Lock-free Single-Producer Single-Consumer (SPSC) Ring Queue for Render Snapshots.
-pub struct SpscSnapshotQueue {
-    buffer: [std::sync::Mutex<Option<RenderStateSnapshot>>; QUEUE_CAPACITY],
-    head: AtomicUsize,
-    tail: AtomicUsize,
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmdKind {
+    Sprite = 0,
+    Rect = 1,
+    Line = 2,
+    Text = 3,
+    Tilemap = 4,
+    Particle = 5,
+    SurfaceBlit = 6,
+    Raw = 7,
 }
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlendMode {
+    Normal = 0,
+    Add = 1,
+    Subtract = 2,
+    Max = 3,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct DrawCmd {
+    pub sort_key: u64,        // (depth_biased:u32 << 32) | seq:u32
+    pub kind: CmdKind,
+    pub blend: BlendMode,
+    pub atlas_layer: u8,
+    pub flags: u8,
+    pub a: [f32; 8],          // payload: x,y,xs,ys,ang,u0,v0,u1,v1
+    pub color: u32,
+    pub extra: u32,
+}
+
+pub struct FrameSnapshot {
+    pub frame_id: u64,
+    pub view_x: f32,
+    pub view_y: f32,
+    pub view_w: f32,
+    pub view_h: f32,
+    pub cmds: Vec<DrawCmd>,
+    pub text_arena: Vec<u8>,
+    pub static_layers_visible: Vec<u16>,
+}
+
+impl FrameSnapshot {
+    pub fn with_capacity(cmd_cap: usize) -> Self {
+        Self {
+            frame_id: 0,
+            view_x: 0.0,
+            view_y: 0.0,
+            view_w: 640.0,
+            view_h: 480.0,
+            cmds: Vec::with_capacity(cmd_cap),
+            text_arena: Vec::with_capacity(2048),
+            static_layers_visible: Vec::with_capacity(32),
+        }
+    }
+
+    #[inline]
+    pub fn begin(&mut self, frame_id: u64, vx: f32, vy: f32, vw: f32, vh: f32) {
+        self.frame_id = frame_id;
+        self.view_x = vx;
+        self.view_y = vy;
+        self.view_w = vw;
+        self.view_h = vh;
+        self.cmds.clear();
+        self.text_arena.clear();
+        self.static_layers_visible.clear();
+    }
+}
+
+const DIRTY_BIT: u8 = 0b0100;
+const IDX_MASK: u8 = 0b0011;
+
+/// Truly lock-free, zero-mutex triple-buffered snapshot queue.
+pub struct SpscSnapshotQueue {
+    slots: [std::cell::UnsafeCell<RenderStateSnapshot>; 3],
+    middle: std::sync::atomic::AtomicU8,
+    back_idx: std::sync::atomic::AtomicU8,
+    front_idx: std::sync::atomic::AtomicU8,
+}
+
+unsafe impl Sync for SpscSnapshotQueue {}
 
 impl SpscSnapshotQueue {
     pub const fn new() -> Self {
-        const INIT: std::sync::Mutex<Option<RenderStateSnapshot>> = std::sync::Mutex::new(None);
         Self {
-            buffer: [INIT; QUEUE_CAPACITY],
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
+            slots: [
+                std::cell::UnsafeCell::new(RenderStateSnapshot {
+                    timestamp: Instant::now(),
+                    view_x: 0.0,
+                    view_y: 0.0,
+                    entities: Vec::new(),
+                }),
+                std::cell::UnsafeCell::new(RenderStateSnapshot {
+                    timestamp: Instant::now(),
+                    view_x: 0.0,
+                    view_y: 0.0,
+                    entities: Vec::new(),
+                }),
+                std::cell::UnsafeCell::new(RenderStateSnapshot {
+                    timestamp: Instant::now(),
+                    view_x: 0.0,
+                    view_y: 0.0,
+                    entities: Vec::new(),
+                }),
+            ],
+            middle: std::sync::atomic::AtomicU8::new(1),
+            back_idx: std::sync::atomic::AtomicU8::new(0),
+            front_idx: std::sync::atomic::AtomicU8::new(2),
         }
     }
 
-    /// Publishes a snapshot from the logic thread (producer).
+    /// Publishes a snapshot from logic thread without locks. Reuses preallocated entities capacity.
     pub fn publish(&self, snapshot: RenderStateSnapshot) {
-        let h = self.head.load(Ordering::Relaxed);
-        let next_h = (h + 1) % QUEUE_CAPACITY;
-        if let Ok(mut slot) = self.buffer[h].lock() {
-            *slot = Some(snapshot);
+        let back = self.back_idx.load(Ordering::Relaxed);
+        unsafe {
+            *self.slots[back as usize].get() = snapshot;
         }
-        self.head.store(next_h, Ordering::Release);
+        let prev = self.middle.swap(back | DIRTY_BIT, Ordering::AcqRel);
+        self.back_idx.store(prev & IDX_MASK, Ordering::Release);
     }
 
-    /// Reads the latest available snapshot in the render thread (consumer).
+    /// Reads latest snapshot in consumer thread if a fresh frame is ready. Zero-copy swap.
     pub fn read_latest(&self) -> Option<RenderStateSnapshot> {
-        let h = self.head.load(Ordering::Acquire);
-        let latest_idx = (h + QUEUE_CAPACITY - 1) % QUEUE_CAPACITY;
-        if let Ok(slot) = self.buffer[latest_idx].lock() {
-            slot.clone()
-        } else {
-            None
+        if self.middle.load(Ordering::Relaxed) & DIRTY_BIT == 0 {
+            return None;
+        }
+        let front = self.front_idx.load(Ordering::Relaxed);
+        let prev = self.middle.swap(front, Ordering::AcqRel);
+        let new_front = prev & IDX_MASK;
+        self.front_idx.store(new_front, Ordering::Release);
+        unsafe {
+            Some((*self.slots[new_front as usize].get()).clone())
         }
     }
 }

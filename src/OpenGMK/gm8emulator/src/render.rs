@@ -7,6 +7,8 @@ pub mod vulkan;
 pub mod colorblind;
 pub mod fsr;
 pub mod lighting2d;
+pub mod config;
+pub mod frame_channel;
 
 use crate::types::Colour;
 use atlas::{AtlasRect, AtlasRef};
@@ -649,9 +651,27 @@ impl Default for RendererOptions {
     }
 }
 
+static BACKEND_REASON: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn get_backend_info_json() -> String {
+    let req = config::CONFIG.backend_requested.load(std::sync::atomic::Ordering::Relaxed);
+    let act = config::CONFIG.backend_actual.load(std::sync::atomic::Ordering::Relaxed);
+    let fb = config::CONFIG.fallback_active.load(std::sync::atomic::Ordering::Relaxed);
+    let reason = BACKEND_REASON.lock().ok().and_then(|r| r.clone()).unwrap_or_default();
+    format!(
+        "{{\"requested\":\"{}\",\"actual\":\"{}\",\"fallback\":{},\"reason\":\"{}\"}}",
+        if req == 1 { "vulkan" } else { "opengl" },
+        if act == 1 { "vulkan" } else { "opengl" },
+        fb,
+        reason.replace('\"', "\\\"")
+    )
+}
+
 impl Renderer {
     pub fn new(backend: (), connection: &Connection, options: &RendererOptions, window: &Window, clear_colour: Colour) -> Result<Self, String> {
+        config::CONFIG.init_from_env();
         let vulkan_requested = crate::touch_controls::is_vulkan_backend()
+            || config::CONFIG.backend_requested.load(std::sync::atomic::Ordering::Relaxed) == 1
             || std::env::var("OPENGMK_BACKEND").map(|v| v.eq_ignore_ascii_case("vulkan")).unwrap_or(false);
 
         if vulkan_requested {
@@ -659,14 +679,21 @@ impl Renderer {
             match vulkan::VulkanRenderer::new(options, connection, window, clear_colour) {
                 Ok(vk) => {
                     eprintln!("[render] ¡Backend Vulkan inicializado correctamente!");
+                    config::CONFIG.set_backend_status(true, true, false);
                     return Ok(Self(Box::new(vk)));
                 },
                 Err(e) => {
                     eprintln!("[render] ADVERTENCIA: No se pudo iniciar Vulkan ({}). Fallback automático a OpenGL ES.", e);
                     crate::touch_controls::set_vulkan_backend(false);
+                    if let Ok(mut lock) = BACKEND_REASON.lock() {
+                        *lock = Some(e.clone());
+                    }
+                    config::CONFIG.set_backend_status(true, false, true);
                     std::env::set_var("OPENGMK_BACKEND", "opengl");
                 }
             }
+        } else {
+            config::CONFIG.set_backend_status(false, false, false);
         }
 
         Ok(Self(Box::new(match backend {

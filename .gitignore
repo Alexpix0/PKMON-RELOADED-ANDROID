@@ -26,6 +26,11 @@ android/local.properties
 # The signing key and its passwords stay on the machine that builds the release.
 android/keystore/
 android/keystore.properties
+*.keystore
+*.jks
+android/*.keystore
+android/release.keystore
+android/keystore/alex_private.keystore
 # The .so here is copied from target/ by the Gradle build, not a source file.
 android/app/src/main/jniLibs/
 

@@ -2440,6 +2440,19 @@ impl Game {
             });
         }
 
+        // Performance telemetry every 120 frames
+        static PERF_FRAME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let f = PERF_FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if f % 120 == 0 {
+            eprintln!(
+                "[RLD_PERF] frame: {} | room_speed: {} | instances: {} | views: {}",
+                f,
+                self.room.speed,
+                self.room.instance_list.len(),
+                self.room.views.len()
+            );
+        }
+
         // Clear inputs for this frame
         self.input.step();
 

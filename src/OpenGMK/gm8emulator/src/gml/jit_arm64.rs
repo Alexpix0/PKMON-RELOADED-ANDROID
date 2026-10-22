@@ -10,7 +10,8 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub static JIT_ARM64_ENABLED: AtomicBool = AtomicBool::new(true);
+// Kept DISABLED by default in v0.9.8 to prevent SIGSEGV from W^X / SELinux policies on OEM kernels.
+pub static JIT_ARM64_ENABLED: AtomicBool = AtomicBool::new(false);
 
 #[inline(always)]
 pub fn is_jit_arm64_enabled() -> bool {

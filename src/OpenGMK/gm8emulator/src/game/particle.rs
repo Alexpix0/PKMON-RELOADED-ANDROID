@@ -1164,13 +1164,21 @@ impl System {
         };
         if self.draw_old_to_new {
             for particle in &self.particles {
-                types.get_asset(particle.ptype).map(|pt| fix_blend(pt.additive_blending, renderer));
-                particle.draw(self.x, self.y, renderer, assets, types, shapes);
+                if particle.alpha > Real::from(0.001) && particle.size > Real::from(0.0) {
+                    if let Some(pt) = types.get_asset(particle.ptype) {
+                        fix_blend(pt.additive_blending, renderer);
+                    }
+                    particle.draw(self.x, self.y, renderer, assets, types, shapes);
+                }
             }
         } else {
             for particle in self.particles.iter().rev() {
-                types.get_asset(particle.ptype).map(|pt| fix_blend(pt.additive_blending, renderer));
-                particle.draw(self.x, self.y, renderer, assets, types, shapes);
+                if particle.alpha > Real::from(0.001) && particle.size > Real::from(0.0) {
+                    if let Some(pt) = types.get_asset(particle.ptype) {
+                        fix_blend(pt.additive_blending, renderer);
+                    }
+                    particle.draw(self.x, self.y, renderer, assets, types, shapes);
+                }
             }
         }
         fix_blend(false, renderer);

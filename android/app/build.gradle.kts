@@ -40,8 +40,8 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 38
-        versionName = "9.7"
+        versionCode = 39
+        versionName = "0.9.8"
 
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -61,16 +61,16 @@ android {
                     secretKeystore.writeBytes(bytes)
                 }
                 storeFile = secretKeystore
-                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "AlexReloaded2026SecureKey!"
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "alex_reloaded"
                 keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
             } else {
                 val repoKeystore = rootProject.file("release.keystore")
                 if (repoKeystore.exists()) {
                     storeFile = repoKeystore
-                    storePassword = "pokemonreloaded"
-                    keyAlias = "reloaded"
-                    keyPassword = "pokemonreloaded"
+                    storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
+                    keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "reloaded"
+                    keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
                 }
             }
         }
