@@ -113,12 +113,9 @@ impl<'a> LineIterator<'a> {
 }
 
 impl Game {
-    /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
-    /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
-    pub fn draw(&mut self) -> gml::Result<()> {
-        // Update views that should be following objects
+    /// Updates views that should be following objects.
+    pub fn update_views(&mut self) {
         if self.room.views_enabled {
-            self.renderer.clear_view(self.background_colour, 1.0);
             for view in self.room.views.iter_mut().filter(|x| x.visible) {
                 if let Some(handle) = match view.follow_target {
                     obj_id if obj_id < 100000 => {
@@ -175,6 +172,16 @@ impl Game {
                     view.source_y = view.source_y.max(0).min(self.room.height - view.source_h);
                 }
             }
+        }
+    }
+
+    /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
+    /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
+    pub fn draw(&mut self) -> gml::Result<()> {
+        // Update views that should be following objects
+        self.update_views();
+        if self.room.views_enabled {
+            self.renderer.clear_view(self.background_colour, 1.0);
         }
 
         // Draw all views

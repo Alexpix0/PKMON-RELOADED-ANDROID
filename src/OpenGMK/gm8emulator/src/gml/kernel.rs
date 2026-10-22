@@ -4550,22 +4550,12 @@ impl Game {
         instance.x.set(x);
         instance.y.set(y);
         instance.bbox_is_stale.set(true);
-        let sprite = self
-            .assets
-            .sprites
-            .get_asset(if instance.mask_index.get() < 0 { instance.sprite_index.get() } else { instance.mask_index.get() })
-            .map(|x| x.as_ref());
-        instance.update_bbox(sprite);
-        let q_x1 = instance.bbox_left.get();
-        let q_y1 = instance.bbox_top.get();
-        let q_x2 = instance.bbox_right.get();
-        let q_y2 = instance.bbox_bottom.get();
 
         // Check collision with target
         let collision = match obj {
             gml::SELF => false,
             gml::OTHER => self.check_collision(context.this, context.other),
-            obj => self.find_instance_near(obj, q_x1, q_y1, q_x2, q_y2, |handle| self.check_collision(context.this, handle)).is_some(),
+            obj => self.find_instance_with(obj, |handle| self.check_collision(context.this, handle)).is_some(),
         };
 
         // Move self back to where it was
@@ -5265,9 +5255,7 @@ impl Game {
 
     pub fn collision_point(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x, y, object_id, precise, exclude_self) = expect_args!(args, [real, real, int, bool, bool])?;
-        let px = x.round().to_i32();
-        let py = y.round().to_i32();
-        match self.find_instance_near(object_id, px - 2, py - 2, px + 2, py + 2, |handle| {
+        match self.find_instance_with(object_id, |handle| {
             (!exclude_self || handle != context.this) && self.check_collision_point(handle, x, y, precise)
         }) {
             Some(handle) => Ok(self.room.instance_list.get(handle).id.get().into()),
@@ -5278,11 +5266,7 @@ impl Game {
     pub fn collision_rectangle(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2, object_id, precise, exclude_self) =
             expect_args!(args, [int, int, int, int, int, bool, bool])?;
-        let min_x = x1.min(x2);
-        let min_y = y1.min(y2);
-        let max_x = x1.max(x2);
-        let max_y = y1.max(y2);
-        match self.find_instance_near(object_id, min_x, min_y, max_x, max_y, |handle| {
+        match self.find_instance_with(object_id, |handle| {
             (!exclude_self || handle != context.this) && self.check_collision_rectangle(handle, x1, y1, x2, y2, precise)
         }) {
             Some(handle) => Ok(self.room.instance_list.get(handle).id.get().into()),
@@ -5292,11 +5276,7 @@ impl Game {
 
     pub fn collision_circle(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x, y, r, object_id, precise, exclude_self) = expect_args!(args, [real, real, real, int, bool, bool])?;
-        let min_x = (x - r).round().to_i32();
-        let min_y = (y - r).round().to_i32();
-        let max_x = (x + r).round().to_i32();
-        let max_y = (y + r).round().to_i32();
-        match self.find_instance_near(object_id, min_x, min_y, max_x, max_y, |handle| {
+        match self.find_instance_with(object_id, |handle| {
             (!exclude_self || handle != context.this)
                 && self.check_collision_ellipse(handle, x - r, y - r, x + r, y + r, precise)
         }) {
@@ -5308,11 +5288,7 @@ impl Game {
     pub fn collision_ellipse(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2, object_id, precise, exclude_self) =
             expect_args!(args, [real, real, real, real, int, bool, bool])?;
-        let min_x = x1.min(x2).round().to_i32();
-        let min_y = y1.min(y2).round().to_i32();
-        let max_x = x1.max(x2).round().to_i32();
-        let max_y = y1.max(y2).round().to_i32();
-        match self.find_instance_near(object_id, min_x, min_y, max_x, max_y, |handle| {
+        match self.find_instance_with(object_id, |handle| {
             (!exclude_self || handle != context.this) && self.check_collision_ellipse(handle, x1, y1, x2, y2, precise)
         }) {
             Some(handle) => Ok(self.room.instance_list.get(handle).id.get().into()),
@@ -5323,11 +5299,7 @@ impl Game {
     pub fn collision_line(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2, object_id, precise, exclude_self) =
             expect_args!(args, [real, real, real, real, int, bool, bool])?;
-        let min_x = x1.min(x2).round().to_i32();
-        let min_y = y1.min(y2).round().to_i32();
-        let max_x = x1.max(x2).round().to_i32();
-        let max_y = y1.max(y2).round().to_i32();
-        match self.find_instance_near(object_id, min_x, min_y, max_x, max_y, |handle| {
+        match self.find_instance_with(object_id, |handle| {
             (!exclude_self || handle != context.this) && self.check_collision_line(handle, x1, y1, x2, y2, precise)
         }) {
             Some(handle) => Ok(self.room.instance_list.get(handle).id.get().into()),
@@ -5538,18 +5510,8 @@ impl Game {
         instance.bbox_is_stale.set(true);
 
         // Check collision with target
-        let sprite = self
-            .assets
-            .sprites
-            .get_asset(if instance.mask_index.get() < 0 { instance.sprite_index.get() } else { instance.mask_index.get() })
-            .map(|x| x.as_ref());
-        instance.update_bbox(sprite);
-        let q_x1 = instance.bbox_left.get();
-        let q_y1 = instance.bbox_top.get();
-        let q_x2 = instance.bbox_right.get();
-        let q_y2 = instance.bbox_bottom.get();
         let other =
-            self.find_instance_near(obj, q_x1, q_y1, q_x2, q_y2, |handle| handle != context.this && self.check_collision(context.this, handle));
+            self.find_instance_with(obj, |handle| handle != context.this && self.check_collision(context.this, handle));
 
         // Move self back to where it was
         instance.x.set(old_x);
@@ -5657,12 +5619,10 @@ impl Game {
 
     pub fn position_meeting(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x, y, object_id) = expect_args!(args, [real, real, int])?;
-        let px = x.round().to_i32();
-        let py = y.round().to_i32();
         let meeting = match object_id {
             gml::SELF => self.check_collision_point(context.this, x, y, true),
             gml::OTHER => self.check_collision_point(context.other, x, y, true),
-            obj => self.find_instance_near(obj, px - 2, py - 2, px + 2, py + 2, |handle| self.check_collision_point(handle, x, y, true)).is_some(),
+            obj => self.find_instance_with(obj, |handle| self.check_collision_point(handle, x, y, true)).is_some(),
         };
         Ok(meeting.into())
     }

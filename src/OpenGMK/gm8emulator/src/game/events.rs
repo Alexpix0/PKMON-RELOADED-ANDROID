@@ -671,6 +671,38 @@ impl Game {
             None
         };
 
+        // Populate spatial hash ONLY for candidate targets of registered collision events (1 single pass, zero decorative instances)
+        self.spatial_hash.clear();
+        let collision_holders = &self.event_holders[gml::ev::COLLISION];
+        if !collision_holders.is_empty() && self.spatial_hash.is_enabled() {
+            let mut populated_targets = std::collections::HashSet::new();
+            for (_obj, target_list) in collision_holders.iter() {
+                for &target_obj in target_list.borrow().iter() {
+                    if populated_targets.insert(target_obj) {
+                        let mut it = self.room.instance_list.iter_by_object(target_obj);
+                        while let Some(handle) = it.next(&self.room.instance_list) {
+                            let inst = self.room.instance_list.get(handle);
+                            if inst.is_active() {
+                                let sprite = self
+                                    .assets
+                                    .sprites
+                                    .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
+                                    .map(|x| x.as_ref());
+                                inst.update_bbox(sprite);
+                                self.spatial_hash.insert(
+                                    handle,
+                                    inst.bbox_left.get(),
+                                    inst.bbox_top.get(),
+                                    inst.bbox_right.get(),
+                                    inst.bbox_bottom.get(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =

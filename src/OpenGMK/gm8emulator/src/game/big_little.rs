@@ -98,10 +98,12 @@ impl CpuTopology {
 
     /// Pins the current calling thread to high-performance Big cores.
     pub fn pin_current_thread_to_big(&self) {
-        if self.is_free_scheduler || !is_big_little_affinity_enabled() || self.big_cores.is_empty() {
+        if !is_big_little_affinity_enabled() {
             return;
         }
-        self.apply_affinity(&self.big_cores);
+        if !self.big_cores.is_empty() {
+            self.apply_affinity(&self.big_cores);
+        }
     }
 
     /// Pins the current calling thread to energy-efficient LITTLE cores.

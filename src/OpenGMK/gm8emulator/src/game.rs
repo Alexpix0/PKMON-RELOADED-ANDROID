@@ -2346,9 +2346,6 @@ impl Game {
             return Ok(());
         }
 
-        // Rebuild spatial hash before Step event so GML collision checks have updated positions
-        self.rebuild_spatial_hash();
-
         // Step event
         self.run_object_event(ev::STEP, 0, None)?;
         if self.scene_change.is_some() {
@@ -2364,9 +2361,6 @@ impl Game {
                 self.run_instance_event(ev::OTHER, 8, handle, handle, None)?;
             }
         }
-
-        // Rebuild spatial hash after movement so bound events and collision events see current AABBs
-        self.rebuild_spatial_hash();
 
         // Outside room, intersect boundary, outside/intersect view
         self.run_bound_events()?;
@@ -2455,8 +2449,12 @@ impl Game {
         self.room.instance_list.remove_with(|instance| instance.state.get() == InstanceState::Deleted);
 
         // Draw everything, including running draw events
-        if self.auto_draw && !skip_visual_frame {
-            self.draw()?;
+        if self.auto_draw {
+            if !skip_visual_frame {
+                self.draw()?;
+            } else {
+                self.update_views();
+            }
         }
 
         // Move backgrounds
@@ -3687,41 +3685,11 @@ impl Game {
 
     // Checks if an instance is colliding with any solid, returning the solid if it is, otherwise None
     pub fn check_collision_solid(&self, inst: usize) -> Option<usize> {
-        let inst_obj = self.room.instance_list.get(inst);
-        let sprite = self
-            .assets
-            .sprites
-            .get_asset(if inst_obj.mask_index.get() < 0 { inst_obj.sprite_index.get() } else { inst_obj.mask_index.get() })
-            .map(|x| x.as_ref());
-        inst_obj.update_bbox(sprite);
-
-        let q_x1 = inst_obj.bbox_left.get();
-        let q_y1 = inst_obj.bbox_top.get();
-        let q_x2 = inst_obj.bbox_right.get();
-        let q_y2 = inst_obj.bbox_bottom.get();
-
-        let mut found = None;
-        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
-            self.spatial_hash.query_candidates(q_x1, q_y1, q_x2, q_y2, |target| {
-                if inst != target {
-                    let t_inst = self.room.instance_list.get(target);
-                    if t_inst.is_active() && t_inst.solid.get() {
-                        if self.check_collision(inst, target) {
-                            found = Some(target);
-                            return false;
-                        }
-                    }
-                }
-                true
-            });
-            return found;
-        } else {
-            let mut iter = self.room.instance_list.iter_by_drawing();
-            while let Some(target) = iter.next(&self.room.instance_list) {
-                if inst != target && self.room.instance_list.get(target).solid.get() {
-                    if self.check_collision(inst, target) {
-                        return Some(target);
-                    }
+        let mut iter = self.room.instance_list.iter_by_drawing();
+        while let Some(target) = iter.next(&self.room.instance_list) {
+            if self.room.instance_list.get(target).solid.get() {
+                if self.check_collision(inst, target) {
+                    return Some(target);
                 }
             }
         }
@@ -3730,41 +3698,11 @@ impl Game {
 
     // Checks if an instance is colliding with any instance, returning the target if it is, otherwise None
     pub fn check_collision_any(&self, inst: usize) -> Option<usize> {
-        let inst_obj = self.room.instance_list.get(inst);
-        let sprite = self
-            .assets
-            .sprites
-            .get_asset(if inst_obj.mask_index.get() < 0 { inst_obj.sprite_index.get() } else { inst_obj.mask_index.get() })
-            .map(|x| x.as_ref());
-        inst_obj.update_bbox(sprite);
-
-        let q_x1 = inst_obj.bbox_left.get();
-        let q_y1 = inst_obj.bbox_top.get();
-        let q_x2 = inst_obj.bbox_right.get();
-        let q_y2 = inst_obj.bbox_bottom.get();
-
-        let mut found = None;
-        if self.spatial_hash.is_enabled() && self.spatial_hash.entry_count() > 0 {
-            self.spatial_hash.query_candidates(q_x1, q_y1, q_x2, q_y2, |target| {
-                if inst != target {
-                    let t_inst = self.room.instance_list.get(target);
-                    if t_inst.is_active() {
-                        if self.check_collision(inst, target) {
-                            found = Some(target);
-                            return false;
-                        }
-                    }
-                }
-                true
-            });
-            return found;
-        } else {
-            let mut iter = self.room.instance_list.iter_by_drawing();
-            while let Some(target) = iter.next(&self.room.instance_list) {
-                if inst != target {
-                    if self.check_collision(inst, target) {
-                        return Some(target);
-                    }
+        let mut iter = self.room.instance_list.iter_by_drawing();
+        while let Some(target) = iter.next(&self.room.instance_list) {
+            if inst != target {
+                if self.check_collision(inst, target) {
+                    return Some(target);
                 }
             }
         }
