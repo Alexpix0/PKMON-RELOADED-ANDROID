@@ -1,16 +1,16 @@
 use crate::{gml::Value, math::Real};
 use time::{OffsetDateTime, PrimitiveDateTime, UtcOffset};
 
-/// Precision hybrid frame pacing on Android to eliminate timer overshoot and 7 FPS drops in idle/reposo.
+/// Precision hybrid frame pacing on Android to eliminate timer overshoot, scheduler latency and 42 FPS locks.
 #[cfg(target_os = "android")]
 pub fn sleep(dur: std::time::Duration) {
     let begin = std::time::Instant::now();
     let target = begin + dur;
-    // Android kernel scheduler ticks (10-20ms jiffies) can easily overshoot small sleeps.
-    // By keeping kernel sleep at (dur - 2.5ms) and absorbing tail latency with spin_loop,
-    // we achieve rock-solid 60 FPS without pegging mobile CPU cores.
-    if let Some(sleep_time) = dur.checked_sub(std::time::Duration::from_micros(2500)) {
-        if sleep_time > std::time::Duration::from_millis(1) {
+    // Android kernel scheduler ticks and power governor latencies easily overshoot sleeps under 6ms.
+    // Never hand short sleeps (< 6ms) to the Linux kernel scheduler.
+    // For sleeps >= 6ms, sleep for (dur - 5ms) and absorb the final 5ms tail with a zero-jitter spin loop.
+    if let Some(sleep_time) = dur.checked_sub(std::time::Duration::from_millis(5)) {
+        if sleep_time >= std::time::Duration::from_millis(1) {
             std::thread::sleep(sleep_time);
         }
     }

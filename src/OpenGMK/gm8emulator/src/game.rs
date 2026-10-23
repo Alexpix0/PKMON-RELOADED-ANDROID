@@ -2831,7 +2831,16 @@ impl Game {
                 time_now += duration;
             } else {
                 FRAME_LAGGING.store(true, std::sync::atomic::Ordering::Relaxed);
-                time_now = Instant::now();
+                #[cfg(target_os = "android")]
+                if diff <= duration + Duration::from_millis(3) {
+                    time_now += duration;
+                } else {
+                    time_now = Instant::now();
+                }
+                #[cfg(not(target_os = "android"))]
+                {
+                    time_now = Instant::now();
+                }
             }
         }
     }

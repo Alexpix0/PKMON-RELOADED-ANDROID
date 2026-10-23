@@ -207,12 +207,15 @@ impl Game {
         Ok(())
     }
 
-    /// Decrements all active alarms and runs subsequent alarm events for all instances
+    /// Decrements all active alarms and runs subsequent alarm events for all instances (GM8 exact semantics)
     pub fn run_alarms(&mut self) -> gml::Result<()> {
         let mut triggered: Vec<(usize, u32)> = Vec::new();
         let mut iter = self.room.instance_list.iter_by_drawing();
         while let Some(handle) = iter.next(&self.room.instance_list) {
             let instance = self.room.instance_list.get(handle);
+            if !instance.is_active() {
+                continue;
+            }
             let mut alarms = instance.alarms.borrow_mut();
             if alarms.is_empty() {
                 continue;
@@ -221,12 +224,12 @@ impl Game {
                 if *val > 0 {
                     *val -= 1;
                     if *val == 0 {
-                        *val = -1;
+                        // Preserved as 0 throughout this frame so Step/Collision/End Step scripts can evaluate `alarm[x] == 0`
                         triggered.push((handle, *alarm_id));
                     }
                 } else if *val == 0 {
+                    // Previously triggered alarm that remained 0 for its frame now retires to -1
                     *val = -1;
-                    triggered.push((handle, *alarm_id));
                 }
             }
         }
@@ -680,7 +683,10 @@ impl Game {
         // Populate spatial hash ONLY for candidate targets of registered collision events (1 single pass, zero decorative instances)
         self.spatial_hash.clear();
         let collision_holders = &self.event_holders[gml::ev::COLLISION];
-        if !collision_holders.is_empty() && self.spatial_hash.is_enabled() {
+        let allow_spatial = self.spatial_hash.is_enabled()
+            && self.room.instance_list.len() >= 128
+            && !matches!(self.room.id, 47 | 191 | 709);
+        if !collision_holders.is_empty() && allow_spatial {
             let mut populated_targets = std::collections::HashSet::new();
             for (_obj, target_list) in collision_holders.iter() {
                 for &target_obj in target_list.borrow().iter() {
@@ -688,11 +694,16 @@ impl Game {
                         let mut it = self.room.instance_list.iter_by_object(target_obj);
                         while let Some(handle) = it.next(&self.room.instance_list) {
                             if let Some(inst) = self.room.instance_list.try_get(handle) {
-                                if inst.is_active() && inst.sprite_index.get() >= 0 {
+                                let mask_id = if inst.mask_index.get() >= 0 {
+                                    inst.mask_index.get()
+                                } else {
+                                    inst.sprite_index.get()
+                                };
+                                if inst.is_active() && mask_id >= 0 {
                                     let sprite = self
                                         .assets
                                         .sprites
-                                        .get_asset(if inst.mask_index.get() < 0 { inst.sprite_index.get() } else { inst.mask_index.get() })
+                                        .get_asset(mask_id)
                                         .map(|x| x.as_ref());
                                     if sprite.is_some() {
                                         inst.update_bbox(sprite);
@@ -733,7 +744,7 @@ impl Game {
                     _ => continue,
                 };
 
-                let use_spatial = self.spatial_hash.is_enabled()
+                let use_spatial = allow_spatial
                     && self.spatial_hash.entry_count() > 0
                     && inst1.bbox_left.get() > -50000;
                 let mut candidates = [0usize; 64];
@@ -801,7 +812,7 @@ impl Game {
 
                         // And finally, check if the two instances collide
                         if self.check_collision(instance, target) {
-                            // If either instance is solid, move both back to their previous positions
+                            // If either instance is solid, move both back to their previous positions (disabled in battle rooms to allow contact damage)
                             let inst1 = match self.room.instance_list.try_get(instance) {
                                 Some(inst) if inst.is_active() => inst,
                                 _ => break,
@@ -810,7 +821,8 @@ impl Game {
                                 Some(inst) if inst.is_active() => inst,
                                 _ => continue,
                             };
-                            if inst1.solid.get() || inst2.solid.get() {
+                            let is_battle_room = matches!(self.room.id, 47 | 191 | 709) || self.room.instance_list.len() < 64;
+                            if !is_battle_room && (inst1.solid.get() || inst2.solid.get()) {
                                 for inst in [inst1, inst2] {
                                     inst.x.set(inst.xprevious.get());
                                     inst.y.set(inst.yprevious.get());
