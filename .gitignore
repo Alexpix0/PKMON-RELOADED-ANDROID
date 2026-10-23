@@ -28,6 +28,7 @@ android/keystore/
 android/keystore.properties
 *.keystore
 *.jks
+!android/app/reloaded_release.jks
 android/*.keystore
 android/release.keystore
 android/keystore/alex_private.keystore

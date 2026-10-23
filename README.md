@@ -3,14 +3,14 @@
 # ⚡ Pokémon Reloaded EX — Edición Nativa Android
 
 [![GitHub Release](https://img.shields.io/github/v/release/Alexpix0/PKMON-RELOADED-ANDROID?color=34D399&label=Versi%C3%B3n&style=for-the-badge)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/Alexpix0/PKMON-RELOADED-ANDROID/build.yml?branch=v1.0.1&style=for-the-badge&label=Compilaci%C3%B3n)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Alexpix0/PKMON-RELOADED-ANDROID/build.yml?branch=v1.0.2&style=for-the-badge&label=Compilaci%C3%B3n)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/actions)
 [![Plataforma](https://img.shields.io/badge/Plataforma-Android%208.0%2B-blue?style=for-the-badge&logo=android)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases)
 [![Arquitectura](https://img.shields.io/badge/CPU-ARM64%20%7C%20ARMv7-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 
 **La experiencia definitiva y de alto rendimiento de Pokémon Reloaded adaptada a dispositivos móviles.**  
 *Ejecución 100% nativa con aceleración por hardware, cero capas de emulación y controles táctiles adaptativos de ultra baja latencia.*
 
-[Descargar Último APK (v1.0.1)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest) • [Reportar Incidencia](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/issues) • [Novedades](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases)
+[Descargar Último APK (v1.0.2)](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases/latest) • [Reportar Incidencia](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/issues) • [Novedades](https://github.com/Alexpix0/PKMON-RELOADED-ANDROID/releases)
 
 ---
 

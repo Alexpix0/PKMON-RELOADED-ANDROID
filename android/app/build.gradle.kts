@@ -40,84 +40,28 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 43
-        versionName = "1.0.1"
+        versionCode = 44
+        versionName = "1.0.2"
 
         ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
         create("release") {
-            if (!keystoreProperties.isEmpty) {
-                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
-            } else if (!System.getenv("RELEASE_KEYSTORE_BASE64").isNullOrBlank()) {
-                val secretKeystore = rootProject.file("keystore/ci_release.keystore")
-                if (!secretKeystore.exists()) {
-                    secretKeystore.parentFile?.mkdirs()
-                    val bytes = Base64.getDecoder().decode(System.getenv("RELEASE_KEYSTORE_BASE64"))
-                    secretKeystore.writeBytes(bytes)
-                }
-                storeFile = secretKeystore
-                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "alex_reloaded"
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
-            } else {
-                val repoKeystore = rootProject.file("release.keystore")
-                if (repoKeystore.exists()) {
-                    storeFile = repoKeystore
-                    storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD") ?: ""
-                    keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "reloaded"
-                    keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: storePassword
-                } else {
-                    // Create an ephemeral release keystore for CI if external secrets were not configured
-                    val ciKeystore = rootProject.file("keystore/ci_auto_release.keystore")
-                    if (!ciKeystore.exists()) {
-                        ciKeystore.parentFile?.mkdirs()
-                        val cmd = arrayOf(
-                            "keytool", "-genkeypair", "-v",
-                            "-keystore", ciKeystore.absolutePath,
-                            "-alias", "alex_reloaded",
-                            "-keyalg", "RSA", "-keysize", "2048",
-                            "-validity", "10000",
-                            "-storepass", "pokemonreloaded",
-                            "-keypass", "pokemonreloaded",
-                            "-dname", "CN=Pokemon Reloaded, OU=Android, O=Alexpix, L=Madrid, ST=Madrid, C=ES"
-                        )
-                        runCatching {
-                            ProcessBuilder(*cmd).start().waitFor()
-                        }
-                    }
-                    if (ciKeystore.exists()) {
-                        storeFile = ciKeystore
-                        storePassword = "pokemonreloaded"
-                        keyAlias = "alex_reloaded"
-                        keyPassword = "pokemonreloaded"
-                    }
-                }
-            }
+            storeFile = file("reloaded_release.jks")
+            storePassword = "PokemonReloadedKey2026"
+            keyAlias = "reloaded"
+            keyPassword = "PokemonReloadedKey2026"
         }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
-            val releaseSigning = signingConfigs.getByName("release")
-            signingConfig = if (releaseSigning.storeFile?.exists() == true) {
-                releaseSigning
-            } else {
-                signingConfigs.getByName("debug")
-            }
         }
         debug {
-            val releaseSigning = signingConfigs.getByName("release")
-            signingConfig = if (releaseSigning.storeFile?.exists() == true) {
-                releaseSigning
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
