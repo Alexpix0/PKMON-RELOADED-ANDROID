@@ -20,27 +20,47 @@ pub enum Valign {
     Bottom,
 }
 
-thread_local! {
-    static TL_WORD_BUF: std::cell::RefCell<Vec<u8>> = std::cell::RefCell::new(Vec::with_capacity(64));
-    static TL_LINE_BUF: std::cell::RefCell<Vec<u8>> = std::cell::RefCell::new(Vec::with_capacity(256));
-}
-
 struct LineIterator<'a> {
     text: std::borrow::Cow<'a, [u8]>,
     pos: usize,
     font: &'a font::Font,
     max_width: Option<i32>,
-    word_buf: &'a mut Vec<u8>,
+    word_buf: [u8; 64],
+    word_len: usize,
     word_width: i32,
-    line_buf: &'a mut Vec<u8>,
+    line_buf: [u8; 256],
+    line_len: usize,
 }
 
 impl<'a> LineIterator<'a> {
+    #[inline]
+    fn push_word_char(&mut self, c: u8) {
+        if self.word_len < self.word_buf.len() {
+            self.word_buf[self.word_len] = c;
+            self.word_len += 1;
+        }
+    }
+
+    #[inline]
+    fn flush_word_to_line(&mut self, line_width: &mut i32) {
+        if self.word_len > 0 {
+            let copy_len = self.word_len.min(self.line_buf.len() - self.line_len);
+            self.line_buf[self.line_len..self.line_len + copy_len]
+                .copy_from_slice(&self.word_buf[..copy_len]);
+            self.line_len += copy_len;
+            *line_width += self.word_width;
+            self.word_len = 0;
+            self.word_width = 0;
+        }
+    }
+
     fn next(&mut self) -> Option<(&[u8], i32)> {
         if self.pos >= self.text.len() {
             return None
         }
-        self.line_buf.clear();
+        self.line_len = 0;
+        self.word_len = 0;
+        self.word_width = 0;
         let mut line_width = 0;
 
         let mut iter = self.text[self.pos..].iter().copied().enumerate().peekable();
@@ -67,21 +87,16 @@ impl<'a> LineIterator<'a> {
             // Next, insert the character into the word buffer
             match c {
                 b'\n' => {
-                    // Newline
-                    self.line_buf.extend_from_slice(&self.word_buf);
-                    line_width += self.word_width;
-                    self.word_buf.clear();
-                    self.word_width = 0;
+                    self.flush_word_to_line(&mut line_width);
                     break
                 },
                 _ => {
-                    // Normal character
                     if let Some(character) = self.font.get_char(c) {
-                        self.word_buf.push(c);
+                        self.push_word_char(c);
                         self.word_width += character.offset;
                     } else {
                         // Space when it isn't in the font
-                        self.word_buf.push(b' ');
+                        self.push_word_char(b' ');
                         if let Some(character) = self.font.get_char(self.font.first) {
                             self.word_width += character.offset;
                         }
@@ -98,10 +113,7 @@ impl<'a> LineIterator<'a> {
 
             // Push new word if applicable
             if c == b' ' {
-                self.line_buf.extend_from_slice(&self.word_buf);
-                line_width += self.word_width;
-                self.word_buf.clear();
-                self.word_width = 0;
+                self.flush_word_to_line(&mut line_width);
             }
         }
 
@@ -109,12 +121,11 @@ impl<'a> LineIterator<'a> {
             self.pos += pos;
         } else {
             // Add the last word
-            self.line_buf.extend_from_slice(self.word_buf);
-            line_width += self.word_width;
+            self.flush_word_to_line(&mut line_width);
             self.pos = self.text.len();
         }
 
-        Some((self.line_buf.as_slice(), line_width))
+        Some((&self.line_buf[..self.line_len], line_width))
     }
 }
 
@@ -460,14 +471,7 @@ impl Game {
     }
 
     /// Splits the string into line-width pairs.
-    fn split_string<'a>(
-        &self,
-        string: &'a gml::String,
-        max_width: Option<i32>,
-        font: &'a Font,
-        word_buf: &'a mut Vec<u8>,
-        line_buf: &'a mut Vec<u8>,
-    ) -> LineIterator<'a> {
+    fn split_string<'a>(&self, string: &'a gml::String, max_width: Option<i32>, font: &'a Font) -> LineIterator<'a> {
         let encoded_text: std::borrow::Cow<'a, [u8]> = match self.gm_version {
             Version::GameMaker8_0 => std::borrow::Cow::Borrowed(string.as_ref()),
             Version::GameMaker8_1 => {
@@ -492,16 +496,16 @@ impl Game {
                 }
             },
         };
-        word_buf.clear();
-        line_buf.clear();
         LineIterator {
             text: encoded_text,
             pos: 0,
             font,
             max_width,
-            word_buf,
+            word_buf: [0u8; 64],
+            word_len: 0,
             word_width: 0,
-            line_buf,
+            line_buf: [0u8; 256],
+            line_len: 0,
         }
     }
 
@@ -519,19 +523,13 @@ impl Game {
 
         let mut width = 0;
         let mut line_count = 0;
-        TL_WORD_BUF.with(|wb_cell| {
-            TL_LINE_BUF.with(|lb_cell| {
-                let mut wb = wb_cell.borrow_mut();
-                let mut lb = lb_cell.borrow_mut();
-                let mut iter = self.split_string(&string, max_width, font, &mut wb, &mut lb);
-                while let Some((_, current_w)) = iter.next() {
-                    if width < current_w {
-                        width = current_w;
-                    }
-                    line_count += 1;
-                }
-            })
-        });
+        let mut iter = self.split_string(&string, max_width, font);
+        while let Some((_, current_w)) = iter.next() {
+            if width < current_w {
+                width = current_w;
+            }
+            line_count += 1;
+        }
 
         (width, line_count * line_height)
     }
@@ -597,78 +595,72 @@ impl Game {
                 + ((f64::from(c1 & 0xff0000) * (1.0 - ratio) + f64::from(c2 & 0xff0000) * ratio) as i32 & 0xff0000)
         }
 
-        TL_WORD_BUF.with(|wb_cell| {
-            TL_LINE_BUF.with(|lb_cell| {
-                let mut wb = wb_cell.borrow_mut();
-                let mut lb = lb_cell.borrow_mut();
-                let mut iter = self.split_string(&string, max_width, font, &mut wb, &mut lb);
-                while let Some((line, width)) = iter.next() {
-                    let left_offset = match self.draw_halign {
-                        Halign::Left => 0,
-                        Halign::Middle => -(width as i32 / 2),
-                        Halign::Right => -width as i32,
-                    };
-                    let mut cursor_x = left_offset;
+        let mut iter = self.split_string(&string, max_width, font);
+        while let Some((line, width)) = iter.next() {
+            let left_offset = match self.draw_halign {
+                Halign::Left => 0,
+                Halign::Middle => -(width as i32 / 2),
+                Halign::Right => -width as i32,
+            };
+            let mut cursor_x = left_offset;
 
-                    for &c in line.iter() {
-                        let character = match font.get_char(c) {
-                            Some(character) => character,
-                            None => {
-                                // Space if it isn't in the font
-                                if let Some(character) = font.get_char(font.first) {
-                                    cursor_x += character.offset as i32;
-                                }
-                                continue;
-                            },
-                        };
-
-                        let raw_xdiff = (character.distance as i32 + cursor_x) as f64 * xscale.into_inner();
-                        let raw_ydiff = cursor_y as f64 * yscale.into_inner();
-
-                        let (px, py) = if is_straight {
-                            (x.into_inner() + raw_xdiff, y.into_inner() + raw_ydiff)
-                        } else {
-                            (
-                                x.into_inner() + raw_xdiff * cos + raw_ydiff * sin,
-                                y.into_inner() + raw_ydiff * cos - raw_xdiff * sin,
-                            )
-                        };
-
-                        if let Some(col) = uniform_colour {
-                            // Fast-path: no trigonometric rotation & no per-vertex color blending
-                            self.renderer.draw_sprite(
-                                character.atlas_ref,
-                                px,
-                                py,
-                                xscale.into(),
-                                yscale.into(),
-                                angle.into(),
-                                col,
-                                alpha.into(),
-                            );
-                        } else if let Some((c1, c2, c3, c4)) = colours {
-                            // Full-path: four-corner color gradient interpolation
-                            self.renderer.draw_sprite_colour(
-                                character.atlas_ref,
-                                px,
-                                py,
-                                xscale.into(),
-                                yscale.into(),
-                                angle.into(),
-                                lerp_col(c1, c2, f64::from(cursor_x - left_offset) / f64::from(width)),
-                                lerp_col(c1, c2, f64::from(cursor_x - left_offset + character.offset) / f64::from(width)),
-                                lerp_col(c4, c3, f64::from(cursor_x - left_offset + character.offset) / f64::from(width)),
-                                lerp_col(c4, c3, f64::from(cursor_x - left_offset) / f64::from(width)),
-                                alpha.into(),
-                            );
+            for &c in line.iter() {
+                let character = match font.get_char(c) {
+                    Some(character) => character,
+                    None => {
+                        // Space if it isn't in the font
+                        if let Some(character) = font.get_char(font.first) {
+                            cursor_x += character.offset as i32;
                         }
+                        continue;
+                    },
+                };
 
-                        cursor_x += character.offset as i32;
-                    }
+                let raw_xdiff = (character.distance as i32 + cursor_x) as f64 * xscale.into_inner();
+                let raw_ydiff = cursor_y as f64 * yscale.into_inner();
 
-                    cursor_y += line_height;
+                let (px, py) = if is_straight {
+                    (x.into_inner() + raw_xdiff, y.into_inner() + raw_ydiff)
+                } else {
+                    (
+                        x.into_inner() + raw_xdiff * cos + raw_ydiff * sin,
+                        y.into_inner() + raw_ydiff * cos - raw_xdiff * sin,
+                    )
+                };
+
+                if let Some(col) = uniform_colour {
+                    // Fast-path: no trigonometric rotation & no per-vertex color blending
+                    self.renderer.draw_sprite(
+                        character.atlas_ref,
+                        px,
+                        py,
+                        xscale.into(),
+                        yscale.into(),
+                        angle.into(),
+                        col,
+                        alpha.into(),
+                    );
+                } else if let Some((c1, c2, c3, c4)) = colours {
+                    // Full-path: four-corner color gradient interpolation
+                    self.renderer.draw_sprite_colour(
+                        character.atlas_ref,
+                        px,
+                        py,
+                        xscale.into(),
+                        yscale.into(),
+                        angle.into(),
+                        lerp_col(c1, c2, f64::from(cursor_x - left_offset) / f64::from(width)),
+                        lerp_col(c1, c2, f64::from(cursor_x - left_offset + character.offset) / f64::from(width)),
+                        lerp_col(c4, c3, f64::from(cursor_x - left_offset + character.offset) / f64::from(width)),
+                        lerp_col(c4, c3, f64::from(cursor_x - left_offset) / f64::from(width)),
+                        alpha.into(),
+                    );
                 }
-            })
-        });
+
+                cursor_x += character.offset as i32;
+            }
+
+            cursor_y += line_height;
+        }
     }
 }
