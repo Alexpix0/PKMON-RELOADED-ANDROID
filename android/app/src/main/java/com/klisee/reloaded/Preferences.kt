@@ -232,7 +232,7 @@ class Preferences(context: Context) {
 
     /** Graphics backend: "opengl" or "vulkan" */
     var graphicsBackend: String
-        get() = prefs.getString("graphicsBackend", "opengl") ?: "opengl"
+        get() = prefs.getString("graphicsBackend", "vulkan") ?: "vulkan"
         set(value) {
             prefs.edit().putString("graphicsBackend", value).apply()
         }

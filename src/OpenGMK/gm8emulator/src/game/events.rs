@@ -218,11 +218,15 @@ impl Game {
                 continue;
             }
             for (alarm_id, val) in alarms.iter_mut() {
-                if *val >= 0 {
+                if *val > 0 {
                     *val -= 1;
                     if *val == 0 {
+                        *val = -1;
                         triggered.push((handle, *alarm_id));
                     }
+                } else if *val == 0 {
+                    *val = -1;
+                    triggered.push((handle, *alarm_id));
                 }
             }
         }
@@ -838,8 +842,12 @@ impl Game {
                                 self.apply_speeds(instance);
                                 self.apply_speeds(target);
 
-                                // If they're still colliding, move them back again
-                                if inst1.is_active() && inst2.is_active() && self.check_collision(instance, target) {
+                                // If they're still colliding, move them back again (except in combat rooms where attacks resolve immediately)
+                                if !matches!(self.room.id, 47 | 191 | 709)
+                                    && inst1.is_active()
+                                    && inst2.is_active()
+                                    && self.check_collision(instance, target)
+                                {
                                     inst1.x.set(inst1.xprevious.get());
                                     inst1.y.set(inst1.yprevious.get());
                                     inst1.bbox_is_stale.set(true);

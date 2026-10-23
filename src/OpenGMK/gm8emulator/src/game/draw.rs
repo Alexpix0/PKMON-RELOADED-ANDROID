@@ -306,8 +306,18 @@ impl Game {
             }
         }
 
-        fn draw_tile(game: &mut Game, idx: usize) {
+        fn draw_tile(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) {
             let tile = game.room.tile_list.get(idx);
+            if !tile.visible.get() {
+                return;
+            }
+            let tx = tile.x.get().into_inner() as i32;
+            let ty = tile.y.get().into_inner() as i32;
+            let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
+            let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
+            if tx + tw < src_x - 32 || tx > src_x + src_w + 32 || ty + th < src_y - 32 || ty > src_y + src_h + 32 {
+                return;
+            }
             if let Some(Some(background)) = game.assets.backgrounds.get(tile.background_index.get() as usize) {
                 if let Some(atlas) = background.atlas_ref {
                     game.renderer.set_depth(tile.depth.get().into_inner() as f32);
@@ -360,21 +370,8 @@ impl Game {
         self.room.instance_list.draw_sort();
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
-        self.room.tile_list.draw_sort();
-        // Fast viewport frustum pre-filter: iterate only visible tiles while preserving sorted depth order
-        let visible_tiles: Vec<usize> = self.room.tile_list.draw_order().iter().copied().filter(|&idx| {
-            let tile = self.room.tile_list.get(idx);
-            if !tile.visible.get() {
-                return false;
-            }
-            let tx = tile.x.get().into_inner() as i32;
-            let ty = tile.y.get().into_inner() as i32;
-            let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
-            let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
-            const MARGIN: i32 = 48;
-            !(tx + tw < src_x - MARGIN || tx > src_x + src_w + MARGIN || ty + th < src_y - MARGIN || ty > src_y + src_h + MARGIN)
-        }).collect();
-        let mut iter_tile = visible_tiles.into_iter();
+        // Tiles are pre-sorted at room load / modification. Iterate draw_order directly with zero per-frame allocations.
+        let mut iter_tile = self.room.tile_list.draw_order().iter().copied();
         let mut iter_tile_v = iter_tile.next();
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
@@ -391,9 +388,9 @@ impl Game {
                     break
                 },
                 (None, Some(idx_tile), None) => {
-                    draw_tile(self, idx_tile);
+                    draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     while let Some(idx_tile) = iter_tile.next() {
-                        draw_tile(self, idx_tile);
+                        draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     }
                     break
                 },
@@ -410,7 +407,7 @@ impl Game {
                     let part_depth = idx_opt_part.map(|h| self.particles.get_system(h).unwrap().depth);
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
-                            draw_tile(self, idx_opt_tile.unwrap());
+                            draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
                             iter_tile_v = iter_tile.next();
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h)?;

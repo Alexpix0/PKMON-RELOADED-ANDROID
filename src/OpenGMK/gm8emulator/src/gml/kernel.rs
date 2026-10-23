@@ -4588,8 +4588,19 @@ impl Game {
         let instance = self.room.instance_list.get(context.this);
         let dy = instance.y.get().into_inner() - y.into_inner();
         let dx = x.into_inner() - instance.x.get().into_inner();
-        let direction = Real::from(dy.atan2(dx).to_degrees().rem_euclid(360.0));
-        instance.set_speed_direction(speed, direction);
+        let dist = dx.hypot(dy);
+        let direction = if dist <= 0.0001 {
+            instance.direction.get()
+        } else {
+            Real::from(dy.atan2(dx).to_degrees().rem_euclid(360.0))
+        };
+        // Unstick overlapping / close target attack dive (<= 16 px): do not stall with speed 0
+        let eff_speed = if dist <= 16.0 && speed == Real::from(0.0) {
+            Real::from(1.0)
+        } else {
+            speed
+        };
+        instance.set_speed_direction(eff_speed, direction);
         Ok(Default::default())
     }
 

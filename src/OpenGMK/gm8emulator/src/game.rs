@@ -1823,6 +1823,7 @@ impl Game {
         for tile in room.tiles.iter() {
             self.room.tile_list.insert(tile.clone());
         }
+        self.room.tile_list.draw_sort();
 
         // Load all instances in new room, unless they already exist due to persistence
         let mut new_handles: Vec<(usize, &asset::room::Instance)> =
