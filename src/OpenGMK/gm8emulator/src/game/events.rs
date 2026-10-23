@@ -647,10 +647,11 @@ impl Game {
                             self.run_instance_event(gml::ev::COLLISION, target_obj as u32, instance, target, None)?;
                             self.run_instance_event(gml::ev::COLLISION, object as u32, target, instance, None)?;
 
-                            // If either instance is solid, apply both instances' hspeed and vspeed
+                            // If either instance is solid, apply both instances' hspeed and vspeed (bypassed in battle rooms)
                             let inst1 = self.room.instance_list.get(instance);
                             let inst2 = self.room.instance_list.get(target);
-                            if inst1.solid.get() || inst2.solid.get() {
+                            let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
+                            if !is_battle_room && (inst1.solid.get() || inst2.solid.get()) {
                                 self.apply_speeds(instance);
                                 self.apply_speeds(target);
 

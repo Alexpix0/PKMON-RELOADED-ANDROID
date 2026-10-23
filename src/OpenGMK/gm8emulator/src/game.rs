@@ -86,6 +86,7 @@ static CACHED_FRAME_SKIP: std::sync::atomic::AtomicU32 = std::sync::atomic::Atom
 static CACHED_WEATHER_OPT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static ENV_CACHED_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static LAST_FRAME_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(16_666);
+static LAST_COMBAT_FRAME_TIME_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub fn update_cached_env_settings() {
     let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
@@ -2415,7 +2416,10 @@ impl Game {
             }
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let is_combat = matches!(self.room.id, 47 | 191 | 709);
-            if is_combat && FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            let combat_lagging = is_combat
+                && (FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed)
+                    || LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed) > 18_000);
+            if combat_lagging {
                 let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 (c % 2) == 1
             } else {
@@ -2445,7 +2449,10 @@ impl Game {
         let skip_visual_frame = {
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let is_combat = matches!(self.room.id, 47 | 191 | 709);
-            if is_combat && FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            let combat_lagging = is_combat
+                && (FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed)
+                    || LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed) > 18_000);
+            if combat_lagging {
                 let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 (c % 2) == 1
             } else {
@@ -2579,6 +2586,7 @@ impl Game {
             static ACCUM_DRAW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
             let dur_total = t_frame_start.map(|t| t.elapsed()).unwrap_or_default();
+            LAST_COMBAT_FRAME_TIME_US.store(dur_total.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
             let d_step = dur_step.unwrap_or_default();
             let d_col = dur_col.unwrap_or_default();
             let d_draw = dur_draw.unwrap_or_default();

@@ -757,12 +757,31 @@ impl Game {
                 }
             },
             Node::Binary { left, right, operator, type_unsafe } => {
-                // the + in += can happen here, and += ignores errors in the + portion
-                let left = self.eval(left, context)?;
-                match operator.call(left.clone(), self.eval(right, context)?) {
-                    res @ Ok(_) => res,
-                    Err(_) if *type_unsafe => Ok(left),
-                    res => res,
+                match operator {
+                    BinaryOperator::And => {
+                        let left_val = self.eval(left, context)?;
+                        if !left_val.is_truthy() {
+                            return Ok(Value::Real(Real::from(0.0)));
+                        }
+                        let right_val = self.eval(right, context)?;
+                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                    },
+                    BinaryOperator::Or => {
+                        let left_val = self.eval(left, context)?;
+                        if left_val.is_truthy() {
+                            return Ok(Value::Real(Real::from(1.0)));
+                        }
+                        let right_val = self.eval(right, context)?;
+                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                    },
+                    _ => {
+                        let left = self.eval(left, context)?;
+                        match operator.call(left.clone(), self.eval(right, context)?) {
+                            res @ Ok(_) => res,
+                            Err(_) if *type_unsafe => Ok(left),
+                            res => res,
+                        }
+                    }
                 }
             },
             Node::Unary { child, operator } => operator.call(self.eval(child, context)?),
