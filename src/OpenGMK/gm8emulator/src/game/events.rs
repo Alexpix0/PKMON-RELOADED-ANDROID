@@ -764,7 +764,7 @@ impl Game {
                             })
                             .collect()
                     } else {
-                        let mut list = Vec::new();
+                        let mut list = Vec::with_capacity(32);
                         let mut it = self.room.instance_list.iter_by_object(target_obj);
                         while let Some(t) = it.next(&self.room.instance_list) {
                             list.push(t);

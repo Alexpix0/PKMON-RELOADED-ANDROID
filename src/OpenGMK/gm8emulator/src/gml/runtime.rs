@@ -757,12 +757,31 @@ impl Game {
                 }
             },
             Node::Binary { left, right, operator, type_unsafe } => {
-                // the + in += can happen here, and += ignores errors in the + portion
-                let left = self.eval(left, context)?;
-                match operator.call(left.clone(), self.eval(right, context)?) {
-                    res @ Ok(_) => res,
-                    Err(_) if *type_unsafe => Ok(left),
-                    res => res,
+                match operator {
+                    BinaryOperator::And => {
+                        let left_val = self.eval(left, context)?;
+                        if !left_val.is_truthy() {
+                            return Ok(Value::Real(Real::from(0.0)));
+                        }
+                        let right_val = self.eval(right, context)?;
+                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                    },
+                    BinaryOperator::Or => {
+                        let left_val = self.eval(left, context)?;
+                        if left_val.is_truthy() {
+                            return Ok(Value::Real(Real::from(1.0)));
+                        }
+                        let right_val = self.eval(right, context)?;
+                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                    },
+                    _ => {
+                        let left = self.eval(left, context)?;
+                        match operator.call(left.clone(), self.eval(right, context)?) {
+                            res @ Ok(_) => res,
+                            Err(_) if *type_unsafe => Ok(left),
+                            res => res,
+                        }
+                    }
                 }
             },
             Node::Unary { child, operator } => operator.call(self.eval(child, context)?),
@@ -807,13 +826,17 @@ impl Game {
         }
     }
 
-    // Set a field on an instance
+    // Set a field on an instance with single-lookup Entry API
+    #[inline(always)]
     fn set_instance_field(&self, instance: usize, field_id: usize, array_index: u32, value: Value) {
         let mut fields = self.room.instance_list.get(instance).fields.borrow_mut();
-        if let Some(field) = fields.get_mut(&field_id) {
-            field.set(array_index, value)
-        } else {
-            fields.insert(field_id, Field::new(array_index, value));
+        match fields.entry(field_id) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                entry.get_mut().set(array_index, value);
+            },
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(Field::new(array_index, value));
+            },
         }
     }
 
@@ -1213,7 +1236,13 @@ impl Game {
             InstanceVariable::Solid => instance.solid.set(value.is_truthy()),
             InstanceVariable::Visible => instance.visible.set(value.is_truthy()),
             InstanceVariable::Persistent => instance.persistent.set(value.is_truthy()),
-            InstanceVariable::Depth => instance.depth.set(value.into()),
+            InstanceVariable::Depth => {
+                let d: Real = value.into();
+                if instance.depth.get() != d {
+                    instance.depth.set(d);
+                    self.room.instance_list.mark_dirty();
+                }
+            },
             InstanceVariable::SpriteIndex => {
                 let v: i32 = value.into();
                 instance.set_sprite_index(

@@ -209,8 +209,46 @@ pub struct Rectangle {
     pub height: u32,
 }
 
-// TODO: why is this unused
 pub type _Version = u32;
+
+/// Ultra-fast non-cryptographic hasher for internal GML symbol tables, fields and locals.
+#[derive(Default)]
+pub struct FxHasher {
+    hash: usize,
+}
+
+impl std::hash::Hasher for FxHasher {
+    #[inline(always)]
+    fn finish(&self) -> u64 {
+        self.hash as u64
+    }
+
+    #[inline(always)]
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.hash = (self.hash.rotate_left(5) ^ (byte as usize)).wrapping_mul(0x517cc1b727220a95);
+        }
+    }
+
+    #[inline(always)]
+    fn write_usize(&mut self, i: usize) {
+        self.hash = (self.hash.rotate_left(5) ^ i).wrapping_mul(0x517cc1b727220a95);
+    }
+
+    #[inline(always)]
+    fn write_u32(&mut self, i: u32) {
+        self.hash = (self.hash.rotate_left(5) ^ (i as usize)).wrapping_mul(0x517cc1b727220a95);
+    }
+
+    #[inline(always)]
+    fn write_i32(&mut self, i: i32) {
+        self.write_u32(i as u32);
+    }
+}
+
+pub type FxBuildHasher = std::hash::BuildHasherDefault<FxHasher>;
+pub type FxHashMap<K, V> = std::collections::HashMap<K, V, FxBuildHasher>;
+pub type FxHashSet<V> = std::collections::HashSet<V, FxBuildHasher>;
 
 #[cfg(test)]
 mod tests {

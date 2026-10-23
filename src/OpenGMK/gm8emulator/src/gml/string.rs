@@ -4,7 +4,7 @@ use std::{borrow::Cow, fmt, rc::Rc};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct String(Rc<[u8]>);
+pub struct String(pub Rc<[u8]>);
 
 impl String {
     pub fn decode(&self, encoding: &'static Encoding) -> Cow<str> {

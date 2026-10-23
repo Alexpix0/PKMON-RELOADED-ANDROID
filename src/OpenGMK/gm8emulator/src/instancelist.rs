@@ -162,6 +162,8 @@ pub struct InstanceList {
     draw_order: Vec<usize>,
     object_id_map: HashMap<ID, Vec<usize>>, // Object ID <-> Count
     object_id_map_inherit: HashMap<ID, Vec<usize>>,
+    #[serde(skip)]
+    dirty: bool,
 }
 
 // generic purpose non-borrowing iterators
@@ -225,6 +227,7 @@ impl InstanceList {
             draw_order: Vec::new(),
             object_id_map: HashMap::new(),
             object_id_map_inherit: HashMap::new(),
+            dirty: true,
         }
     }
 
@@ -278,7 +281,14 @@ impl InstanceList {
             .unwrap_or(gml::NOONE)
     }
 
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
     pub fn draw_sort(&mut self) {
+        if !self.dirty {
+            return;
+        }
         self.draw_order.sort_by(|&idx1, &idx2| {
             // TODO: Bench if this is faster with unreachable_unchecked...
             let left = self.chunks.get(idx1).unwrap();
@@ -287,7 +297,8 @@ impl InstanceList {
             // Draw order is sorted by depth (higher is lowest...) deterministically disambiguated by ID
             right.depth.get().cmp_nan_first(&left.depth.get())
                 .then_with(|| left.id.get().cmp(&right.id.get()))
-        })
+        });
+        self.dirty = false;
     }
 
     pub fn iter_by_drawing(&self) -> ILIterDrawOrder {
@@ -316,6 +327,7 @@ impl InstanceList {
     }
 
     pub fn insert(&mut self, el: Instance) -> usize {
+        self.dirty = true;
         let object_id = el.object_index.get();
         let value = self.chunks.insert(el);
         self.draw_order.push(value);
@@ -374,6 +386,7 @@ impl InstanceList {
 
     pub fn remove_with(&mut self, f: impl Fn(&Instance) -> bool) {
         if self.chunks.remove_with(f) > 0 {
+            self.dirty = true;
             self.draw_order.retain(|idx| self.chunks.get(*idx).is_some());
             self.refresh_maps();
         }
@@ -382,6 +395,7 @@ impl InstanceList {
     pub fn remove_as_vec(&mut self, f: impl Fn(&Instance) -> bool) -> Vec<Instance> {
         let instances = self.chunks.remove_as_vec(f);
         if instances.len() > 0 {
+            self.dirty = true;
             self.draw_order.retain(|idx| self.chunks.get(*idx).is_some());
             self.refresh_maps();
         }

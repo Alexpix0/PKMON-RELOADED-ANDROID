@@ -23,10 +23,18 @@ macro_rules! gml_cmp_impl {
             $v fn $fname(self, rhs: Self) -> gml::Result<Self> {
                 let freal: fn(Real) -> bool = $r_cond;
                 let fstr: fn(&[u8], &[u8]) -> bool = $s_cond;
-                Ok(if match (self, rhs) {
-                    (Self::Real(a), Self::Real(b)) => freal((a - b)),
-                    (Self::Str(a), Self::Str(b)) => fstr(a.as_ref(), b.as_ref()),
-                    (a, b) => return invalid_op!($op_variant, a, b),
+                Ok(if match (&self, &rhs) {
+                    (Self::Real(a), Self::Real(b)) => freal((*a - *b)),
+                    (Self::Str(a), Self::Str(b)) => {
+                        if std::rc::Rc::ptr_eq(&a.0, &b.0) {
+                            fstr(&[], &[])
+                        } else {
+                            fstr(a.as_ref(), b.as_ref())
+                        }
+                    },
+                    _ => match (self, rhs) {
+                        (a, b) => return invalid_op!($op_variant, a, b),
+                    }
                 } {
                     super::TRUE
                 } else {

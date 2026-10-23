@@ -277,17 +277,24 @@ impl Game {
             self.renderer.clear_zbuf();
         }
 
-        fn draw_instance(game: &mut Game, idx: usize) -> gml::Result<()> {
+        fn draw_instance(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
-                game.renderer.set_depth(instance.depth.get().into_inner() as f32);
-                if game.custom_draw_objects.contains(&instance.object_index.get()) {
-                    // Custom draw event
-                    game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
-                } else {
-                    // Default draw action
+                if !game.custom_draw_objects.contains(&instance.object_index.get()) {
+                    // Viewport Frustum Culling for default-drawn instances (+64px margin)
+                    let ix = instance.x.get().into_inner() as i32;
+                    let iy = instance.y.get().into_inner() as i32;
+                    const MARGIN: i32 = 64;
+                    if ix < src_x - MARGIN || ix > src_x + src_w + MARGIN || iy < src_y - MARGIN || iy > src_y + src_h + MARGIN {
+                        return Ok(());
+                    }
+                    game.renderer.set_depth(instance.depth.get().into_inner() as f32);
                     let _ = game.draw_instance_default(idx);
                     Ok(())
+                } else {
+                    // Custom draw event: always execute as GML might draw HUD/GUI or global effects
+                    game.renderer.set_depth(instance.depth.get().into_inner() as f32);
+                    game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
                 }
             } else {
                 Ok(())
@@ -371,9 +378,9 @@ impl Game {
             match (iter_inst_v, iter_tile_v, iter_part_v) {
                 (None, None, None) => break,
                 (Some(idx_inst), None, None) => {
-                    draw_instance(self, idx_inst)?;
+                    draw_instance(self, idx_inst, src_x, src_y, src_w, src_h)?;
                     while let Some(idx_inst) = iter_inst.next(&self.room.instance_list) {
-                        draw_instance(self, idx_inst)?;
+                        draw_instance(self, idx_inst, src_x, src_y, src_w, src_h)?;
                     }
                     break
                 },
@@ -400,7 +407,7 @@ impl Game {
                             draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
                             iter_tile_v = iter_tile.next(&self.room.tile_list);
                         } else {
-                            draw_instance(self, idx_opt_inst.unwrap())?;
+                            draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
                         }
                     } else {

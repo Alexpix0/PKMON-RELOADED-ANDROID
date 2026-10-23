@@ -2,7 +2,7 @@ use crate::{
     asset::{Object, Sprite},
     gml::{InstanceVariable, Value},
     math::Real,
-    types::ID,
+    types::{FxHashMap, ID},
     util,
 };
 use serde::{Deserialize, Serialize};
@@ -80,8 +80,8 @@ pub struct Instance {
     pub bbox_bottom: Cell<i32>,
     pub bbox_is_stale: Cell<bool>,
 
-    pub fields: RefCell<HashMap<usize, Field>>,
-    pub alarms: RefCell<HashMap<u32, i32>>,
+    pub fields: RefCell<FxHashMap<usize, Field>>,
+    pub alarms: RefCell<FxHashMap<u32, i32>>,
 
     pub parents: Rc<RefCell<HashSet<i32>>>,
 }
@@ -89,13 +89,13 @@ pub struct Instance {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Field {
     Single(Value),
-    Array(HashMap<u32, Value>),
+    Array(FxHashMap<u32, Value>),
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct DummyFieldHolder {
-    pub fields: HashMap<usize, Field>,
-    pub vars: HashMap<InstanceVariable, Field>,
+    pub fields: FxHashMap<usize, Field>,
+    pub vars: FxHashMap<InstanceVariable, Field>,
 }
 
 impl Instance {
@@ -191,8 +191,8 @@ impl Instance {
             bbox_right: Cell::new(BBOX_DEFAULT),
             bbox_bottom: Cell::new(BBOX_DEFAULT),
             bbox_is_stale: Cell::new(true),
-            fields: RefCell::new(HashMap::new()),
-            alarms: RefCell::new(HashMap::new()),
+            fields: RefCell::new(FxHashMap::default()),
+            alarms: RefCell::new(FxHashMap::default()),
         }
     }
 
@@ -369,7 +369,7 @@ impl Field {
         match index {
             0 => Self::Single(value),
             i => {
-                let mut array = HashMap::new();
+                let mut array = FxHashMap::default();
                 array.insert(i, value);
                 Self::Array(array)
             },
@@ -400,7 +400,7 @@ impl Field {
                     *v = value;
                 },
                 i => {
-                    let mut array = HashMap::with_capacity(2);
+                    let mut array = FxHashMap::default();
                     array.insert(0, v.clone());
                     array.insert(i, value);
                     *self = Self::Array(array);
@@ -415,6 +415,6 @@ impl Field {
 
 impl DummyFieldHolder {
     pub fn new() -> Self {
-        Self { fields: HashMap::new(), vars: HashMap::new() }
+        Self { fields: FxHashMap::default(), vars: FxHashMap::default() }
     }
 }
