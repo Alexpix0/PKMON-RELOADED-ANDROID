@@ -222,7 +222,15 @@ val AVAILABLE_KEY_CHOICES: List<PcKeyChoice> by lazy {
  */
 class PadProbe(context: Context) : View(context) {
     var onKey: ((Int) -> Unit)? = null
+    var onKeyUp: ((Int) -> Unit)? = null
     var onStick: ((Float, Float) -> Unit)? = null
+
+    private var l2Pressed = false
+    private var r2Pressed = false
+    private var hatLeft = false
+    private var hatRight = false
+    private var hatUp = false
+    private var hatDown = false
 
     init {
         isFocusable = true
@@ -234,9 +242,67 @@ class PadProbe(context: Context) : View(context) {
         return true
     }
 
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        onKeyUp?.invoke(keyCode)
+        return true
+    }
+
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK) {
+        if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK ||
+            event.source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD) {
             onStick?.invoke(event.getAxisValue(MotionEvent.AXIS_X), event.getAxisValue(MotionEvent.AXIS_Y))
+
+            // Analog triggers detection with hysteresis
+            val l2 = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
+            if (l2 > 0.5f && !l2Pressed) {
+                l2Pressed = true
+                onKey?.invoke(KeyEvent.KEYCODE_BUTTON_L2)
+            } else if (l2 < 0.4f && l2Pressed) {
+                l2Pressed = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_BUTTON_L2)
+            }
+
+            val r2 = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
+            if (r2 > 0.5f && !r2Pressed) {
+                r2Pressed = true
+                onKey?.invoke(KeyEvent.KEYCODE_BUTTON_R2)
+            } else if (r2 < 0.4f && r2Pressed) {
+                r2Pressed = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_BUTTON_R2)
+            }
+
+            // D-Pad Hat axes detection
+            val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
+            val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
+            if (hatX < -0.5f && !hatLeft) {
+                hatLeft = true
+                onKey?.invoke(KeyEvent.KEYCODE_DPAD_LEFT)
+            } else if (hatX >= -0.3f && hatLeft) {
+                hatLeft = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_DPAD_LEFT)
+            }
+            if (hatX > 0.5f && !hatRight) {
+                hatRight = true
+                onKey?.invoke(KeyEvent.KEYCODE_DPAD_RIGHT)
+            } else if (hatX <= 0.3f && hatRight) {
+                hatRight = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_DPAD_RIGHT)
+            }
+            if (hatY < -0.5f && !hatUp) {
+                hatUp = true
+                onKey?.invoke(KeyEvent.KEYCODE_DPAD_UP)
+            } else if (hatY >= -0.3f && hatUp) {
+                hatUp = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_DPAD_UP)
+            }
+            if (hatY > 0.5f && !hatDown) {
+                hatDown = true
+                onKey?.invoke(KeyEvent.KEYCODE_DPAD_DOWN)
+            } else if (hatY <= 0.3f && hatDown) {
+                hatDown = false
+                onKeyUp?.invoke(KeyEvent.KEYCODE_DPAD_DOWN)
+            }
+
             return true
         }
         return super.onGenericMotionEvent(event)

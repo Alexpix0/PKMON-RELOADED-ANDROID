@@ -21,20 +21,21 @@ pub enum Valign {
 }
 
 struct LineIterator<'a> {
-    text: Vec<u8>,
+    text: std::borrow::Cow<'a, [u8]>,
     pos: usize,
     font: &'a font::Font,
     max_width: Option<i32>,
     word_buf: Vec<u8>,
     word_width: i32,
+    line_buf: Vec<u8>,
 }
 
 impl<'a> LineIterator<'a> {
-    fn next(&mut self) -> Option<(Vec<u8>, i32)> {
+    fn next(&mut self) -> Option<(&[u8], i32)> {
         if self.pos >= self.text.len() {
             return None
         }
-        let mut line = Vec::new();
+        self.line_buf.clear();
         let mut line_width = 0;
 
         let mut iter = self.text[self.pos..].iter().copied().enumerate().peekable();
@@ -62,7 +63,7 @@ impl<'a> LineIterator<'a> {
             match c {
                 b'\n' => {
                     // Newline
-                    line.extend_from_slice(&self.word_buf);
+                    self.line_buf.extend_from_slice(&self.word_buf);
                     line_width += self.word_width;
                     self.word_buf.clear();
                     self.word_width = 0;
@@ -92,7 +93,7 @@ impl<'a> LineIterator<'a> {
 
             // Push new word if applicable
             if c == b' ' {
-                line.extend_from_slice(&self.word_buf);
+                self.line_buf.extend_from_slice(&self.word_buf);
                 line_width += self.word_width;
                 self.word_buf.clear();
                 self.word_width = 0;
@@ -103,12 +104,12 @@ impl<'a> LineIterator<'a> {
             self.pos += pos;
         } else {
             // Add the last word
-            line.extend_from_slice(&self.word_buf);
+            self.line_buf.extend_from_slice(&self.word_buf);
             line_width += self.word_width;
             self.pos = self.text.len();
         }
 
-        Some((line, line_width))
+        Some((&self.line_buf, line_width))
     }
 }
 
@@ -282,11 +283,15 @@ impl Game {
             if instance.visible.get() {
                 if !game.custom_draw_objects.contains(&instance.object_index.get()) {
                     // Viewport Frustum Culling for default-drawn instances (+64px margin)
-                    let ix = instance.x.get().into_inner() as i32;
-                    let iy = instance.y.get().into_inner() as i32;
-                    const MARGIN: i32 = 64;
-                    if ix < src_x - MARGIN || ix > src_x + src_w + MARGIN || iy < src_y - MARGIN || iy > src_y + src_h + MARGIN {
-                        return Ok(());
+                    // In battle rooms (47, 191, 709), disable culling so aerial/fly moves and shadows never cut off
+                    let in_battle = matches!(game.room.id, 47 | 191 | 709);
+                    if !in_battle {
+                        let ix = instance.x.get().into_inner() as i32;
+                        let iy = instance.y.get().into_inner() as i32;
+                        const MARGIN: i32 = 64;
+                        if ix < src_x - MARGIN || ix > src_x + src_w + MARGIN || iy < src_y - MARGIN || iy > src_y + src_h + MARGIN {
+                            return Ok(());
+                        }
                     }
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
                     let _ = game.draw_instance_default(idx);
@@ -301,37 +306,25 @@ impl Game {
             }
         }
 
-        fn draw_tile(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) {
+        fn draw_tile(game: &mut Game, idx: usize) {
             let tile = game.room.tile_list.get(idx);
-            if tile.visible.get() {
-                // Viewport Frustum Culling: discard offscreen tiles (+32px safety margin)
-                let tx = tile.x.get().into_inner() as i32;
-                let ty = tile.y.get().into_inner() as i32;
-                let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
-                let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
-                const MARGIN: i32 = 32;
-                if tx + tw < src_x - MARGIN || tx > src_x + src_w + MARGIN || ty + th < src_y - MARGIN || ty > src_y + src_h + MARGIN {
-                    return;
-                }
-
-                if let Some(Some(background)) = game.assets.backgrounds.get(tile.background_index.get() as usize) {
-                    if let Some(atlas) = background.atlas_ref {
-                        game.renderer.set_depth(tile.depth.get().into_inner() as f32);
-                        game.renderer.draw_sprite_partial(
-                            atlas,
-                            tile.tile_x.get().into(),
-                            tile.tile_y.get().into(),
-                            tile.width.get().into(),
-                            tile.height.get().into(),
-                            tile.x.get().into(),
-                            tile.y.get().into(),
-                            tile.xscale.get().into(),
-                            tile.yscale.get().into(),
-                            0.0,
-                            tile.blend.get(),
-                            tile.alpha.get().into(),
-                        )
-                    }
+            if let Some(Some(background)) = game.assets.backgrounds.get(tile.background_index.get() as usize) {
+                if let Some(atlas) = background.atlas_ref {
+                    game.renderer.set_depth(tile.depth.get().into_inner() as f32);
+                    game.renderer.draw_sprite_partial(
+                        atlas,
+                        tile.tile_x.get().into(),
+                        tile.tile_y.get().into(),
+                        tile.width.get().into(),
+                        tile.height.get().into(),
+                        tile.x.get().into(),
+                        tile.y.get().into(),
+                        tile.xscale.get().into(),
+                        tile.yscale.get().into(),
+                        0.0,
+                        tile.blend.get(),
+                        tile.alpha.get().into(),
+                    )
                 }
             }
         }
@@ -368,8 +361,21 @@ impl Game {
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
         self.room.tile_list.draw_sort();
-        let mut iter_tile = self.room.tile_list.iter_by_drawing();
-        let mut iter_tile_v = iter_tile.next(&self.room.tile_list);
+        // Fast viewport frustum pre-filter: iterate only visible tiles while preserving sorted depth order
+        let visible_tiles: Vec<usize> = self.room.tile_list.draw_order().iter().copied().filter(|&idx| {
+            let tile = self.room.tile_list.get(idx);
+            if !tile.visible.get() {
+                return false;
+            }
+            let tx = tile.x.get().into_inner() as i32;
+            let ty = tile.y.get().into_inner() as i32;
+            let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
+            let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
+            const MARGIN: i32 = 48;
+            !(tx + tw < src_x - MARGIN || tx > src_x + src_w + MARGIN || ty + th < src_y - MARGIN || ty > src_y + src_h + MARGIN)
+        }).collect();
+        let mut iter_tile = visible_tiles.into_iter();
+        let mut iter_tile_v = iter_tile.next();
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
         let mut iter_part_v = iter_part.next(&self.particles);
@@ -385,9 +391,9 @@ impl Game {
                     break
                 },
                 (None, Some(idx_tile), None) => {
-                    draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
-                    while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
-                        draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
+                    draw_tile(self, idx_tile);
+                    while let Some(idx_tile) = iter_tile.next() {
+                        draw_tile(self, idx_tile);
                     }
                     break
                 },
@@ -404,8 +410,8 @@ impl Game {
                     let part_depth = idx_opt_part.map(|h| self.particles.get_system(h).unwrap().depth);
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
-                            draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
-                            iter_tile_v = iter_tile.next(&self.room.tile_list);
+                            draw_tile(self, idx_opt_tile.unwrap());
+                            iter_tile_v = iter_tile.next();
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
@@ -452,34 +458,40 @@ impl Game {
     }
 
     /// Splits the string into line-width pairs.
-    fn split_string<'a>(&self, string: gml::String, max_width: Option<i32>, font: &'a Font) -> LineIterator<'a> {
-        let encoded_text = match self.gm_version {
-            Version::GameMaker8_0 => string.as_ref().to_vec(),
+    fn split_string<'a>(&self, string: &'a gml::String, max_width: Option<i32>, font: &'a Font) -> LineIterator<'a> {
+        let encoded_text: std::borrow::Cow<'a, [u8]> = match self.gm_version {
+            Version::GameMaker8_0 => std::borrow::Cow::Borrowed(string.as_ref()),
             Version::GameMaker8_1 => {
                 let encoding = font.get_encoding(self.encoding);
-                let string = string.decode_utf8();
-                let (encoded_text, _, bad) = encoding.encode(string.as_ref());
+                let decoded = string.decode_utf8();
+                let (encoded_text, _, bad) = encoding.encode(decoded.as_ref());
                 if bad {
-                    // semi-custom decoder because bad characters must be replaced with ? instead of html codes
-                    // and unfortunately encoding_rs doesn't have a nicer way of handling this
-                    let mut encoded_text = Vec::with_capacity(encoded_text.as_ref().len());
-                    let mut iter = string.char_indices().peekable();
+                    let mut encoded_vec = Vec::with_capacity(encoded_text.as_ref().len());
+                    let mut iter = decoded.char_indices().peekable();
                     while let Some((pos, _)) = iter.next() {
-                        let slice = iter.peek().map(|(p, _)| &string[pos..*p]).unwrap_or(&string[pos..]);
+                        let slice = iter.peek().map(|(p, _)| &decoded[pos..*p]).unwrap_or(&decoded[pos..]);
                         let (encoded_char, _, bad) = encoding.encode(slice);
                         if bad {
-                            encoded_text.push(b'?');
+                            encoded_vec.push(b'?');
                         } else {
-                            encoded_text.extend_from_slice(encoded_char.as_ref());
+                            encoded_vec.extend_from_slice(encoded_char.as_ref());
                         }
                     }
-                    encoded_text
+                    std::borrow::Cow::Owned(encoded_vec)
                 } else {
-                    encoded_text.into_owned()
+                    std::borrow::Cow::Owned(encoded_text.into_owned())
                 }
             },
         };
-        LineIterator { text: encoded_text, pos: 0, font, max_width, word_buf: Vec::new(), word_width: 0 }
+        LineIterator {
+            text: encoded_text,
+            pos: 0,
+            font,
+            max_width,
+            word_buf: Vec::with_capacity(32),
+            word_width: 0,
+            line_buf: Vec::with_capacity(128),
+        }
     }
 
     /// Gets width and height of a string using the current draw_font.
@@ -496,7 +508,7 @@ impl Game {
 
         let mut width = 0;
         let mut line_count = 0;
-        let mut iter = self.split_string(string, max_width, font);
+        let mut iter = self.split_string(&string, max_width, font);
         while let Some((_, current_w)) = iter.next() {
             if width < current_w {
                 width = current_w;
@@ -533,8 +545,12 @@ impl Game {
 
         let font = self.assets.fonts.get_asset(self.draw_font_id).map(|x| x.as_ref()).unwrap_or(&self.default_font);
 
-        let sin = angle.to_radians().sin();
-        let cos = angle.to_radians().cos();
+        let is_straight = angle == Real::from(0.0);
+        let (sin, cos) = if is_straight {
+            (0.0f64, 1.0f64)
+        } else {
+            (angle.to_radians().sin().into_inner(), angle.to_radians().cos().into_inner())
+        };
 
         // Figure out what the height of a line is if one wasn't specified
         let line_height = match line_height {
@@ -542,10 +558,17 @@ impl Game {
             None => font.tallest_char_height as i32,
         };
 
+        let str_h = self.get_string_size(string.clone(), Some(line_height), max_width).1;
         let mut cursor_y = match self.draw_valign {
             Valign::Top => 0,
-            Valign::Middle => -(self.get_string_size(string.clone(), Some(line_height), max_width).1 / 2),
-            Valign::Bottom => -self.get_string_size(string.clone(), Some(line_height), max_width).1,
+            Valign::Middle => -(str_h / 2),
+            Valign::Bottom => -str_h,
+        };
+
+        let uniform_colour = match colours {
+            Some((c1, c2, c3, c4)) if c1 == c2 && c1 == c3 && c1 == c4 => Some(c1),
+            None => Some(u32::from(self.draw_colour) as i32),
+            _ => None,
         };
 
         fn lerp_col(c1: i32, c2: i32, ratio: f64) -> i32 {
@@ -554,7 +577,7 @@ impl Game {
                 + ((f64::from(c1 & 0xff0000) * (1.0 - ratio) + f64::from(c2 & 0xff0000) * ratio) as i32 & 0xff0000)
         }
 
-        let mut iter = self.split_string(string, max_width, font);
+        let mut iter = self.split_string(&string, max_width, font);
         while let Some((line, width)) = iter.next() {
             let left_offset = match self.draw_halign {
                 Halign::Left => 0,
@@ -563,7 +586,7 @@ impl Game {
             };
             let mut cursor_x = left_offset;
 
-            for c in line.iter().copied() {
+            for &c in line.iter() {
                 let character = match font.get_char(c) {
                     Some(character) => character,
                     None => {
@@ -571,21 +594,40 @@ impl Game {
                         if let Some(character) = font.get_char(font.first) {
                             cursor_x += character.offset as i32;
                         }
-                        continue
+                        continue;
                     },
                 };
 
-                let xdiff = Real::from(character.distance as i32 + cursor_x);
-                let ydiff = Real::from(cursor_y);
+                let raw_xdiff = (character.distance as i32 + cursor_x) as f64 * xscale.into_inner();
+                let raw_ydiff = cursor_y as f64 * yscale.into_inner();
 
-                let (xdiff, ydiff) =
-                    (xdiff * xscale * cos + ydiff * yscale * sin, ydiff * yscale * cos - xdiff * xscale * sin);
+                let (px, py) = if is_straight {
+                    (x.into_inner() + raw_xdiff, y.into_inner() + raw_ydiff)
+                } else {
+                    (
+                        x.into_inner() + raw_xdiff * cos + raw_ydiff * sin,
+                        y.into_inner() + raw_ydiff * cos - raw_xdiff * sin,
+                    )
+                };
 
-                match colours {
-                    Some((c1, c2, c3, c4)) => self.renderer.draw_sprite_colour(
+                if let Some(col) = uniform_colour {
+                    // Fast-path: no trigonometric rotation & no per-vertex color blending
+                    self.renderer.draw_sprite(
                         character.atlas_ref,
-                        (x + xdiff).into(),
-                        (y + ydiff).into(),
+                        px,
+                        py,
+                        xscale.into(),
+                        yscale.into(),
+                        angle.into(),
+                        col,
+                        alpha.into(),
+                    );
+                } else if let Some((c1, c2, c3, c4)) = colours {
+                    // Full-path: four-corner color gradient interpolation
+                    self.renderer.draw_sprite_colour(
+                        character.atlas_ref,
+                        px,
+                        py,
                         xscale.into(),
                         yscale.into(),
                         angle.into(),
@@ -594,17 +636,7 @@ impl Game {
                         lerp_col(c4, c3, f64::from(cursor_x - left_offset + character.offset) / f64::from(width)),
                         lerp_col(c4, c3, f64::from(cursor_x - left_offset) / f64::from(width)),
                         alpha.into(),
-                    ),
-                    None => self.renderer.draw_sprite(
-                        character.atlas_ref,
-                        (x + xdiff).into(),
-                        (y + ydiff).into(),
-                        xscale.into(),
-                        yscale.into(),
-                        angle.into(),
-                        u32::from(self.draw_colour) as i32,
-                        alpha.into(),
-                    ),
+                    );
                 }
 
                 cursor_x += character.offset as i32;

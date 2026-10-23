@@ -209,26 +209,33 @@ impl Game {
 
     /// Decrements all active alarms and runs subsequent alarm events for all instances
     pub fn run_alarms(&mut self) -> gml::Result<()> {
-        for alarm_id in 0..=11 {
-            // Get all the objects which have this alarm event registered
-            if let Some(objects) = self.event_holders[gml::ev::ALARMS].get(&alarm_id).map(|x| x.clone()) {
-                for object_id in objects.borrow().iter().copied() {
-                    // Iter all instances of this object
-                    let mut iter = self.room.instance_list.iter_by_object(object_id);
-                    while let Some(handle) = iter.next(&self.room.instance_list) {
-                        // Check if this has the alarm set
-                        let instance = self.room.instance_list.get(handle);
-                        let run_event = match instance.alarms.borrow_mut().get_mut(&alarm_id) {
-                            Some(alarm) if *alarm >= 0 => {
-                                // Decrement it, run the event if it hit 0
-                                *alarm -= 1;
-                                *alarm == 0
-                            },
-                            _ => false,
-                        };
-                        if run_event {
-                            self.run_instance_event(gml::ev::ALARMS, alarm_id, handle, handle, None)?;
-                        }
+        let mut triggered: Vec<(usize, u32)> = Vec::new();
+        let mut iter = self.room.instance_list.iter_by_drawing();
+        while let Some(handle) = iter.next(&self.room.instance_list) {
+            let instance = self.room.instance_list.get(handle);
+            let mut alarms = instance.alarms.borrow_mut();
+            if alarms.is_empty() {
+                continue;
+            }
+            for (alarm_id, val) in alarms.iter_mut() {
+                if *val >= 0 {
+                    *val -= 1;
+                    if *val == 0 {
+                        triggered.push((handle, *alarm_id));
+                    }
+                }
+            }
+        }
+
+        for (handle, alarm_id) in triggered {
+            if let Some(inst) = self.room.instance_list.try_get(handle) {
+                if inst.is_active() {
+                    let obj_id = inst.object_index.get();
+                    let has_event = self.event_holders[gml::ev::ALARMS]
+                        .get(&alarm_id)
+                        .map_or(false, |objects| objects.borrow().contains(&obj_id));
+                    if has_event {
+                        self.run_instance_event(gml::ev::ALARMS, alarm_id, handle, handle, None)?;
                     }
                 }
             }

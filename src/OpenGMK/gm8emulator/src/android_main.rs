@@ -132,7 +132,8 @@ fn map_key(keycode: AKeyCode) -> Option<Key> {
         AKEYCODE_BUTTON_L1 => Key::M,
         AKEYCODE_BUTTON_R2 => Key::O,
         AKEYCODE_BUTTON_L2 => Key::S,
-        AKEYCODE_BUTTON_THUMBL | AKEYCODE_BUTTON_THUMBR => Key::E,
+        AKEYCODE_BUTTON_THUMBL => Key::Q,
+        AKEYCODE_BUTTON_THUMBR => Key::E,
 
         _ => return None,
     })
@@ -162,6 +163,10 @@ static STICK_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 /// Which arrow keys the physical stick is holding (bit 0 up, 1 down, 2 left, 3 right). Kept apart
 /// from the on-screen joystick's state so neither can release a key the other is holding.
 static STICK_STATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Analog trigger states with hysteresis
+static L2_TRIGGER_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static R2_TRIGGER_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Reads the video mode the launcher saved. Only one thing matters here: whether the picture keeps
 /// the shape the game was drawn for, or stretches to fill the screen.
@@ -1345,6 +1350,37 @@ fn translate(event: &InputEvent) {
             // read from the event itself rather than from a pointer.
             if motion.source().is_joystick_class() {
                 crate::touch_controls::set_pad_active(true);
+
+                // --- Analog Triggers with Hysteresis (L2 / R2) ---
+                let l2_raw = axis_value(motion, Axis::Ltrigger).max(axis_value(motion, Axis::Brake));
+                let r2_raw = axis_value(motion, Axis::Rtrigger).max(axis_value(motion, Axis::Gas));
+
+                let l2_was = L2_TRIGGER_HELD.load(std::sync::atomic::Ordering::Relaxed);
+                if !l2_was && l2_raw > 0.55 {
+                    L2_TRIGGER_HELD.store(true, std::sync::atomic::Ordering::Relaxed);
+                    if let Some(k) = mapped_key(AKEYCODE_BUTTON_L2) {
+                        android::push_input(ramen::platform::android::InputEvent::KeyDown { key: k, text: None });
+                    }
+                } else if l2_was && l2_raw < 0.40 {
+                    L2_TRIGGER_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
+                    if let Some(k) = mapped_key(AKEYCODE_BUTTON_L2) {
+                        android::push_input(ramen::platform::android::InputEvent::KeyUp { key: k });
+                    }
+                }
+
+                let r2_was = R2_TRIGGER_HELD.load(std::sync::atomic::Ordering::Relaxed);
+                if !r2_was && r2_raw > 0.55 {
+                    R2_TRIGGER_HELD.store(true, std::sync::atomic::Ordering::Relaxed);
+                    if let Some(k) = mapped_key(AKEYCODE_BUTTON_R2) {
+                        android::push_input(ramen::platform::android::InputEvent::KeyDown { key: k, text: None });
+                    }
+                } else if r2_was && r2_raw < 0.40 {
+                    R2_TRIGGER_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
+                    if let Some(k) = mapped_key(AKEYCODE_BUTTON_R2) {
+                        android::push_input(ramen::platform::android::InputEvent::KeyUp { key: k });
+                    }
+                }
+
                 if STICK_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
                     let (mut x, mut y) = (axis_value(motion, Axis::X), axis_value(motion, Axis::Y));
                     let (z, rz) = (axis_value(motion, Axis::Z), axis_value(motion, Axis::Rz));
@@ -1555,6 +1591,8 @@ fn reset_input_state() {
     if let Ok(mut value) = DELAYED_DOWNS.lock() { value.clear(); }
     if let Ok(mut value) = JOYSTICK_PTR.lock() { *value = None; }
     JOYSTICK_STATE.store(0, std::sync::atomic::Ordering::Relaxed);
+    L2_TRIGGER_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
+    R2_TRIGGER_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
     IME_SHOWN.store(false, std::sync::atomic::Ordering::Relaxed);
     crate::touch_controls::clear_layout();
     crate::touch_controls::clear_wheel_touch_origin();

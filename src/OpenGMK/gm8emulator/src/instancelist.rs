@@ -436,6 +436,10 @@ impl TileList {
         TLIterDrawOrder(0)
     }
 
+    pub fn draw_order(&self) -> &[usize] {
+        &self.draw_order
+    }
+
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
     }

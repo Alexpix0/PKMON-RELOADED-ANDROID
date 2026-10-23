@@ -6,14 +6,24 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,12 +45,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -82,6 +96,7 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
     var showNumKeys by remember { mutableStateOf(prefs.showNumKeys) }
     var capturing by remember { mutableStateOf<ControlAction?>(null) }
     var lastCode by remember { mutableStateOf<Int?>(null) }
+    var pressedKeys by remember { mutableStateOf(setOf<Int>()) }
     var stickReadout by remember { mutableStateOf(0f to 0f) }
     var pads by remember { mutableStateOf(connectedPads(context)) }
 
@@ -155,6 +170,26 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
             modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            LiveGamepadVisualizer(
+                pressedKeys = pressedKeys,
+                bindings = bindings,
+                capturingAction = capturing,
+                stickReadout = stickReadout,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                onButtonClicked = { code ->
+                    lastCode = code
+                    if (capturing != null) {
+                        store(bindings + (capturing!! to code), stick)
+                        capturing = null
+                    } else {
+                        val boundAction = actionFor(bindings, code)
+                        if (boundAction != null) {
+                            capturing = boundAction
+                        }
+                    }
+                }
+            )
+
             SettingsGroup("Mando", modifier = Modifier.padding(horizontal = 16.dp)) {
                 InfoRow(
                     icon = Icons.Filled.SportsEsports,
@@ -187,10 +222,14 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                     update = { probe ->
                         probe.onKey = { code ->
                             lastCode = code
+                            pressedKeys = pressedKeys + code
                             capturing?.let { action ->
                                 store(bindings + (action to code), stick)
                                 capturing = null
                             }
+                        }
+                        probe.onKeyUp = { code ->
+                            pressedKeys = pressedKeys - code
                         }
                         probe.onStick = { x, y -> stickReadout = x to y }
                         probe.requestFocus()
@@ -495,6 +534,351 @@ fun ControlsScreen(prefs: Preferences, filesDir: File, onBack: () -> Unit) {
                     androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                     Text("Restaurar los controles por defecto")
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Modern Interactive Gamepad Visualizer Studio with live neon glow reactive to physical buttons and axes.
+ */
+@Composable
+fun LiveGamepadVisualizer(
+    pressedKeys: Set<Int>,
+    bindings: Map<ControlAction, Int>,
+    capturingAction: ControlAction?,
+    stickReadout: Pair<Float, Float>,
+    modifier: Modifier = Modifier,
+    onButtonClicked: (Int) -> Unit
+) {
+    val activeNeon = Color(0xFF00E5FF)
+    val cardBg = Color(0xFF0F141C)
+    val cardBorder = if (pressedKeys.isNotEmpty()) activeNeon else Color(0xFF222B38)
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(cardBg)
+            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
+            .padding(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header: Live Title & Active Banner
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SportsEsports,
+                        contentDescription = null,
+                        tint = activeNeon,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "STUDIO DE MANDO EN VIVO",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = activeNeon,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                val bannerText = when {
+                    capturingAction != null -> "ASIGNANDO: ${capturingAction.label}"
+                    pressedKeys.isNotEmpty() -> {
+                        val code = pressedKeys.first()
+                        val act = actionFor(bindings, code)
+                        if (act != null) "${buttonName(code)} -> ${act.key}" else buttonName(code)
+                    }
+                    else -> "MANDO LISTO"
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (capturingAction != null || pressedKeys.isNotEmpty()) Color(0x3300E5FF) else Color(0xFF192231))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = bannerText,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (capturingAction != null || pressedKeys.isNotEmpty()) activeNeon else Color(0xFF90A4AE)
+                    )
+                }
+            }
+
+            // Top Bumpers & Triggers Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GamepadButton(
+                        label = "L2 (LT)",
+                        code = 104,
+                        isPressed = pressedKeys.contains(104),
+                        assignedAction = actionFor(bindings, 104),
+                        modifier = Modifier.width(58.dp).height(32.dp),
+                        shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 4.dp, topEnd = 4.dp, bottomEnd = 4.dp),
+                        onClick = { onButtonClicked(104) }
+                    )
+                    GamepadButton(
+                        label = "L1 (LB)",
+                        code = 102,
+                        isPressed = pressedKeys.contains(102),
+                        assignedAction = actionFor(bindings, 102),
+                        modifier = Modifier.width(58.dp).height(32.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = { onButtonClicked(102) }
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    GamepadButton(
+                        label = "R1 (RB)",
+                        code = 103,
+                        isPressed = pressedKeys.contains(103),
+                        assignedAction = actionFor(bindings, 103),
+                        modifier = Modifier.width(58.dp).height(32.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = { onButtonClicked(103) }
+                    )
+                    GamepadButton(
+                        label = "R2 (RT)",
+                        code = 105,
+                        isPressed = pressedKeys.contains(105),
+                        assignedAction = actionFor(bindings, 105),
+                        modifier = Modifier.width(58.dp).height(32.dp),
+                        shape = RoundedCornerShape(topEnd = 10.dp, bottomEnd = 4.dp, topStart = 4.dp, bottomStart = 4.dp),
+                        onClick = { onButtonClicked(105) }
+                    )
+                }
+            }
+
+            // Center Layout: D-Pad (Left), Center & Sticks (Middle), Face Buttons (Right)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // D-PAD CROSS
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    GamepadButton(
+                        label = "▲",
+                        code = KeyEvent.KEYCODE_DPAD_UP,
+                        isPressed = pressedKeys.contains(KeyEvent.KEYCODE_DPAD_UP),
+                        assignedAction = actionFor(bindings, KeyEvent.KEYCODE_DPAD_UP),
+                        modifier = Modifier.size(34.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = { onButtonClicked(KeyEvent.KEYCODE_DPAD_UP) }
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        GamepadButton(
+                            label = "◀",
+                            code = KeyEvent.KEYCODE_DPAD_LEFT,
+                            isPressed = pressedKeys.contains(KeyEvent.KEYCODE_DPAD_LEFT),
+                            assignedAction = actionFor(bindings, KeyEvent.KEYCODE_DPAD_LEFT),
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            onClick = { onButtonClicked(KeyEvent.KEYCODE_DPAD_LEFT) }
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFF131822))
+                        )
+                        GamepadButton(
+                            label = "▶",
+                            code = KeyEvent.KEYCODE_DPAD_RIGHT,
+                            isPressed = pressedKeys.contains(KeyEvent.KEYCODE_DPAD_RIGHT),
+                            assignedAction = actionFor(bindings, KeyEvent.KEYCODE_DPAD_RIGHT),
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            onClick = { onButtonClicked(KeyEvent.KEYCODE_DPAD_RIGHT) }
+                        )
+                    }
+                    GamepadButton(
+                        label = "▼",
+                        code = KeyEvent.KEYCODE_DPAD_DOWN,
+                        isPressed = pressedKeys.contains(KeyEvent.KEYCODE_DPAD_DOWN),
+                        assignedAction = actionFor(bindings, KeyEvent.KEYCODE_DPAD_DOWN),
+                        modifier = Modifier.size(34.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        onClick = { onButtonClicked(KeyEvent.KEYCODE_DPAD_DOWN) }
+                    )
+                }
+
+                // CENTER CONTROLS: Select, Start & Dual Thumbsticks
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        GamepadButton(
+                            label = "SELECT",
+                            code = 109,
+                            isPressed = pressedKeys.contains(109),
+                            assignedAction = actionFor(bindings, 109),
+                            modifier = Modifier.width(52.dp).height(24.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            onClick = { onButtonClicked(109) }
+                        )
+                        GamepadButton(
+                            label = "START",
+                            code = 108,
+                            isPressed = pressedKeys.contains(108),
+                            assignedAction = actionFor(bindings, 108),
+                            modifier = Modifier.width(52.dp).height(24.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            onClick = { onButtonClicked(108) }
+                        )
+                    }
+
+                    // Sticks (L3 & R3)
+                    Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                        GamepadButton(
+                            label = "L3",
+                            code = 106,
+                            isPressed = pressedKeys.contains(106),
+                            assignedAction = actionFor(bindings, 106),
+                            modifier = Modifier.size(42.dp),
+                            shape = CircleShape,
+                            onClick = { onButtonClicked(106) }
+                        )
+                        GamepadButton(
+                            label = "R3",
+                            code = 107,
+                            isPressed = pressedKeys.contains(107),
+                            assignedAction = actionFor(bindings, 107),
+                            modifier = Modifier.size(42.dp),
+                            shape = CircleShape,
+                            onClick = { onButtonClicked(107) }
+                        )
+                    }
+                }
+
+                // FACE BUTTONS (X, Y, A, B DIAMOND)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    GamepadButton(
+                        label = "Y",
+                        code = 100,
+                        isPressed = pressedKeys.contains(100),
+                        assignedAction = actionFor(bindings, 100),
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        onClick = { onButtonClicked(100) }
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                        GamepadButton(
+                            label = "X",
+                            code = 99,
+                            isPressed = pressedKeys.contains(99),
+                            assignedAction = actionFor(bindings, 99),
+                            modifier = Modifier.size(36.dp),
+                            shape = CircleShape,
+                            onClick = { onButtonClicked(99) }
+                        )
+                        Box(modifier = Modifier.size(32.dp))
+                        GamepadButton(
+                            label = "B",
+                            code = 97,
+                            isPressed = pressedKeys.contains(97),
+                            assignedAction = actionFor(bindings, 97),
+                            modifier = Modifier.size(36.dp),
+                            shape = CircleShape,
+                            onClick = { onButtonClicked(97) }
+                        )
+                    }
+                    GamepadButton(
+                        label = "A",
+                        code = 96,
+                        isPressed = pressedKeys.contains(96),
+                        assignedAction = actionFor(bindings, 96),
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        onClick = { onButtonClicked(96) }
+                    )
+                }
+            }
+
+            // Info note
+            Text(
+                text = "Toca cualquier botón del mando visual o físico para probarlo o mapearlo al instante.",
+                fontSize = 10.sp,
+                color = Color(0xFF78909C),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+/**
+ * Individual interactive gamepad button with reactive neon cyan glow on press and action tag.
+ */
+@Composable
+private fun GamepadButton(
+    label: String,
+    code: Int,
+    isPressed: Boolean,
+    assignedAction: ControlAction?,
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(8.dp),
+    onClick: () -> Unit
+) {
+    val activeNeon = Color(0xFF00E5FF)
+    val activeBg = Color(0x3D00E5FF)
+    val inactiveBg = Color(0xFF141923)
+    val inactiveBorder = Color(0xFF263248)
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(if (isPressed) activeBg else inactiveBg)
+            .border(if (isPressed) 2.dp else 1.dp, if (isPressed) activeNeon else inactiveBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (isPressed) FontWeight.ExtraBold else FontWeight.Bold,
+                color = if (isPressed) activeNeon else Color(0xFFCFD8DC),
+                textAlign = TextAlign.Center,
+                lineHeight = 12.sp
+            )
+            if (assignedAction != null) {
+                Text(
+                    text = assignedAction.key,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isPressed) Color.White else Color(0xFF90A4AE),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 9.sp
+                )
             }
         }
     }

@@ -2289,7 +2289,7 @@ fun SettingsScreen(
                                     NavRow(
                                         icon = Icons.Filled.SystemUpdate,
                                         title = "🔄 Buscar actualizaciones de versión (GitHub)",
-                                        subtitle = "Instalada: v$appVersion (build 36) · Toca para comprobar GitHub Releases",
+                                        subtitle = "Instalada: v${appVersion.ifEmpty { com.klisee.reloaded.AppInfo.VERSION_NAME }} (Build ${com.klisee.reloaded.AppInfo.VERSION_CODE}) · Toca para comprobar GitHub Releases",
                                         items = if (currentCrashDump != null) 5 else 4,
                                         index = 0,
                                         enabled = !checking,
