@@ -4586,21 +4586,8 @@ impl Game {
     pub fn move_towards_point(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (x, y, speed) = expect_args!(args, [real, real, real])?;
         let instance = self.room.instance_list.get(context.this);
-        let dy = instance.y.get().into_inner() - y.into_inner();
-        let dx = x.into_inner() - instance.x.get().into_inner();
-        let dist = dx.hypot(dy);
-        let direction = if dist <= 0.0001 {
-            instance.direction.get()
-        } else {
-            Real::from(dy.atan2(dx).to_degrees().rem_euclid(360.0))
-        };
-        // Unstick overlapping / close target attack dive (<= 16 px): do not stall with speed 0
-        let eff_speed = if dist <= 16.0 && speed == Real::from(0.0) {
-            Real::from(1.0)
-        } else {
-            speed
-        };
-        instance.set_speed_direction(eff_speed, direction);
+        let direction = (instance.y.get() - y).arctan2(x - instance.x.get()).to_degrees();
+        instance.set_speed_direction(speed, direction);
         Ok(Default::default())
     }
 
