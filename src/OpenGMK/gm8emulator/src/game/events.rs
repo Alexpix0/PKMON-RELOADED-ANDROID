@@ -607,6 +607,28 @@ impl Game {
                     // And iter every instance of the target object
                     let mut iter2 = self.room.instance_list.iter_by_object(target_obj);
                     while let Some(target) = iter2.next(&self.room.instance_list) {
+                        if instance == target {
+                            continue;
+                        }
+
+                        let inst1 = self.room.instance_list.get(instance);
+                        let inst2 = self.room.instance_list.get(target);
+
+                        if inst1.bbox_is_stale.get() {
+                            let mask = self.get_instance_mask_sprite(instance);
+                            inst1.update_bbox(mask);
+                        }
+                        if inst2.bbox_is_stale.get() {
+                            let mask = self.get_instance_mask_sprite(target);
+                            inst2.update_bbox(mask);
+                        }
+
+                        let b1 = inst1.bbox();
+                        let b2 = inst2.bbox();
+                        if b1.right < b2.left || b1.left > b2.right || b1.bottom < b2.top || b1.top > b2.bottom {
+                            continue;
+                        }
+
                         // And finally, check if the two instances collide
                         if self.check_collision(instance, target) {
                             // If either instance is solid, move both back to their previous positions

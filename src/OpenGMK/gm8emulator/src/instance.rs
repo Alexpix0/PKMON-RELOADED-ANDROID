@@ -98,7 +98,25 @@ pub struct DummyFieldHolder {
     pub vars: FxHashMap<InstanceVariable, Field>,
 }
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct BBox {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
 impl Instance {
+    #[inline]
+    pub fn bbox(&self) -> BBox {
+        BBox {
+            left: self.bbox_left.get(),
+            top: self.bbox_top.get(),
+            right: self.bbox_right.get(),
+            bottom: self.bbox_bottom.get(),
+        }
+    }
+
     pub fn new(id: ID, x: Real, y: Real, object_index: i32, object: &Object) -> Self {
         Self::new_ext(
             id,

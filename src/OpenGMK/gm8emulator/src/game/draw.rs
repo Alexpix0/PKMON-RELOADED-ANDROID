@@ -523,6 +523,19 @@ impl Game {
             None => font.tallest_char_height as i32,
         };
 
+        let bytes = string.as_ref();
+        if max_width.is_none() && !bytes.iter().any(|&b| b == b'#' || b == b'\n' || b == b'\r') {
+            let mut width = 0;
+            for &c in bytes {
+                if let Some(character) = font.get_char(c) {
+                    width += character.offset;
+                } else if let Some(character) = font.get_char(font.first) {
+                    width += character.offset;
+                }
+            }
+            return (width, line_height);
+        }
+
         let mut width = 0;
         let mut line_count = 0;
         let mut iter = self.split_string(&string, max_width, font);
@@ -554,8 +567,9 @@ impl Game {
     ) {
         #[cfg(target_os = "android")]
         {
-            let text = self.decode_str(string.as_ref());
-            if self.dialogue_open() || (text.len() >= 12 && text.contains(' ')) {
+            let bytes = string.as_ref();
+            if self.dialogue_open() || (bytes.len() >= 12 && bytes.contains(&b' ')) {
+                let text = self.decode_str(bytes);
                 crate::touch_controls::record_dialogue(&text);
             }
         }
@@ -590,6 +604,62 @@ impl Game {
             None => Some(u32::from(self.draw_colour) as i32),
             _ => None,
         };
+
+        let bytes = string.as_ref();
+        if max_width.is_none() && !bytes.iter().any(|&b| b == b'#' || b == b'\n' || b == b'\r') {
+            let mut width = 0;
+            for &c in bytes {
+                if let Some(character) = font.get_char(c) {
+                    width += character.offset;
+                } else if let Some(character) = font.get_char(font.first) {
+                    width += character.offset;
+                }
+            }
+
+            let left_offset = match self.draw_halign {
+                Halign::Left => 0,
+                Halign::Middle => -(width / 2),
+                Halign::Right => -width,
+            };
+            let mut cursor_x = left_offset;
+
+            if is_straight {
+                if let Some(col) = uniform_colour {
+                    let y_pos = y.into_inner() + cursor_y as f64 * yscale.into_inner();
+                    let x_base = x.into_inner();
+                    let xs_f: f64 = xscale.into_inner();
+                    let ys_f: f64 = yscale.into_inner();
+                    let alpha_f: f64 = alpha.into_inner();
+
+                    for &c in bytes {
+                        let character = match font.get_char(c) {
+                            Some(character) => character,
+                            None => {
+                                if let Some(character) = font.get_char(font.first) {
+                                    cursor_x += character.offset as i32;
+                                }
+                                continue;
+                            }
+                        };
+
+                        let px = x_base + (character.distance as i32 + cursor_x) as f64 * xs_f;
+                        self.renderer.draw_sprite(
+                            character.atlas_ref,
+                            px,
+                            y_pos,
+                            xs_f,
+                            ys_f,
+                            0.0,
+                            col,
+                            alpha_f,
+                        );
+
+                        cursor_x += character.offset as i32;
+                    }
+                    return;
+                }
+            }
+        }
 
         fn lerp_col(c1: i32, c2: i32, ratio: f64) -> i32 {
             ((f64::from(c1 & 0xff) * (1.0 - ratio) + f64::from(c2 & 0xff) * ratio) as i32 & 0xff)

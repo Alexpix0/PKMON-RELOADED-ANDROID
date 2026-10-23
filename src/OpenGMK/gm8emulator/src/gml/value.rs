@@ -25,7 +25,13 @@ macro_rules! gml_cmp_impl {
                 let fstr: fn(&[u8], &[u8]) -> bool = $s_cond;
                 Ok(if match (self, rhs) {
                     (Self::Real(a), Self::Real(b)) => freal((a - b)),
-                    (Self::Str(a), Self::Str(b)) => fstr(a.as_ref(), b.as_ref()),
+                    (Self::Str(a), Self::Str(b)) => {
+                        if std::rc::Rc::ptr_eq(&a.0, &b.0) {
+                            fstr(b"", b"")
+                        } else {
+                            fstr(a.as_ref(), b.as_ref())
+                        }
+                    },
                     (a, b) => return invalid_op!($op_variant, a, b),
                 } {
                     super::TRUE
@@ -142,7 +148,7 @@ impl Value {
     pub fn almost_equals(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Real(a), Self::Real(b)) => *a == *b,
-            (Self::Str(a), Self::Str(b)) => a.as_ref() == b.as_ref(),
+            (Self::Str(a), Self::Str(b)) => std::rc::Rc::ptr_eq(&a.0, &b.0) || a.as_ref() == b.as_ref(),
             _ => false,
         }
     }

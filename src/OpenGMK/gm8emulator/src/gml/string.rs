@@ -2,9 +2,16 @@ use encoding_rs::Encoding;
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{borrow::Cow, fmt, rc::Rc};
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct String(pub Rc<[u8]>);
+
+impl PartialEq for String {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || self.0.as_ref() == other.0.as_ref()
+    }
+}
 
 impl String {
     pub fn decode(&self, encoding: &'static Encoding) -> Cow<str> {
