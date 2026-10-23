@@ -33,27 +33,6 @@ struct LineIterator<'a> {
 }
 
 impl<'a> LineIterator<'a> {
-    #[inline]
-    fn push_word_char(&mut self, c: u8) {
-        if self.word_len < self.word_buf.len() {
-            self.word_buf[self.word_len] = c;
-            self.word_len += 1;
-        }
-    }
-
-    #[inline]
-    fn flush_word_to_line(&mut self, line_width: &mut i32) {
-        if self.word_len > 0 {
-            let copy_len = self.word_len.min(self.line_buf.len() - self.line_len);
-            self.line_buf[self.line_len..self.line_len + copy_len]
-                .copy_from_slice(&self.word_buf[..copy_len]);
-            self.line_len += copy_len;
-            *line_width += self.word_width;
-            self.word_len = 0;
-            self.word_width = 0;
-        }
-    }
-
     fn next(&mut self) -> Option<(&[u8], i32)> {
         if self.pos >= self.text.len() {
             return None
@@ -62,6 +41,29 @@ impl<'a> LineIterator<'a> {
         self.word_len = 0;
         self.word_width = 0;
         let mut line_width = 0;
+
+        macro_rules! push_word_char {
+            ($self:ident, $c:expr) => {
+                if $self.word_len < $self.word_buf.len() {
+                    $self.word_buf[$self.word_len] = $c;
+                    $self.word_len += 1;
+                }
+            };
+        }
+
+        macro_rules! flush_word_to_line {
+            ($self:ident, $line_width:ident) => {
+                if $self.word_len > 0 {
+                    let copy_len = $self.word_len.min($self.line_buf.len() - $self.line_len);
+                    $self.line_buf[$self.line_len..$self.line_len + copy_len]
+                        .copy_from_slice(&$self.word_buf[..copy_len]);
+                    $self.line_len += copy_len;
+                    $line_width += $self.word_width;
+                    $self.word_len = 0;
+                    $self.word_width = 0;
+                }
+            };
+        }
 
         let mut iter = self.text[self.pos..].iter().copied().enumerate().peekable();
         while let Some((_, c)) = iter.next() {
@@ -87,16 +89,16 @@ impl<'a> LineIterator<'a> {
             // Next, insert the character into the word buffer
             match c {
                 b'\n' => {
-                    self.flush_word_to_line(&mut line_width);
+                    flush_word_to_line!(self, line_width);
                     break
                 },
                 _ => {
                     if let Some(character) = self.font.get_char(c) {
-                        self.push_word_char(c);
+                        push_word_char!(self, c);
                         self.word_width += character.offset;
                     } else {
                         // Space when it isn't in the font
-                        self.push_word_char(b' ');
+                        push_word_char!(self, b' ');
                         if let Some(character) = self.font.get_char(self.font.first) {
                             self.word_width += character.offset;
                         }
@@ -113,7 +115,7 @@ impl<'a> LineIterator<'a> {
 
             // Push new word if applicable
             if c == b' ' {
-                self.flush_word_to_line(&mut line_width);
+                flush_word_to_line!(self, line_width);
             }
         }
 
@@ -121,7 +123,7 @@ impl<'a> LineIterator<'a> {
             self.pos += pos;
         } else {
             // Add the last word
-            self.flush_word_to_line(&mut line_width);
+            flush_word_to_line!(self, line_width);
             self.pos = self.text.len();
         }
 
