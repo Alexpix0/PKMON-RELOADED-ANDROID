@@ -1,7 +1,3 @@
-bool is_untextured(vec2 tc) {
-    return tc.x < -0.5 || any(isnan(tc)) || tc.x != tc.x || tc.y != tc.y;
-}
-
 
 struct Light {
     vec4 pos; // padded vec3
@@ -49,8 +45,10 @@ void main() {
     frag_atlas_xywh = atlas_xywh;
     frag_blend_flat = vec4(1.0);
 
-    if (is_untextured(tex_coord)) {
-        frag_tex_coord = vec2(-1000.0);
+    // -1 is the engine's mark for an untextured primitive (its vertices sample the white pixel).
+    // A comparison is safe on every GPU; NaN is not.
+    if (tex_coord.x < 0.0) {
+        frag_tex_coord = vec2(0.0);
         frag_blend = blend;
     } else {
         frag_tex_coord = tex_coord;

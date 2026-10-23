@@ -83,6 +83,54 @@ class GameActivity : NativeActivity() {
 
     private var imeAnchor: EditText? = null
 
+    private val batteryReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) {
+            if (intent?.action == android.content.Intent.ACTION_BATTERY_LOW) {
+                emergencySaveFlush()
+            }
+        }
+    }
+
+    private fun emergencySaveFlush() {
+        Thread {
+            try {
+                Log.w(TAG, "ACTION_BATTERY_LOW recibido: iniciando Emergency Save Flush...")
+                val gameDir = java.io.File(filesDir, "game")
+                val partidasDir = java.io.File(gameDir, "data/partidas")
+                val backupEmergency = java.io.File(filesDir, "backups_emergency").apply { mkdirs() }
+
+                val savFiles = mutableListOf<java.io.File>()
+                if (partidasDir.isDirectory) {
+                    partidasDir.listFiles()?.filter { it.isFile && it.name.endsWith(".sav", ignoreCase = true) }?.let {
+                        savFiles.addAll(it)
+                    }
+                }
+                val dataDir = java.io.File(gameDir, "data")
+                if (dataDir.isDirectory) {
+                    dataDir.listFiles()?.filter { it.isFile && it.name.endsWith(".sav", ignoreCase = true) }?.let {
+                        savFiles.addAll(it)
+                    }
+                }
+
+                for (sav in savFiles) {
+                    try {
+                        java.io.FileOutputStream(sav, true).use { fos ->
+                            fos.fd.sync()
+                        }
+                        val dest = java.io.File(backupEmergency, sav.name)
+                        sav.copyTo(dest, overwrite = true)
+                        Log.i(TAG, "Emergency flush & mirror exitoso: ${sav.name} (${sav.length()} bytes)")
+                    } catch (e: Throwable) {
+                        Log.e(TAG, "Error al sincronizar ${sav.name}: ${e.message}")
+                    }
+                }
+                Log.w(TAG, "Emergency Save Flush completado exitosamente.")
+            } catch (e: Throwable) {
+                Log.e(TAG, "Fallo en emergencySaveFlush: ${e.message}")
+            }
+        }.start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Draw behind the notch/camera hole. Without this the system insets the window on the short
         // edge and the game is left with a black band beside it instead of filling the screen.
@@ -108,12 +156,20 @@ class GameActivity : NativeActivity() {
                 Log.w(TAG, "No se pudo activar Sustained Performance Mode en este dispositivo: ${e.message}")
             }
         }
+        try {
+            registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_LOW))
+        } catch (e: Throwable) {
+            Log.w(TAG, "No se pudo registrar batteryReceiver: ${e.message}")
+        }
         installImeAnchor()
         watchImeHeight()
         hideSystemBars()
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(batteryReceiver)
+        } catch (_: Throwable) {}
         if (instance === this) instance = null
         super.onDestroy()
         // Terminates the isolated :game process so no background native threads stay running
@@ -303,6 +359,21 @@ class GameActivity : NativeActivity() {
                 if (!activity.isFinishing && !activity.isDestroyed) {
                     activity.reportImeHeight(activity.currentImeHeight())
                 }
+            }
+        }
+
+        @JvmStatic
+        fun showTouchHint() {
+            val activity = instance ?: return
+            activity.runOnUiThread {
+                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                com.klisee.reloaded.ui.Strings.init(activity)
+                com.klisee.reloaded.ui.Strings.update(Preferences(activity))
+                android.widget.Toast.makeText(
+                    activity,
+                    com.klisee.reloaded.ui.Strings.tr("Toca una pieza y pulsa Girar para rotarla."),
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }

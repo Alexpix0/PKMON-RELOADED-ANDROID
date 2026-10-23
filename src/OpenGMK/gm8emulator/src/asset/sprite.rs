@@ -350,6 +350,21 @@ impl Sprite {
     pub fn get_atlas_ref(&self, image_index: i32) -> Option<AtlasRef> {
         Some(self.get_frame(image_index)?.atlas_ref)
     }
+
+    /// The collision map used by the current animation frame. GM8 stores one map per frame for
+    /// sprites with `per_frame_colliders`; using the first map made opened doors/gates keep the
+    /// closed frame's collision.
+    pub fn collider_at(&self, image_index: Real) -> Option<&Collider> {
+        if self.colliders.is_empty() {
+            return None;
+        }
+        if self.per_frame_colliders && self.colliders.len() > 1 {
+            let frame = image_index.to_i32().max(0) as usize % self.colliders.len();
+            Some(&self.colliders[frame])
+        } else {
+            Some(&self.colliders[0])
+        }
+    }
 }
 
 impl Collider {

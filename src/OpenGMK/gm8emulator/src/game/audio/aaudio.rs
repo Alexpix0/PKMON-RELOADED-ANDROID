@@ -124,7 +124,7 @@ unsafe fn create_stream(sample_rate: i32, channel_count: i32) -> Result<*mut c_v
     AAudioStreamBuilder_setChannelCount(builder, channel_count);
     AAudioStreamBuilder_setSampleRate(builder, sample_rate);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setBufferCapacityInFrames(builder, 192); // ~2.0 ms latency at 48kHz
+    AAudioStreamBuilder_setBufferCapacityInFrames(builder, 2048);
     AAudioStreamBuilder_setDataCallback(builder, data_callback, std::ptr::null_mut());
     AAudioStreamBuilder_setErrorCallback(builder, error_callback, std::ptr::null_mut());
 
@@ -138,6 +138,12 @@ unsafe fn create_stream(sample_rate: i32, channel_count: i32) -> Result<*mut c_v
     }
     AAudioStreamBuilder_delete(builder);
     check(result, "AAudioStreamBuilder_openStream")?;
+
+    // Dynamic latency optimization: configure double-burst initial buffer size for optimal responsiveness
+    let burst = AAudioStream_getFramesPerBurst(stream).max(64);
+    let initial_frames = burst * 2;
+    let _ = AAudioStream_setBufferSizeInFrames(stream, initial_frames);
+
     Ok(stream)
 }
 
@@ -170,6 +176,11 @@ extern "C" {
     fn AAudioStream_getSampleRate(stream: *mut c_void) -> i32;
     fn AAudioStream_getState(stream: *mut c_void) -> i32;
     fn AAudioStream_close(stream: *mut c_void) -> i32;
+    fn AAudioStream_getFramesPerBurst(stream: *mut c_void) -> i32;
+    fn AAudioStream_getBufferSizeInFrames(stream: *mut c_void) -> i32;
+    fn AAudioStream_setBufferSizeInFrames(stream: *mut c_void, num_frames: i32) -> i32;
+    fn AAudioStream_getBufferCapacityInFrames(stream: *mut c_void) -> i32;
+    fn AAudioStream_getXRunCount(stream: *mut c_void) -> i32;
 }
 
 extern "C" fn error_callback(_stream: *mut c_void, _user_data: *mut c_void, error: i32) {
@@ -191,7 +202,7 @@ pub fn sound_started() -> bool {
 /// Pulls `num_frames` of interleaved f32 audio out of the lock-free ring buffer.
 /// AAudio calls this from its real-time audio thread: zero locking, zero wait, constant O(1) time.
 extern "C" fn data_callback(
-    _stream: *mut c_void,
+    stream: *mut c_void,
     _user_data: *mut c_void,
     audio_data: *mut c_void,
     num_frames: i32,
@@ -221,6 +232,18 @@ extern "C" fn data_callback(
     }
     if to_read < len {
         buffer[to_read..].fill(0.0);
+        // Dynamic underrun guard: if ring buffer starved during heavy map transition or GC,
+        // expand AAudio buffer size by 1 hardware burst (up to stream capacity) to eradicate clicks.
+        if !stream.is_null() {
+            unsafe {
+                let current_size = AAudioStream_getBufferSizeInFrames(stream);
+                let capacity = AAudioStream_getBufferCapacityInFrames(stream);
+                let burst = AAudioStream_getFramesPerBurst(stream).max(64);
+                if current_size > 0 && current_size + burst <= capacity {
+                    let _ = AAudioStream_setBufferSizeInFrames(stream, current_size + burst);
+                }
+            }
+        }
     }
     READ_POS.store(r.wrapping_add(to_read), Ordering::Release);
 

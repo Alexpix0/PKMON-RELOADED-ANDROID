@@ -357,6 +357,16 @@ class Preferences(context: Context) {
         }
     }
 
+    /** Writes the game's language index (0 Spanish, 1 English) where the engine reads it. */
+    fun writeGameLanguage(filesDir: java.io.File) {
+        val file = java.io.File(filesDir, "game/data/text/config.ini")
+        val index = if (resolvedGameLanguage() == "en") 1 else 0
+        runCatching {
+            file.parentFile?.mkdirs()
+            file.writeText(" $index")
+        }
+    }
+
     /** Alerta Visual Perimetral de Pokémon Variocolor (Shiny Beacon) */
     var shinyBeacon: Boolean
         get() = prefs.getBoolean("shinyBeacon", false)

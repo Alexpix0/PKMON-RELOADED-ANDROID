@@ -89,6 +89,10 @@ pub const CHOICE: u8 = 32;
 pub const SAFARI: u8 = 64;
 pub const MENU_NAV: u8 = 128;
 
+/// The actual puzzle room: PuzleUNW, 202.
+pub const PUZZLE_ROOM: i32 = 202;
+pub const ROTATE_NAME: &str = "girar";
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Shape {
     Circle { cx: f32, cy: f32, r: f32 },
@@ -168,6 +172,7 @@ pub const MASTER_CONTROLS: &[Control] = &[
     Control { name: "f", key: Key::F, shape: Shape::Circle { cx: 0.120, cy: 0.145, r: 0.022 }, label: Label::Text("F"), contexts: WORLD },
     Control { name: "f1", key: Key::F1, shape: Shape::Circle { cx: 0.190, cy: 0.145, r: 0.022 }, label: Label::Text("F1"), contexts: WORLD },
     Control { name: "f5", key: Key::F5, shape: Shape::Circle { cx: 0.260, cy: 0.145, r: 0.022 }, label: Label::Text("F5"), contexts: WORLD },
+    Control { name: ROTATE_NAME, key: Key::Z, shape: Shape::Circle { cx: 0.935, cy: 0.150, r: 0.036 }, label: Label::Text("Girar"), contexts: 0 },
 ];
 
 pub const CLASSIC_CONTROLS: &[Control] = MASTER_CONTROLS;
@@ -682,6 +687,10 @@ pub fn set_room(room: i32) {
         picker_reset();
         // A fresh picker offers its one-off trick button again; using it once was enough last time.
         COMBO_USED.store(false, Ordering::Relaxed);
+        #[cfg(target_os = "android")]
+        if room == PUZZLE_ROOM {
+            crate::android_main::show_puzzle_hint();
+        }
     }
     ROOM.store(room, Ordering::Relaxed);
     log_state_change(room);
@@ -925,6 +934,8 @@ pub fn current_context() -> u8 {
         // The Safari Zone's catching room. Confirmed on the device: it reports room 715 while the
         // ball is being thrown there. It keeps the map's buttons bar the stick and the attacks.
         715 => SAFARI,
+        // The puzzle uses only its three buttons; everything else steps aside.
+        PUZZLE_ROOM => MENU,
         // Before the first frame we don't know the room yet; show nothing rather than flashing the
         // whole overlay for one frame.
         -1 => MENU,
@@ -990,6 +1001,11 @@ pub fn is_menu_idle_for_power_saving() -> bool {
 pub fn is_active(index: usize) -> bool {
     if overlay_style() == OverlayStyle::None {
         return false
+    }
+    if ROOM.load(Ordering::Relaxed) == PUZZLE_ROOM
+        && matches!(controls()[index].name, ROTATE_NAME | "f1" | "x")
+    {
+        return !pad_active() && !info_window_open();
     }
     // In MENU modals / box management, allow hybrid mode with overlay buttons if enabled in layout
     if current_context() == MENU {

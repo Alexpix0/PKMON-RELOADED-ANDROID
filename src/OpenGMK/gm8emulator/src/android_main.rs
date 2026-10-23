@@ -1087,6 +1087,11 @@ fn pointer_down(id: i32, x: f32, y: f32) {
             } else if name == crate::touch_controls::LOG_NAME {
                 let open = crate::touch_controls::toggle_log_modal();
                 jni_vibrate(if open { 25 } else { 12 });
+            } else if name == crate::touch_controls::ROTATE_NAME {
+                queue_rotate_at_last_game_touch();
+                SWALLOWED_INPUTS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::collections::HashSet::new).insert(id);
+                jni_vibrate(15);
+                return;
             } else {
                 control_key_down(index);
                 POINTER_CONTROLS.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(HashMap::new).insert(id, index);
@@ -1170,7 +1175,45 @@ static MOUSE_DOWN_AT: Mutex<Vec<(i32, Instant)>> = Mutex::new(Vec::new());
 static DELAYED_UPS: Mutex<Vec<(Instant, f32, f32)>> = Mutex::new(Vec::new());
 static DELAYED_DOWNS: Mutex<Vec<(Instant, f32, f32)>> = Mutex::new(Vec::new());
 
+/// Last place the finger touched the game itself, not a button.
+static LAST_GAME_TOUCH: Mutex<Option<(f32, f32)>> = Mutex::new(None);
+const ROTATE_DELAY: Duration = Duration::from_millis(350);
+static PENDING_ROTATE: Mutex<Option<(Instant, f32, f32)>> = Mutex::new(None);
+
+fn right_click_at(x: f32, y: f32) {
+    use ramen::platform::android::InputEvent;
+    android::push_input(InputEvent::PointerMoved { x, y });
+    android::push_input(InputEvent::PointerDown { x, y, button: 2 });
+    android::push_input(InputEvent::PointerUp { x, y, button: 2 });
+}
+
+fn queue_rotate_at_last_game_touch() {
+    if let Some((x, y)) = *LAST_GAME_TOUCH.lock().unwrap_or_else(|e| e.into_inner()) {
+        *PENDING_ROTATE.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now() + ROTATE_DELAY, x, y));
+        eprintln!("[puzzle] girar encolado en {},{}", x, y);
+    }
+}
+
+fn flush_pending_rotate() {
+    let mut pending = PENDING_ROTATE.lock().unwrap_or_else(|e| e.into_inner());
+    let Some((at, x, y)) = *pending else { return };
+    if Instant::now() < at {
+        return;
+    }
+    *pending = None;
+    eprintln!("[puzzle] girar enviado en {},{}", x, y);
+    right_click_at(x, y);
+}
+
+pub fn show_puzzle_hint() {
+    with_activity(|env, class| {
+        env.call_static_method(class, "showTouchHint", "()V", &[])?;
+        Ok(())
+    });
+}
+
 fn mouse_down(id: i32, x: f32, y: f32) {
+    *LAST_GAME_TOUCH.lock().unwrap_or_else(|e| e.into_inner()) = Some((x, y));
     let deliver_at = Instant::now() + HOVER_DELAY;
     let mut downs = MOUSE_DOWN_AT.lock().unwrap_or_else(|e| e.into_inner());
     downs.retain(|(pointer, _)| *pointer != id);
@@ -2032,6 +2075,7 @@ pub fn android_entry(app: AndroidApp) {
             control_key_up(index);
         }
         flush_delayed_mouse();
+        flush_pending_rotate();
 
         // The keyboard follows the game's text dialog: it comes up by itself the moment the game asks
         // for a name, and goes away when the dialog closes. Only the change is acted on, so closing
