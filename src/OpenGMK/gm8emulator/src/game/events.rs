@@ -790,11 +790,11 @@ impl Game {
                         if instance == target {
                             continue;
                         }
-                        let inst1 = match self.room.instance_list.try_get(instance) {
+                        let _inst1 = match self.room.instance_list.try_get(instance) {
                             Some(inst) if inst.is_active() => inst,
                             _ => break,
                         };
-                        let inst2 = match self.room.instance_list.try_get(target) {
+                        let _inst2 = match self.room.instance_list.try_get(target) {
                             Some(inst) if inst.is_active() => inst,
                             _ => continue,
                         };

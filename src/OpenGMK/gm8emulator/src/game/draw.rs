@@ -370,9 +370,9 @@ impl Game {
         self.room.instance_list.draw_sort();
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
-        // Tiles are pre-sorted at room load / modification. Iterate draw_order directly with zero per-frame allocations.
-        let mut iter_tile = self.room.tile_list.draw_order().iter().copied();
-        let mut iter_tile_v = iter_tile.next();
+        // Tiles are pre-sorted at room load / modification. Iterate non-borrowing TLIterDrawOrder directly with zero per-frame allocations.
+        let mut iter_tile = self.room.tile_list.iter_by_drawing();
+        let mut iter_tile_v = iter_tile.next(&self.room.tile_list);
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
         let mut iter_part_v = iter_part.next(&self.particles);
@@ -389,7 +389,7 @@ impl Game {
                 },
                 (None, Some(idx_tile), None) => {
                     draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
-                    while let Some(idx_tile) = iter_tile.next() {
+                    while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
                         draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     }
                     break
@@ -408,7 +408,7 @@ impl Game {
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
                             draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
-                            iter_tile_v = iter_tile.next();
+                            iter_tile_v = iter_tile.next(&self.room.tile_list);
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
