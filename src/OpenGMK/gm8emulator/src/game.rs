@@ -2408,29 +2408,44 @@ impl Game {
                 update_cached_env_settings();
             }
             static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
-            match fs_mode {
-                1 => {
-                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    (c % 2) == 1
-                },
-                2 => {
-                    let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    (c % 3) != 0
-                },
-                3 => {
-                    if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+            let is_combat = matches!(self.room.id, 47 | 191 | 709);
+            if is_combat && FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (c % 2) == 1
+            } else {
+                let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
+                match fs_mode {
+                    1 => {
                         let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         (c % 2) == 1
-                    } else {
-                        false
-                    }
-                },
-                _ => false,
+                    },
+                    2 => {
+                        let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        (c % 3) != 0
+                    },
+                    3 => {
+                        if crate::touch_controls::fast_forward_active() || FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                            let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            (c % 2) == 1
+                        } else {
+                            false
+                        }
+                    },
+                    _ => false,
+                }
             }
         };
         #[cfg(not(target_os = "android"))]
-        let skip_visual_frame = false;
+        let skip_visual_frame = {
+            static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let is_combat = matches!(self.room.id, 47 | 191 | 709);
+            if is_combat && FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed) {
+                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (c % 2) == 1
+            } else {
+                false
+            }
+        };
 
         #[cfg(target_os = "android")]
         let weather_opt = CACHED_WEATHER_OPT.load(std::sync::atomic::Ordering::Relaxed);
@@ -2477,6 +2492,7 @@ impl Game {
             let instance = self.room.instance_list.get(handle);
             let new_index = instance.image_index.get() + instance.image_speed.get();
             instance.image_index.set(new_index);
+            instance.bbox_is_stale.set(true);
             let frame_count = self
                 .assets
                 .sprites

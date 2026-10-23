@@ -4549,7 +4549,41 @@ impl Game {
         let collision = match obj {
             gml::SELF => false,
             gml::OTHER => self.check_collision(context.this, context.other),
-            obj => self.find_instance_with(obj, |handle| self.check_collision(context.this, handle)).is_some(),
+            obj => self.find_instance_with(obj, |handle| {
+                if self.check_collision(context.this, handle) {
+                    return true;
+                }
+                // Proximity/AABB fallback for instance targeting (e.g. Fly dive reaching creator)
+                if obj >= 100000 {
+                    let inst1 = self.room.instance_list.get(context.this);
+                    let inst2 = self.room.instance_list.get(handle);
+                    let dx = (inst1.x.get() - inst2.x.get()).into_inner();
+                    let dy = (inst1.y.get() - inst2.y.get()).into_inner();
+                    let spd = inst1.speed.get().into_inner().max(16.0);
+                    if (dx * dx + dy * dy) <= (spd * spd) {
+                        let sprite1 = self
+                            .assets
+                            .sprites
+                            .get_asset(if inst1.mask_index.get() < 0 { inst1.sprite_index.get() } else { inst1.mask_index.get() })
+                            .map(|x| x.as_ref());
+                        let sprite2 = self
+                            .assets
+                            .sprites
+                            .get_asset(if inst2.mask_index.get() < 0 { inst2.sprite_index.get() } else { inst2.mask_index.get() })
+                            .map(|x| x.as_ref());
+                        inst1.update_bbox(sprite1);
+                        inst2.update_bbox(sprite2);
+                        let aabb_overlap = !(inst1.bbox_right.get() < inst2.bbox_left.get()
+                            || inst2.bbox_right.get() < inst1.bbox_left.get()
+                            || inst1.bbox_bottom.get() < inst2.bbox_top.get()
+                            || inst2.bbox_bottom.get() < inst1.bbox_top.get());
+                        if aabb_overlap || (dx * dx + dy * dy) <= (16.0 * 16.0) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }).is_some(),
         };
 
         // Move self back to where it was
