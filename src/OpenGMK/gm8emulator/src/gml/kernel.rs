@@ -4427,8 +4427,16 @@ impl Game {
 
     pub fn point_distance(args: &[Value]) -> gml::Result<Value> {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
-        let dx = x2.into_inner() - x1.into_inner();
-        let dy = y2.into_inner() - y1.into_inner();
+        let (x1_f, y1_f) = (x1.into_inner(), y1.into_inner());
+        let (x2_f, y2_f) = (x2.into_inner(), y2.into_inner());
+        if x1_f == x2_f {
+            return Ok(Real::from((y1_f - y2_f).abs()).into());
+        }
+        if y1_f == y2_f {
+            return Ok(Real::from((x1_f - x2_f).abs()).into());
+        }
+        let dx = x2_f - x1_f;
+        let dy = y2_f - y1_f;
         Ok(Real::from(dx.hypot(dy)).into())
     }
 
@@ -4436,6 +4444,12 @@ impl Game {
         let (x1, y1, x2, y2) = expect_args!(args, [real, real, real, real])?;
         let dy = y1.into_inner() - y2.into_inner();
         let dx = x2.into_inner() - x1.into_inner();
+        if dy == 0.0 {
+            return Ok(Real::from(if dx >= 0.0 { 0.0 } else { 180.0 }).into());
+        }
+        if dx == 0.0 {
+            return Ok(Real::from(if dy > 0.0 { 90.0 } else { 270.0 }).into());
+        }
         let deg = dy.atan2(dx).to_degrees().rem_euclid(360.0);
         Ok(Real::from(deg).into())
     }

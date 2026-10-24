@@ -3787,14 +3787,13 @@ impl RendererTrait for RendererImpl {
         let (y1, y2) = if y2 < y1 { (y2, y1) } else { (y1, y2) };
         let x2 = if x2 == x2.floor() { x2 + 0.01 } else { x2 };
         let y2 = if y2 == y2.floor() { y2 + 0.01 } else { y2 };
-        self.push_primitive(
-            ShapeBuilder::new(false, self.white_pixel, alpha, self.depth)
-                .push_point(x1, y1, colour)
-                .push_point(x2, y1, colour)
-                .push_point(x2, y2, colour)
-                .push_point(x1, y2, colour)
-                .build(),
-        );
+        let c = split_colour(colour, alpha);
+        let p0 = [x1 as f32, y1 as f32, self.depth];
+        let p1 = [x2 as f32, y1 as f32, self.depth];
+        let p2 = [x2 as f32, y2 as f32, self.depth];
+        let p3 = [x1 as f32, y2 as f32, self.depth];
+        let uv = [0.0, 0.0];
+        self.push_sprite_quad(self.white_pixel, p0, uv, c, p1, uv, c, p2, uv, c, p3, uv, c);
     }
 
     fn draw_rectangle_outline(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, colour: i32, alpha: f64) {
@@ -3829,6 +3828,19 @@ impl RendererTrait for RendererImpl {
         let (y1, y2) = if y2 < y1 { (y2, y1) } else { (y1, y2) };
         let x2 = if x2 == x2.floor() { x2 + 0.01 } else { x2 };
         let y2 = if y2 == y2.floor() { y2 + 0.01 } else { y2 };
+        if !outline {
+            let col0 = split_colour(c1, alpha);
+            let col1 = split_colour(c2, alpha);
+            let col2 = split_colour(c3, alpha);
+            let col3 = split_colour(c4, alpha);
+            let p0 = [x1 as f32, y1 as f32, self.depth];
+            let p1 = [x2 as f32, y1 as f32, self.depth];
+            let p2 = [x2 as f32, y2 as f32, self.depth];
+            let p3 = [x1 as f32, y2 as f32, self.depth];
+            let uv = [0.0, 0.0];
+            self.push_sprite_quad(self.white_pixel, p0, uv, col0, p1, uv, col1, p2, uv, col2, p3, uv, col3);
+            return;
+        }
         self.push_primitive(
             ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth)
                 .push_point(x1, y1, c1)

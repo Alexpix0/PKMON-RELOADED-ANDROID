@@ -8,6 +8,16 @@ use crate::{
 };
 
 impl Game {
+    #[inline]
+    fn is_pokemon_fighter(&self, instance: &crate::instance::Instance) -> bool {
+        if let Some(obj) = self.assets.objects.get_asset(instance.object_index.get()) {
+            let name = &obj.name;
+            name.contains("pokemon") || name.contains("pkmn") || name.contains("luchador") || name.contains("fighter")
+        } else {
+            false
+        }
+    }
+
     /// Runs an event for all objects which hold the given event.
     /// If no "other" instance is provided, "self" will be used as "other". This is what GM8 tends to do.
     pub fn run_object_event(&mut self, event_id: usize, event_sub: u32, other: Option<usize>) -> gml::Result<()> {
@@ -15,8 +25,27 @@ impl Game {
             Some(e) => e.clone(),
             None => return Ok(()),
         };
+        let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
+        static STEP_THROTTLE_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let throttle_step = is_battle_room && event_id == gml::ev::STEP;
+        let step_frame = if throttle_step {
+            STEP_THROTTLE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        } else {
+            0
+        };
+
         let mut position = 0;
         while let Some(&object_id) = holders.borrow().get(position) {
+            if throttle_step {
+                if let Some(obj) = self.assets.objects.get_asset(object_id) {
+                    let name = &obj.name;
+                    let is_decorative = name.contains("fondo") || name.contains("decor") || name.contains("escenario") || name.contains("estatico");
+                    if is_decorative && (step_frame % 15) != 0 {
+                        position += 1;
+                        continue;
+                    }
+                }
+            }
             let mut iter = self.room.instance_list.iter_by_object(object_id);
             while let Some(instance) = iter.next(&self.room.instance_list) {
                 self.run_instance_event(event_id, event_sub, instance, other.unwrap_or(instance), None)?;
@@ -602,6 +631,11 @@ impl Game {
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
+                let inst1 = self.room.instance_list.get(instance);
+                if inst1.image_alpha.get().into_inner() <= 0.0 && !self.is_pokemon_fighter(inst1) {
+                    continue 'iter1;
+                }
+
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
                     // And iter every instance of the target object
@@ -611,8 +645,10 @@ impl Game {
                             continue;
                         }
 
-                        let inst1 = self.room.instance_list.get(instance);
                         let inst2 = self.room.instance_list.get(target);
+                        if inst2.image_alpha.get().into_inner() <= 0.0 && !self.is_pokemon_fighter(inst2) {
+                            continue;
+                        }
 
                         if inst1.bbox_is_stale.get() {
                             let mask = self.get_instance_mask_sprite(instance);
