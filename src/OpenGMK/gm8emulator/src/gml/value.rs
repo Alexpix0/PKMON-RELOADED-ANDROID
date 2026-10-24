@@ -177,6 +177,11 @@ impl Value {
         }
     }
 
+    #[inline]
+    pub fn as_bool(&self) -> bool {
+        self.is_truthy()
+    }
+
     pub fn as_real(&self) -> Option<Real> {
         match self {
             Self::Real(x) => Some(*x),

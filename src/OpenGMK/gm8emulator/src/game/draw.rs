@@ -300,13 +300,13 @@ impl Game {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
                 if !game.custom_draw_objects.contains(&instance.object_index.get()) {
-                    // Viewport Frustum Culling for default-drawn instances (+64px margin)
+                    // Viewport Frustum Culling for default-drawn instances (+32px margin)
                     // In battle rooms (47, 191, 709), disable culling so aerial/fly moves and shadows never cut off
                     let in_battle = matches!(game.room.id, 47 | 191 | 709);
                     if !in_battle {
                         let ix = instance.x.get().into_inner() as i32;
                         let iy = instance.y.get().into_inner() as i32;
-                        const MARGIN: i32 = 64;
+                        const MARGIN: i32 = 32;
                         if ix < src_x - MARGIN || ix > src_x + src_w + MARGIN || iy < src_y - MARGIN || iy > src_y + src_h + MARGIN {
                             return Ok(());
                         }

@@ -760,19 +760,19 @@ impl Game {
                 match operator {
                     BinaryOperator::And => {
                         let left_val = self.eval(left, context)?;
-                        if !left_val.is_truthy() {
-                            return Ok(Value::Real(Real::from(0.0)));
+                        if !left_val.as_bool() {
+                            return Ok(Value::from(false));
                         }
                         let right_val = self.eval(right, context)?;
-                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                        Ok(Value::from(right_val.as_bool()))
                     },
                     BinaryOperator::Or => {
                         let left_val = self.eval(left, context)?;
-                        if left_val.is_truthy() {
-                            return Ok(Value::Real(Real::from(1.0)));
+                        if left_val.as_bool() {
+                            return Ok(Value::from(true));
                         }
                         let right_val = self.eval(right, context)?;
-                        Ok(Value::Real(Real::from(if right_val.is_truthy() { 1.0 } else { 0.0 })))
+                        Ok(Value::from(right_val.as_bool()))
                     },
                     _ => {
                         let left = self.eval(left, context)?;
