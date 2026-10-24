@@ -244,6 +244,13 @@ class Preferences(context: Context) {
             prefs.edit().putBoolean("force60Fps", value).apply()
         }
 
+    /** VSync vertical synchronization: true locks to 60Hz, false unlocks free framerate in battle */
+    var vsyncEnabled: Boolean
+        get() = prefs.getBoolean("pref_vsync_enabled", true)
+        set(value) {
+            prefs.edit().putBoolean("pref_vsync_enabled", value).apply()
+        }
+
     /** Background music (BGM) volume percentage: 0 to 100 */
     var bgmVolume: Int
         get() = prefs.getInt("bgmVolume", 100)

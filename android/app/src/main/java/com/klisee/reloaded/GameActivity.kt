@@ -145,6 +145,7 @@ class GameActivity : NativeActivity() {
         if (Preferences(applicationContext).keepScreenOn) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
+        setVsyncEnabled(touchPreferences.vsyncEnabled)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
                 val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
@@ -301,6 +302,7 @@ class GameActivity : NativeActivity() {
     external fun nativeAudioFocus(lost: Boolean)
     external fun nativeReloadLayout(profile: Int)
     external fun nativeBackendInfo(): String
+    external fun nativeSetVsyncEnabled(enabled: Boolean)
 
     companion object {
         init {
@@ -311,6 +313,13 @@ class GameActivity : NativeActivity() {
         }
 
         private var instance: GameActivity? = null
+
+        /** Applies runtime VSync setting to native engine */
+        @JvmStatic
+        fun setVsyncEnabled(enabled: Boolean) {
+            runCatching { NativeBridge.setVsyncEnabled(enabled) }
+            runCatching { instance?.nativeSetVsyncEnabled(enabled) }
+        }
 
         /** Returns JSON string with native backend info (requested, actual, fallback, reason). */
         @JvmStatic

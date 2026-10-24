@@ -133,6 +133,7 @@ fun SettingsScreen(
     var persistentShield by remember { mutableStateOf(prefs.persistentShield) }
     var graphicsBackend by remember { mutableStateOf(prefs.graphicsBackend) }
     var force60Fps by remember { mutableStateOf(prefs.force60Fps) }
+    var vsyncEnabled by remember { mutableStateOf(prefs.vsyncEnabled) }
     var bgmVolume by remember { mutableStateOf(prefs.bgmVolume) }
     var sfxVolume by remember { mutableStateOf(prefs.sfxVolume) }
     var autofireEnabled by remember { mutableStateOf(prefs.autofireEnabled) }
@@ -1771,6 +1772,17 @@ fun SettingsScreen(
                                 asyncRenderThread = true
                                 prefs.asyncRenderThread = true
                                 prefs.writeVideo(context.filesDir)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Refresh,
+                            title = "Sincronización Vertical (VSync)",
+                            subtitle = "Sincroniza los fotogramas con el refresco de pantalla (60 Hz). Desactívalo para ganar fluidez inmediata en combates a costa de posible tearing.",
+                            checked = vsyncEnabled,
+                            onCheckedChange = {
+                                vsyncEnabled = it
+                                prefs.vsyncEnabled = it
+                                GameActivity.setVsyncEnabled(it)
                             },
                         )
                     }

@@ -18,15 +18,34 @@ pub struct VulkanSwapchain {
 
 impl VulkanSwapchain {
     pub fn new() -> Self {
+        #[cfg(target_os = "android")]
+        let vsync = crate::render::opengl::egl::is_vsync_enabled();
+        #[cfg(not(target_os = "android"))]
+        let vsync = true;
+
+        let present_mode = if vsync {
+            VK_PRESENT_MODE_FIFO_KHR // Zero-tear non-blocking presentation (VSync on)
+        } else {
+            VK_PRESENT_MODE_MAILBOX_KHR // Lowest latency unlocked framerate (VSync off)
+        };
+
         Self {
             swapchain_handle: 1,
             image_count: 3, // Triple buffering for smooth presentation
             current_index: 0,
-            present_mode: VK_PRESENT_MODE_FIFO_KHR, // Zero-tear non-blocking presentation
+            present_mode,
             pre_transform: VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR, // Pre-transform identity avoids HWUI software rotation
             width: 0,
             height: 0,
         }
+    }
+
+    pub fn set_vsync_mode(&mut self, enabled: bool) {
+        self.present_mode = if enabled {
+            VK_PRESENT_MODE_FIFO_KHR
+        } else {
+            VK_PRESENT_MODE_MAILBOX_KHR
+        };
     }
 
     #[inline]

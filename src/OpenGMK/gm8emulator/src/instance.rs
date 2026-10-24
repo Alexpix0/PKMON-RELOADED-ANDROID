@@ -223,21 +223,29 @@ impl Instance {
 
     // Sets direction, also updating hspeed and vspeed
     pub fn set_direction(&self, direction: Real) {
-        self.direction.set(direction.rem_euclid(Real::from(360.0)));
-        self.update_hvspeed()
+        let norm_dir = direction.rem_euclid(Real::from(360.0));
+        if self.direction.get() != norm_dir {
+            self.direction.set(norm_dir);
+            self.update_hvspeed()
+        }
     }
 
     // Sets speed, also updating hspeed and vspeed
     pub fn set_speed(&self, speed: Real) {
-        self.speed.set(speed);
-        self.update_hvspeed()
+        if self.speed.get() != speed {
+            self.speed.set(speed);
+            self.update_hvspeed()
+        }
     }
 
     // Sets speed and direction, also updating hspeed and vspeed
     pub fn set_speed_direction(&self, speed: Real, direction: Real) {
-        self.speed.set(speed);
-        self.direction.set(direction.rem_euclid(Real::from(360.0)));
-        self.update_hvspeed();
+        let norm_dir = direction.rem_euclid(Real::from(360.0));
+        if self.speed.get() != speed || self.direction.get() != norm_dir {
+            self.speed.set(speed);
+            self.direction.set(norm_dir);
+            self.update_hvspeed();
+        }
     }
 
     // Sets hspeed, also updating direction and speed
@@ -267,9 +275,37 @@ impl Instance {
 
     // Sets hspeed and vspeed based on direction and speed
     fn update_hvspeed(&self) {
+        let speed = self.speed.get();
+        if speed == Real::from(0.0) {
+            self.hspeed.set(Real::from(0.0));
+            self.vspeed.set(Real::from(0.0));
+            return;
+        }
+
+        let dir = self.direction.get();
+        // Fast paths for cardinal directions (standard in rectilinear projectiles)
+        if dir == Real::from(0.0) {
+            self.hspeed.set(speed);
+            self.vspeed.set(Real::from(0.0));
+            return;
+        } else if dir == Real::from(90.0) {
+            self.hspeed.set(Real::from(0.0));
+            self.vspeed.set(-speed);
+            return;
+        } else if dir == Real::from(180.0) {
+            self.hspeed.set(-speed);
+            self.vspeed.set(Real::from(0.0));
+            return;
+        } else if dir == Real::from(270.0) {
+            self.hspeed.set(Real::from(0.0));
+            self.vspeed.set(speed);
+            return;
+        }
+
         let round_threshold = Real::from(0.0001); // The fudge-factor used by GM8
-        let hspeed = self.direction.get().to_radians().cos() * self.speed.get();
-        let vspeed = -self.direction.get().to_radians().sin() * self.speed.get();
+        let rad = dir.to_radians();
+        let hspeed = rad.cos() * speed;
+        let vspeed = -rad.sin() * speed;
         let rounded_hspeed = Real::from(hspeed.round());
         let rounded_vspeed = Real::from(vspeed.round());
 
