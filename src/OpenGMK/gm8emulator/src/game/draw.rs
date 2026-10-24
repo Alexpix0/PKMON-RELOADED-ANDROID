@@ -296,13 +296,16 @@ impl Game {
             self.renderer.clear_zbuf();
         }
 
+pub static BATTLE_DRAW_ENTITIES_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static BATTLE_DRAW_HUD_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
         fn draw_instance(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
+                let in_battle = matches!(game.room.id, 47 | 191 | 709);
                 if !game.custom_draw_objects.contains(&instance.object_index.get()) {
                     // Viewport Frustum Culling for default-drawn instances (+32px margin)
                     // In battle rooms (47, 191, 709), disable culling so aerial/fly moves and shadows never cut off
-                    let in_battle = matches!(game.room.id, 47 | 191 | 709);
                     if !in_battle {
                         let ix = instance.x.get().into_inner() as i32;
                         let iy = instance.y.get().into_inner() as i32;
@@ -312,12 +315,25 @@ impl Game {
                         }
                     }
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
-                    let _ = game.draw_instance_default(idx);
-                    Ok(())
+                    if in_battle {
+                        let t0 = std::time::Instant::now();
+                        let res = game.draw_instance_default(idx);
+                        BATTLE_DRAW_ENTITIES_US.fetch_add(t0.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+                        res
+                    } else {
+                        game.draw_instance_default(idx)
+                    }
                 } else {
                     // Custom draw event: always execute as GML might draw HUD/GUI or global effects
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
-                    game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
+                    if in_battle {
+                        let t0 = std::time::Instant::now();
+                        let res = game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None);
+                        BATTLE_DRAW_HUD_US.fetch_add(t0.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+                        res
+                    } else {
+                        game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
+                    }
                 }
             } else {
                 Ok(())
