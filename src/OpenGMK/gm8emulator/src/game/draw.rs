@@ -317,11 +317,12 @@ impl Game {
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
                     if in_battle {
                         let t0 = std::time::Instant::now();
-                        let res = game.draw_instance_default(idx);
+                        let _ = game.draw_instance_default(idx);
                         BATTLE_DRAW_ENTITIES_US.fetch_add(t0.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-                        res
+                        Ok(())
                     } else {
-                        game.draw_instance_default(idx)
+                        let _ = game.draw_instance_default(idx);
+                        Ok(())
                     }
                 } else {
                     // Custom draw event: always execute as GML might draw HUD/GUI or global effects

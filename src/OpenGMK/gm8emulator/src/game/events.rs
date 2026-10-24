@@ -623,6 +623,7 @@ impl Game {
 
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
+        let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =
@@ -631,10 +632,12 @@ impl Game {
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
-                let alpha1 = self.room.instance_list.get(instance).image_alpha.get().into_inner();
-                let obj1 = self.room.instance_list.get(instance).object_index.get();
-                if alpha1 <= 0.0 && !self.is_pokemon_fighter(obj1) {
-                    continue 'iter1;
+                if is_battle_room {
+                    let alpha1 = self.room.instance_list.get(instance).image_alpha.get().into_inner();
+                    let obj1 = self.room.instance_list.get(instance).object_index.get();
+                    if alpha1 <= 0.0 && !self.is_pokemon_fighter(obj1) {
+                        continue 'iter1;
+                    }
                 }
 
                 // Go through all its collision target objects
@@ -646,10 +649,12 @@ impl Game {
                             continue;
                         }
 
-                        let alpha2 = self.room.instance_list.get(target).image_alpha.get().into_inner();
-                        let obj2 = self.room.instance_list.get(target).object_index.get();
-                        if alpha2 <= 0.0 && !self.is_pokemon_fighter(obj2) {
-                            continue;
+                        if is_battle_room {
+                            let alpha2 = self.room.instance_list.get(target).image_alpha.get().into_inner();
+                            let obj2 = self.room.instance_list.get(target).object_index.get();
+                            if alpha2 <= 0.0 && !self.is_pokemon_fighter(obj2) {
+                                continue;
+                            }
                         }
 
                         let inst1 = self.room.instance_list.get(instance);
