@@ -1332,6 +1332,14 @@ impl Renderer {
         self.0.finish(window_width, window_height, clear_colour)
     }
 
+    pub fn begin_hud_batch(&mut self) {
+        self.0.begin_hud_batch();
+    }
+
+    pub fn end_hud_batch(&mut self) {
+        self.0.end_hud_batch();
+    }
+
     pub fn state(&self) -> RendererState {
         RendererState {
             model_matrix: self.get_model_matrix(),

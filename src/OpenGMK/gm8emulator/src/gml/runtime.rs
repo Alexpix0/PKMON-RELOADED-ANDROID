@@ -873,28 +873,27 @@ impl Game {
         if array_index == 0 {
             let mut cache = inst.mru_fields.borrow_mut();
             let len = inst.mru_len.get();
-            let mut found = false;
+            let mut found_idx = None;
             for i in 0..len {
                 if cache[i].0 == field_id {
-                    cache[i].1 = value;
-                    if i > 0 {
-                        cache.swap(0, i);
-                    }
-                    found = true;
+                    found_idx = Some(i);
                     break;
                 }
             }
-            if !found {
-                if len < 4 {
-                    cache[len] = (field_id, value);
-                    inst.mru_len.set(len + 1);
-                    if len > 0 {
-                        cache.swap(0, len);
-                    }
-                } else {
-                    cache[3] = (field_id, value);
-                    cache.swap(0, 3);
+            if let Some(i) = found_idx {
+                cache[i].1 = value;
+                if i > 0 {
+                    cache.swap(0, i);
                 }
+            } else if len < 4 {
+                cache[len] = (field_id, value);
+                inst.mru_len.set(len + 1);
+                if len > 0 {
+                    cache.swap(0, len);
+                }
+            } else {
+                cache[3] = (field_id, value);
+                cache.swap(0, 3);
             }
         } else {
             let mut cache = inst.mru_fields.borrow_mut();
