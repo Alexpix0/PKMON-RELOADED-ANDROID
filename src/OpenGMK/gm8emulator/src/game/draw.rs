@@ -6,6 +6,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+pub static BATTLE_DRAW_ENTITIES_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub static BATTLE_DRAW_HUD_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum Halign {
     Left,
@@ -295,9 +298,6 @@ impl Game {
         } else {
             self.renderer.clear_zbuf();
         }
-
-pub static BATTLE_DRAW_ENTITIES_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-pub static BATTLE_DRAW_HUD_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
         fn draw_instance(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
