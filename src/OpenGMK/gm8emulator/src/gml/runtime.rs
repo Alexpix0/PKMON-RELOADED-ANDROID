@@ -366,7 +366,6 @@ impl Game {
                 let target = self.get_target(context, &accessor.owner, self.globalvars.contains(&accessor.index))?;
                 let array_index = self.get_array_index(&accessor.array, context)?;
                 let value = self.eval(value, context)?;
-                context.return_value = value.clone();
                 match target {
                     Target::Single(None) => (),
                     Target::Single(Some(instance)) => {
@@ -404,7 +403,6 @@ impl Game {
                 let target = self.get_target(context, &accessor.owner, false)?;
                 let array_index = self.get_array_index(&accessor.array, context)?;
                 let value = self.eval(value, context)?;
-                context.return_value = value.clone();
                 match target {
                     Target::Single(None) => (),
                     Target::Single(Some(instance)) => {
@@ -653,9 +651,11 @@ impl Game {
                 }
 
                 if let Some(Some(script)) = self.assets.scripts.get(*script_id) {
-                    let instructions = script.compiled.clone();
+                    let instructions: &[Instruction] = unsafe {
+                        std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
+                    };
                     let mut new_context = Context::copy_with_args(context, arg_values, args.len());
-                    self.execute(&instructions, &mut new_context)?;
+                    self.execute(instructions, &mut new_context)?;
                     Ok(new_context.return_value)
                 } else {
                     Err(Error::NonexistentAsset(asset::Type::Script, *script_id as i32))
@@ -811,11 +811,40 @@ impl Game {
         }
     }
 
-    // Get a field value from an instance
+    // Get a field value from an instance with fast inline MRU cache
     fn get_instance_field(&self, instance: usize, field_id: usize, array_index: u32) -> gml::Result<Value> {
+        let inst = self.room.instance_list.get(instance);
+        if array_index == 0 {
+            let len = inst.mru_len.get();
+            let mut cache = inst.mru_fields.borrow_mut();
+            for i in 0..len {
+                if cache[i].0 == field_id {
+                    let val = cache[i].1.clone();
+                    if i > 0 {
+                        cache.swap(0, i);
+                    }
+                    return Ok(val);
+                }
+            }
+        }
+
         if let Some(Some(value)) =
-            self.room.instance_list.get(instance).fields.borrow().get(&field_id).map(|field| field.get(array_index))
+            inst.fields.borrow().get(&field_id).map(|field| field.get(array_index))
         {
+            if array_index == 0 {
+                let mut cache = inst.mru_fields.borrow_mut();
+                let len = inst.mru_len.get();
+                if len < 4 {
+                    cache[len] = (field_id, value.clone());
+                    inst.mru_len.set(len + 1);
+                    if len > 0 {
+                        cache.swap(0, len);
+                    }
+                } else {
+                    cache[3] = (field_id, value.clone());
+                    cache.swap(0, 3);
+                }
+            }
             Ok(value)
         } else {
             // GM8 devuelve 0 al leer una variable de instancia que nunca se ha asignado, aunque el
@@ -826,17 +855,59 @@ impl Game {
         }
     }
 
-    // Set a field on an instance with single-lookup Entry API
+    // Set a field on an instance with single-lookup Entry API and MRU cache update
     #[inline(always)]
     fn set_instance_field(&self, instance: usize, field_id: usize, array_index: u32, value: Value) {
-        let mut fields = self.room.instance_list.get(instance).fields.borrow_mut();
-        match fields.entry(field_id) {
-            std::collections::hash_map::Entry::Occupied(mut entry) => {
-                entry.get_mut().set(array_index, value);
-            },
-            std::collections::hash_map::Entry::Vacant(entry) => {
-                entry.insert(Field::new(array_index, value));
-            },
+        let inst = self.room.instance_list.get(instance);
+        {
+            let mut fields = inst.fields.borrow_mut();
+            match fields.entry(field_id) {
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    entry.get_mut().set(array_index, value.clone());
+                },
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(Field::new(array_index, value.clone()));
+                },
+            }
+        }
+        if array_index == 0 {
+            let mut cache = inst.mru_fields.borrow_mut();
+            let len = inst.mru_len.get();
+            let mut found = false;
+            for i in 0..len {
+                if cache[i].0 == field_id {
+                    cache[i].1 = value;
+                    if i > 0 {
+                        cache.swap(0, i);
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                if len < 4 {
+                    cache[len] = (field_id, value);
+                    inst.mru_len.set(len + 1);
+                    if len > 0 {
+                        cache.swap(0, len);
+                    }
+                } else {
+                    cache[3] = (field_id, value);
+                    cache.swap(0, 3);
+                }
+            }
+        } else {
+            let mut cache = inst.mru_fields.borrow_mut();
+            let len = inst.mru_len.get();
+            for i in 0..len {
+                if cache[i].0 == field_id {
+                    for j in i..(len - 1) {
+                        cache[j] = cache[j + 1].clone();
+                    }
+                    inst.mru_len.set(len - 1);
+                    break;
+                }
+            }
         }
     }
 

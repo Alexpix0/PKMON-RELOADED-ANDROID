@@ -245,6 +245,13 @@ pub struct RendererImpl {
     loc_tex: GLint,            // uniform sampler2D tex
     buf_state: GLuint,         // uniform RenderState state
 
+    hud_batch_active: bool,
+    hud_quads: Vec<Vertex>,
+    hud_sprites: Vec<Vertex>,
+    hud_text: Vec<Vertex>,
+    hud_sprite_atlas: u32,
+    hud_text_atlas: u32,
+
     /// Lazily-built program/buffers for the on-screen touch controls (Android only).
     #[cfg(target_os = "android")]
     overlay: Option<Overlay>,
@@ -804,6 +811,13 @@ impl RendererImpl {
                 loc_tex: gl.GetUniformLocation(program, b"tex\0".as_ptr().cast()),
                 buf_state,
 
+                hud_batch_active: false,
+                hud_quads: Vec::new(),
+                hud_sprites: Vec::new(),
+                hud_text: Vec::new(),
+                hud_sprite_atlas: 0,
+                hud_text_atlas: 0,
+
                 #[cfg(target_os = "android")]
                 overlay: None,
 
@@ -933,6 +947,27 @@ impl RendererImpl {
         p2: [f32; 3], uv2: [f32; 2], c2: [f32; 4],
         p3: [f32; 3], uv3: [f32; 2], c3: [f32; 4],
     ) {
+        if self.hud_batch_active {
+            let normal = [0.0, 0.0, 0.0];
+            let atlas_xywh = atlas_ref.into();
+            let target_vec = if atlas_ref.atlas_id == self.white_pixel.atlas_id {
+                &mut self.hud_quads
+            } else if atlas_ref.atlas_id >= 2 {
+                self.hud_text_atlas = atlas_ref.atlas_id;
+                &mut self.hud_text
+            } else {
+                self.hud_sprite_atlas = atlas_ref.atlas_id;
+                &mut self.hud_sprites
+            };
+            target_vec.reserve(6);
+            target_vec.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+            target_vec.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
+            target_vec.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+            target_vec.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+            target_vec.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+            target_vec.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+            return;
+        }
         self.setup_queue(atlas_ref.atlas_id, PrimitiveShape::Triangle);
         let normal = [0.0, 0.0, 0.0];
         let atlas_xywh = atlas_ref.into();
@@ -946,6 +981,20 @@ impl RendererImpl {
     }
 
     fn push_primitive(&mut self, builder: &PrimitiveBuilder) {
+        if self.hud_batch_active && builder.get_shape() == PrimitiveShape::Triangle {
+            let atlas_id = builder.get_atlas_id();
+            let target_vec = if atlas_id == self.white_pixel.atlas_id {
+                &mut self.hud_quads
+            } else if atlas_id >= 2 {
+                self.hud_text_atlas = atlas_id;
+                &mut self.hud_text
+            } else {
+                self.hud_sprite_atlas = atlas_id;
+                &mut self.hud_sprites
+            };
+            target_vec.extend_from_slice(builder.get_vertices());
+            return;
+        }
         self.setup_queue(builder.get_atlas_id(), builder.get_shape());
         self.vertex_queue.extend_from_slice(builder.get_vertices());
     }
@@ -4115,12 +4164,51 @@ impl RendererTrait for RendererImpl {
 
     /// Does anything that's queued to be done.
     fn flush_queue(&mut self) {
+        if self.hud_batch_active {
+            self.end_hud_batch();
+        }
         // move the queue out of self to satisfy the borrow checker
         let mut queue = std::mem::take(&mut self.vertex_queue);
         self.draw_buffer(self.current_atlas, self.queue_type, &queue);
         // clear it and put it back so we can reuse the memory
         queue.clear();
         self.vertex_queue = queue;
+    }
+
+    fn begin_hud_batch(&mut self) {
+        self.flush_queue();
+        self.hud_batch_active = true;
+        self.hud_quads.clear();
+        self.hud_sprites.clear();
+        self.hud_text.clear();
+    }
+
+    fn end_hud_batch(&mut self) {
+        if !self.hud_batch_active {
+            return;
+        }
+        self.hud_batch_active = false;
+        // 1. Procesa y sube primero todos los quads vectoriales planos (white_pixel)
+        if !self.hud_quads.is_empty() {
+            let quads = std::mem::take(&mut self.hud_quads);
+            self.draw_buffer(self.white_pixel.atlas_id, PrimitiveShape::Triangle, &quads);
+            self.hud_quads = quads;
+            self.hud_quads.clear();
+        }
+        // 2. Procesa y sube los iconos y marcos que residen en el Atlas de Sprites
+        if !self.hud_sprites.is_empty() {
+            let sprites = std::mem::take(&mut self.hud_sprites);
+            self.draw_buffer(self.hud_sprite_atlas, PrimitiveShape::Triangle, &sprites);
+            self.hud_sprites = sprites;
+            self.hud_sprites.clear();
+        }
+        // 3. Procesa y sube los glifos de draw_string que residen en el Atlas de Fuentes
+        if !self.hud_text.is_empty() {
+            let text = std::mem::take(&mut self.hud_text);
+            self.draw_buffer(self.hud_text_atlas, PrimitiveShape::Triangle, &text);
+            self.hud_text = text;
+            self.hud_text.clear();
+        }
     }
 
     fn set_view_matrix(&mut self, view: [f32; 16]) {

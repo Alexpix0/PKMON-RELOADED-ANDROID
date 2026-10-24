@@ -98,6 +98,53 @@ pub fn jit_engine() -> &'static GmlJitEngine {
     GML_JIT.get_or_init(GmlJitEngine::new)
 }
 
+fn val_to_f64(val: &Value) -> f64 {
+    match val {
+        Value::Real(r) => r.into_inner(),
+        _ => 0.0,
+    }
+}
+
+pub fn native_distance_hook(_game: &mut crate::game::Game, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+    if args.len() >= 4 {
+        let x1 = val_to_f64(&args[0]);
+        let y1 = val_to_f64(&args[1]);
+        let x2 = val_to_f64(&args[2]);
+        let y2 = val_to_f64(&args[3]);
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        Ok(Value::Real(Real::from((dx * dx + dy * dy).sqrt())))
+    } else {
+        Ok(Value::Real(Real::from(0.0)))
+    }
+}
+
+pub fn native_angle_hook(_game: &mut crate::game::Game, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+    if args.len() >= 2 {
+        let a1 = val_to_f64(&args[0]);
+        let a2 = val_to_f64(&args[1]);
+        let diff = (a1 - a2 + 180.0).rem_euclid(360.0) - 180.0;
+        let res = if diff < -180.0 { diff + 360.0 } else { diff };
+        Ok(Value::Real(Real::from(res)))
+    } else {
+        Ok(Value::Real(Real::from(0.0)))
+    }
+}
+
+pub fn native_damage_hook(_game: &mut crate::game::Game, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+    if args.len() >= 4 {
+        let level = val_to_f64(&args[0]);
+        let power = val_to_f64(&args[1]);
+        let attack = val_to_f64(&args[2]);
+        let defense = val_to_f64(&args[3]);
+        let modifier = if args.len() >= 5 { val_to_f64(&args[4]) } else { 1.0 };
+        let dmg = jit_engine().eval_damage_fast(level, power, attack, defense, modifier);
+        Ok(Value::Real(Real::from(dmg)))
+    } else {
+        Ok(Value::Real(Real::from(1.0)))
+    }
+}
+
 /// Tries dispatching a registered native fast-path for the given script ID.
 pub fn try_fast_path(
     script_id: usize,
@@ -105,5 +152,31 @@ pub fn try_fast_path(
     context: &mut Context,
     args: &[Value],
 ) -> Option<gml::Result<Value>> {
-    jit_engine().dispatch(script_id, game, context, args)
+    let engine = jit_engine();
+    if !engine.is_enabled() {
+        return None;
+    }
+    if let Some(res) = engine.dispatch(script_id, game, context, args) {
+        return Some(res);
+    }
+    if let Some(Some(script)) = game.assets.scripts.get(script_id) {
+        let name_bytes = script.name.0.as_ref();
+        if let Ok(name) = std::str::from_utf8(name_bytes) {
+            let lower = name.to_ascii_lowercase();
+            let hook: Option<NativeScriptFn> = if lower.contains("dano") || lower.contains("daño") || lower.contains("damage") {
+                Some(native_damage_hook)
+            } else if lower.contains("distancia") || lower.contains("distance") {
+                Some(native_distance_hook)
+            } else if lower.contains("angulo_diferencia") || lower.contains("angle_difference") {
+                Some(native_angle_hook)
+            } else {
+                None
+            };
+            if let Some(h) = hook {
+                engine.register_hook(script_id, h);
+                return Some(h(game, context, args));
+            }
+        }
+    }
+    None
 }

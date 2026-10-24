@@ -413,6 +413,8 @@ pub trait RendererTrait {
         port_h: i32,
     );
     fn flush_queue(&mut self);
+    fn begin_hud_batch(&mut self) {}
+    fn end_hud_batch(&mut self) {}
     fn present(&mut self, window_width: u32, window_height: u32, scaling: Scaling);
     /// Presents one surface, stretched over the whole window. Used by the game's information window,
     /// which is drawn at window resolution instead of the game's small framebuffer.

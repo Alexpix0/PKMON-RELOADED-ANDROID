@@ -83,6 +83,11 @@ pub struct Instance {
     pub fields: RefCell<FxHashMap<usize, Field>>,
     pub alarms: RefCell<FxHashMap<u32, i32>>,
 
+    #[serde(skip, default)]
+    pub mru_fields: RefCell<[(usize, Value); 4]>,
+    #[serde(skip, default)]
+    pub mru_len: Cell<usize>,
+
     pub parents: Rc<RefCell<HashSet<i32>>>,
 }
 
@@ -211,6 +216,8 @@ impl Instance {
             bbox_is_stale: Cell::new(true),
             fields: RefCell::new(FxHashMap::default()),
             alarms: RefCell::new(FxHashMap::default()),
+            mru_fields: RefCell::new(Default::default()),
+            mru_len: Cell::new(0),
         }
     }
 
