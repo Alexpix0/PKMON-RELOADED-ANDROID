@@ -9,9 +9,9 @@ use crate::{
 
 impl Game {
     #[inline]
-    fn is_pokemon_fighter(&self, instance: &crate::instance::Instance) -> bool {
-        if let Some(obj) = self.assets.objects.get_asset(instance.object_index.get()) {
-            let name = &obj.name;
+    fn is_pokemon_fighter(&self, object_id: i32) -> bool {
+        if let Some(obj) = self.assets.objects.get_asset(object_id) {
+            let name = obj.name.decode_utf8();
             name.contains("pokemon") || name.contains("pkmn") || name.contains("luchador") || name.contains("fighter")
         } else {
             false
@@ -38,7 +38,7 @@ impl Game {
         while let Some(&object_id) = holders.borrow().get(position) {
             if throttle_step {
                 if let Some(obj) = self.assets.objects.get_asset(object_id) {
-                    let name = &obj.name;
+                    let name = obj.name.decode_utf8();
                     let is_decorative = name.contains("fondo") || name.contains("decor") || name.contains("escenario") || name.contains("estatico");
                     if is_decorative && (step_frame % 15) != 0 {
                         position += 1;
@@ -631,8 +631,9 @@ impl Game {
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
-                let inst1 = self.room.instance_list.get(instance);
-                if inst1.image_alpha.get().into_inner() <= 0.0 && !self.is_pokemon_fighter(inst1) {
+                let alpha1 = self.room.instance_list.get(instance).image_alpha.get().into_inner();
+                let obj1 = self.room.instance_list.get(instance).object_index.get();
+                if alpha1 <= 0.0 && !self.is_pokemon_fighter(obj1) {
                     continue 'iter1;
                 }
 
@@ -645,10 +646,14 @@ impl Game {
                             continue;
                         }
 
-                        let inst2 = self.room.instance_list.get(target);
-                        if inst2.image_alpha.get().into_inner() <= 0.0 && !self.is_pokemon_fighter(inst2) {
+                        let alpha2 = self.room.instance_list.get(target).image_alpha.get().into_inner();
+                        let obj2 = self.room.instance_list.get(target).object_index.get();
+                        if alpha2 <= 0.0 && !self.is_pokemon_fighter(obj2) {
                             continue;
                         }
+
+                        let inst1 = self.room.instance_list.get(instance);
+                        let inst2 = self.room.instance_list.get(target);
 
                         if inst1.bbox_is_stale.get() {
                             let mask = self.get_instance_mask_sprite(instance);
