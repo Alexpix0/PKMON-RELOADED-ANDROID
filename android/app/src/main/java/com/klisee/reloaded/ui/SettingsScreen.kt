@@ -1734,7 +1734,7 @@ fun SettingsScreen(
                             title = "Nativo (30/60 FPS Original)",
                             subtitle = "Mantiene los límites nativos del juego (30 FPS en menús/salas fijas, 60 FPS en combates)",
                             selected = !force60Fps && !asyncRenderThread,
-                            items = 3,
+                            items = 4,
                             index = 0,
                             onSelect = {
                                 force60Fps = false
@@ -1749,7 +1749,7 @@ fun SettingsScreen(
                             title = "60 FPS Forzados (Desbloquear zonas a 30 FPS)",
                             subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
                             selected = force60Fps && !asyncRenderThread,
-                            items = 3,
+                            items = 4,
                             index = 1,
                             onSelect = {
                                 force60Fps = true
@@ -1764,7 +1764,7 @@ fun SettingsScreen(
                             title = "120 FPS (Interpolación Ultra Suave)",
                             subtitle = "Activa renderizado desacoplado e interpolación de cuadros para pantallas de 90/120 Hz",
                             selected = asyncRenderThread,
-                            items = 3,
+                            items = 4,
                             index = 2,
                             onSelect = {
                                 force60Fps = true
@@ -1779,6 +1779,8 @@ fun SettingsScreen(
                             title = "Sincronización Vertical (VSync)",
                             subtitle = "Sincroniza los fotogramas con el refresco de pantalla (60 Hz). Desactívalo para ganar fluidez inmediata en combates a costa de posible tearing.",
                             checked = vsyncEnabled,
+                            items = 4,
+                            index = 3,
                             onCheckedChange = {
                                 vsyncEnabled = it
                                 prefs.vsyncEnabled = it
