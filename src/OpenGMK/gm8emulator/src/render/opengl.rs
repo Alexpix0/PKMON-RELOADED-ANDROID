@@ -976,6 +976,7 @@ impl RendererImpl {
                 self.hud_sprites.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
                 return;
             }
+        }
         if self.current_atlas != atlas_ref.atlas_id {
             self.flush_queue();
             self.current_atlas = atlas_ref.atlas_id;
