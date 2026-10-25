@@ -18,6 +18,27 @@ impl Game {
         }
     }
 
+    #[inline]
+    fn is_combat_active_entity(&self, object_id: i32) -> bool {
+        if let Some(obj) = self.assets.objects.get_asset(object_id) {
+            let name = obj.name.decode_utf8();
+            let lower = name.to_ascii_lowercase();
+            lower.contains("pokemon")
+                || lower.contains("pkmn")
+                || lower.contains("luchador")
+                || lower.contains("fighter")
+                || lower.contains("ataque")
+                || lower.contains("attack")
+                || lower.contains("hitbox")
+                || lower.contains("proyectil")
+                || lower.contains("bala")
+                || lower.contains("golpe")
+                || lower.contains("disparo")
+        } else {
+            false
+        }
+    }
+
     /// Runs an event for all objects which hold the given event.
     /// If no "other" instance is provided, "self" will be used as "other". This is what GM8 tends to do.
     pub fn run_object_event(&mut self, event_id: usize, event_sub: u32, other: Option<usize>) -> gml::Result<()> {
@@ -632,13 +653,16 @@ impl Game {
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
-                if is_battle_room {
+                let obj1 = self.room.instance_list.get(instance).object_index.get();
+                let is_combat1 = if is_battle_room {
                     let alpha1 = self.room.instance_list.get(instance).image_alpha.get().into_inner();
-                    let obj1 = self.room.instance_list.get(instance).object_index.get();
                     if alpha1 <= 0.0 && !self.is_pokemon_fighter(obj1) {
                         continue 'iter1;
                     }
-                }
+                    self.is_combat_active_entity(obj1)
+                } else {
+                    false
+                };
 
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
@@ -649,10 +673,14 @@ impl Game {
                             continue;
                         }
 
+                        let obj2 = self.room.instance_list.get(target).object_index.get();
                         if is_battle_room {
                             let alpha2 = self.room.instance_list.get(target).image_alpha.get().into_inner();
-                            let obj2 = self.room.instance_list.get(target).object_index.get();
                             if alpha2 <= 0.0 && !self.is_pokemon_fighter(obj2) {
+                                continue;
+                            }
+                            let is_combat2 = self.is_combat_active_entity(obj2);
+                            if !is_combat1 && !is_combat2 {
                                 continue;
                             }
                         }

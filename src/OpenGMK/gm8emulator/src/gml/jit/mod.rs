@@ -145,6 +145,66 @@ pub fn native_damage_hook(_game: &mut crate::game::Game, _context: &mut Context,
     }
 }
 
+// 18x18 Type effectiveness matrix (Gen VI+ official standard with Fairy)
+// Rows: Attacking Type, Columns: Defending Type
+#[rustfmt::skip]
+pub static TYPE_CHART: [[f32; 18]; 18] = [
+    // Nor   Fir   Wat   Gra   Ele   Ice   Fig   Poi   Gro   Fly   Psy   Bug   Roc   Gho   Dra   Dar   Ste   Fai
+    /*Normal  */ [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  0.5,  0.0,  1.0,  1.0,  0.5,  1.0],
+    /*Fire    */ [1.0,  0.5,  0.5,  2.0,  1.0,  2.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  0.5,  1.0,  0.5,  1.0,  2.0,  1.0],
+    /*Water   */ [1.0,  2.0,  0.5,  0.5,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  1.0,  1.0,  2.0,  1.0,  0.5,  1.0,  1.0,  1.0],
+    /*Grass   */ [1.0,  0.5,  2.0,  0.5,  1.0,  1.0,  1.0,  0.5,  2.0,  0.5,  1.0,  0.5,  2.0,  1.0,  0.5,  1.0,  0.5,  1.0],
+    /*Electric*/ [1.0,  1.0,  2.0,  0.5,  0.5,  1.0,  1.0,  1.0,  0.0,  2.0,  1.0,  1.0,  1.0,  1.0,  0.5,  1.0,  1.0,  1.0],
+    /*Ice     */ [1.0,  0.5,  0.5,  2.0,  1.0,  0.5,  1.0,  1.0,  2.0,  2.0,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  0.5,  1.0],
+    /*Fighting*/ [2.0,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  0.5,  1.0,  0.5,  0.5,  0.5,  2.0,  0.0,  1.0,  2.0,  2.0,  0.5],
+    /*Poison  */ [1.0,  1.0,  1.0,  2.0,  1.0,  1.0,  1.0,  0.5,  0.5,  1.0,  1.0,  1.0,  0.5,  0.5,  1.0,  1.0,  0.0,  2.0],
+    /*Ground  */ [1.0,  2.0,  1.0,  0.5,  2.0,  1.0,  1.0,  2.0,  1.0,  0.0,  1.0,  0.5,  2.0,  1.0,  1.0,  1.0,  2.0,  1.0],
+    /*Flying  */ [1.0,  1.0,  1.0,  2.0,  0.5,  1.0,  2.0,  1.0,  1.0,  1.0,  1.0,  2.0,  0.5,  1.0,  1.0,  1.0,  0.5,  1.0],
+    /*Psychic */ [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  2.0,  1.0,  1.0,  0.5,  1.0,  1.0,  1.0,  1.0,  0.0,  0.5,  1.0],
+    /*Bug     */ [1.0,  0.5,  1.0,  2.0,  1.0,  1.0,  0.5,  0.5,  1.0,  0.5,  2.0,  1.0,  1.0,  0.5,  1.0,  2.0,  0.5,  0.5],
+    /*Rock    */ [1.0,  2.0,  1.0,  1.0,  1.0,  2.0,  0.5,  1.0,  0.5,  2.0,  1.0,  2.0,  1.0,  1.0,  1.0,  1.0,  0.5,  1.0],
+    /*Ghost   */ [0.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  1.0,  2.0,  1.0,  0.5,  1.0,  1.0],
+    /*Dragon  */ [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  0.5,  0.0],
+    /*Dark    */ [1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  0.5,  1.0,  1.0,  1.0,  2.0,  1.0,  1.0,  2.0,  1.0,  0.5,  1.0,  0.5],
+    /*Steel   */ [1.0,  0.5,  0.5,  1.0,  0.5,  2.0,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  1.0,  1.0,  1.0,  0.5,  2.0],
+    /*Fairy   */ [1.0,  0.5,  1.0,  1.0,  1.0,  1.0,  2.0,  0.5,  1.0,  1.0,  1.0,  1.0,  1.0,  1.0,  2.0,  2.0,  0.5,  1.0],
+];
+
+#[inline(always)]
+pub fn eval_type_multiplier_fast(attack_type: usize, defense_type1: usize, defense_type2: Option<usize>) -> f64 {
+    let m1 = if attack_type < 18 && defense_type1 < 18 {
+        TYPE_CHART[attack_type][defense_type1] as f64
+    } else {
+        1.0
+    };
+    let m2 = match defense_type2 {
+        Some(d2) if attack_type < 18 && d2 < 18 => TYPE_CHART[attack_type][d2] as f64,
+        _ => 1.0,
+    };
+    m1 * m2
+}
+
+pub fn native_type_effectiveness_hook(_game: &mut crate::game::Game, _context: &mut Context, args: &[Value]) -> gml::Result<Value> {
+    if args.len() >= 2 {
+        let att = val_to_f64(&args[0]) as usize;
+        let def1 = val_to_f64(&args[1]) as usize;
+        let def2 = if args.len() >= 3 {
+            let d2 = val_to_f64(&args[2]) as i32;
+            if d2 >= 0 && (d2 as usize) < 18 {
+                Some(d2 as usize)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let mult = eval_type_multiplier_fast(att, def1, def2);
+        Ok(Value::Real(Real::from(mult)))
+    } else {
+        Ok(Value::Real(Real::from(1.0)))
+    }
+}
+
 /// Tries dispatching a registered native fast-path for the given script ID.
 pub fn try_fast_path(
     script_id: usize,
@@ -169,6 +229,8 @@ pub fn try_fast_path(
                 Some(native_distance_hook)
             } else if lower.contains("angulo_diferencia") || lower.contains("angle_difference") {
                 Some(native_angle_hook)
+            } else if lower.contains("calculo_tipo") || lower.contains("efectividad") || lower.contains("tipo_efectividad") || (lower.contains("tipo") && lower.contains("tabla")) {
+                Some(native_type_effectiveness_hook)
             } else {
                 None
             };

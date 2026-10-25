@@ -125,6 +125,35 @@ pub(crate) fn parse_gmspr(bytes: &[u8]) -> Result<gm8exe::asset::Sprite, String>
         .map_err(|e| format!("{:?}", e))
 }
 
+pub struct TrigLut {
+    pub sin_table: [f32; 3600],
+    pub cos_table: [f32; 3600],
+}
+
+pub static TRIG_LUT_3600: std::sync::OnceLock<TrigLut> = std::sync::OnceLock::new();
+
+#[inline(always)]
+pub fn get_trig_lut() -> &'static TrigLut {
+    TRIG_LUT_3600.get_or_init(|| {
+        let mut sin_table = [0.0f32; 3600];
+        let mut cos_table = [0.0f32; 3600];
+        for i in 0..3600 {
+            let rad = ((i as f64) * 0.1).to_radians();
+            sin_table[i] = rad.sin() as f32;
+            cos_table[i] = rad.cos() as f32;
+        }
+        TrigLut { sin_table, cos_table }
+    })
+}
+
+#[inline(always)]
+pub fn fast_sin_cos_deg(dir_deg: f64) -> (f64, f64) {
+    let lut = get_trig_lut();
+    let norm = (dir_deg % 360.0 + 360.0) % 360.0;
+    let idx = ((norm * 10.0).round() as usize) % 3600;
+    (lut.sin_table[idx] as f64, lut.cos_table[idx] as f64)
+}
+
 impl Game {
     pub fn display_get_width(&self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [])?;
@@ -1496,7 +1525,7 @@ impl Game {
             }
             Ok(Default::default())
         } else {
-            Err(gml::Error::NonexistentAsset(asset::Type::Sprite, sprite_index))
+            Ok(Default::default())
         }
     }
 
@@ -1565,7 +1594,7 @@ impl Game {
             }
             Ok(Default::default())
         } else {
-            Err(gml::Error::NonexistentAsset(asset::Type::Sprite, sprite_index))
+            Ok(Default::default())
         }
     }
 
@@ -4458,14 +4487,14 @@ impl Game {
 
     pub fn lengthdir_x(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        let rad = dir.into_inner().to_radians();
-        Ok(Real::from(rad.cos() * len.into_inner()).into())
+        let (_sin, cos) = fast_sin_cos_deg(dir.into_inner());
+        Ok(Real::from(cos * len.into_inner()).into())
     }
 
     pub fn lengthdir_y(args: &[Value]) -> gml::Result<Value> {
         let (len, dir) = expect_args!(args, [real, real])?;
-        let rad = dir.into_inner().to_radians();
-        Ok(Real::from(rad.sin() * -len.into_inner()).into())
+        let (sin, _cos) = fast_sin_cos_deg(dir.into_inner());
+        Ok(Real::from(-sin * len.into_inner()).into())
     }
 
 

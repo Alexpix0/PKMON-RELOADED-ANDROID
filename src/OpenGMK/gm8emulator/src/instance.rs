@@ -302,10 +302,9 @@ impl Instance {
             return;
         }
 
-        let round_threshold = Real::from(0.0001); // The fudge-factor used by GM8
-        let rad = dir.to_radians();
-        let hspeed = rad.cos() * speed;
-        let vspeed = -rad.sin() * speed;
+        let (sin, cos) = crate::gml::kernel::fast_sin_cos_deg(dir.into_inner());
+        let hspeed = Real::from(cos * speed.into_inner());
+        let vspeed = Real::from(-sin * speed.into_inner());
         let rounded_hspeed = Real::from(hspeed.round());
         let rounded_vspeed = Real::from(vspeed.round());
 

@@ -16,3 +16,4 @@ lto = "fat"
 strip = true
 panic = "abort"
 overflow-checks = false
+debug = false

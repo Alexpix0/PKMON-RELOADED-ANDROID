@@ -259,7 +259,11 @@ impl Game {
 
     pub fn draw_instance_default(&mut self, idx: usize) -> gml::Result<()> {
         let instance = self.room.instance_list.get(idx);
-        if let Some(sprite) = self.assets.sprites.get_asset(instance.sprite_index.get()) {
+        let sprite_idx = instance.sprite_index.get();
+        if sprite_idx < 0 {
+            return Ok(());
+        }
+        if let Some(sprite) = self.assets.sprites.get_asset(sprite_idx) {
             if let Some(atlas_ref) = sprite.get_atlas_ref(instance.image_index.get().floor().to_i32()) {
                 self.renderer.draw_sprite(
                     atlas_ref,
@@ -274,7 +278,7 @@ impl Game {
             }
             Ok(())
         } else {
-            Err(gml::Error::NonexistentAsset(asset::Type::Sprite, instance.sprite_index.get()))
+            Ok(())
         }
     }
 
