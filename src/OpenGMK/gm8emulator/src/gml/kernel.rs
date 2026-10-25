@@ -3295,7 +3295,7 @@ impl Game {
     pub fn action_execute_script(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (script_id, arg1, arg2, arg3, arg4, arg5) = expect_args!(args, [int, any, any, any, any, any])?;
         if let Some(script) = self.assets.scripts.get_asset(script_id) {
-            let instructions: &[gml::Instruction] = unsafe {
+            let instructions: &[crate::gml::runtime::Instruction] = unsafe {
                 std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
             };
 
@@ -9680,7 +9680,7 @@ impl Game {
         if let Some(script_id) = args.get(0) {
             let script_id = script_id.round();
             if let Some(script) = self.assets.scripts.get_asset(script_id) {
-                let instructions: &[gml::Instruction] = unsafe {
+                let instructions: &[crate::gml::runtime::Instruction] = unsafe {
                     std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
                 };
                 let mut new_args: [Value; 16] = Default::default();
