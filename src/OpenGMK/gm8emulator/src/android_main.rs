@@ -1830,6 +1830,24 @@ pub extern "system" fn Java_com_klisee_reloaded_NativeBridge_setVsyncEnabled<'lo
     crate::render::opengl::egl::set_vsync_enabled(enabled != 0);
 }
 
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeSetAdaptiveFrameskip<'local>(
+    _env: jni::JNIEnv<'local>,
+    _this: jni::objects::JObject<'local>,
+    enabled: jni::sys::jboolean,
+) {
+    crate::game::set_adaptive_frameskip(enabled != 0);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_klisee_reloaded_NativeBridge_setAdaptiveFrameskip<'local>(
+    _env: jni::JNIEnv<'local>,
+    _class: jni::objects::JClass<'local>,
+    enabled: jni::sys::jboolean,
+) {
+    crate::game::set_adaptive_frameskip(enabled != 0);
+}
+
 /// Whether the system keyboard is up, so it is only raised or dropped on a change.
 static IME_SHOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

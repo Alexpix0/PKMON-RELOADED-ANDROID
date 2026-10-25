@@ -12,4 +12,5 @@ object NativeBridge {
     }
 
     external fun setVsyncEnabled(enabled: Boolean)
+    external fun setAdaptiveFrameskip(enabled: Boolean)
 }

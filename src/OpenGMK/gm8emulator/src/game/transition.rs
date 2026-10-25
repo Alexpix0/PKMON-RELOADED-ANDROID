@@ -249,12 +249,14 @@ impl Game {
                         .get_script_id(transition.script_name.as_ref())
                         .and_then(|id| game.assets.scripts.get(id))
                     {
-                        let instructions = script.compiled.clone();
+                        let instructions: &[crate::gml::Instruction] = unsafe {
+                            std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
+                        };
                         let dummy_instance = game
                             .room
                             .instance_list
                             .insert_dummy(Instance::new_dummy(game.assets.objects.get_asset(0).map(|x| x.as_ref())));
-                        game.execute(&instructions, &mut Context {
+                        game.execute(instructions, &mut Context {
                             this: dummy_instance,
                             other: dummy_instance,
                             arguments: [

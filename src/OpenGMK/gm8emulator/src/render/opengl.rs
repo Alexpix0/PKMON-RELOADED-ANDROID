@@ -950,23 +950,32 @@ impl RendererImpl {
         if self.hud_batch_active {
             let normal = [0.0, 0.0, 0.0];
             let atlas_xywh = atlas_ref.into();
-            let target_vec = if atlas_ref.atlas_id == self.white_pixel.atlas_id {
-                &mut self.hud_quads
-            } else if atlas_ref.atlas_id >= 2 {
-                self.hud_text_atlas = atlas_ref.atlas_id;
-                &mut self.hud_text
+            if atlas_ref.atlas_id == self.white_pixel.atlas_id {
+                self.hud_quads.reserve(6);
+                self.hud_quads.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+                return;
             } else {
+                if !self.hud_sprites.is_empty() && self.hud_sprite_atlas != atlas_ref.atlas_id {
+                    let sprites = std::mem::take(&mut self.hud_sprites);
+                    self.draw_buffer(self.hud_sprite_atlas, PrimitiveShape::Triangle, &sprites);
+                    self.hud_sprites = sprites;
+                    self.hud_sprites.clear();
+                }
                 self.hud_sprite_atlas = atlas_ref.atlas_id;
-                &mut self.hud_sprites
-            };
-            target_vec.reserve(6);
-            target_vec.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-            target_vec.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
-            target_vec.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-            target_vec.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-            target_vec.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-            target_vec.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
-            return;
+                self.hud_sprites.reserve(6);
+                self.hud_sprites.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+                return;
+            }
         }
         self.setup_queue(atlas_ref.atlas_id, PrimitiveShape::Triangle);
         let normal = [0.0, 0.0, 0.0];
@@ -983,17 +992,20 @@ impl RendererImpl {
     fn push_primitive(&mut self, builder: &PrimitiveBuilder) {
         if self.hud_batch_active && builder.get_shape() == PrimitiveShape::Triangle {
             let atlas_id = builder.get_atlas_id();
-            let target_vec = if atlas_id == self.white_pixel.atlas_id {
-                &mut self.hud_quads
-            } else if atlas_id >= 2 {
-                self.hud_text_atlas = atlas_id;
-                &mut self.hud_text
+            if atlas_id == self.white_pixel.atlas_id {
+                self.hud_quads.extend_from_slice(builder.get_vertices());
+                return;
             } else {
+                if !self.hud_sprites.is_empty() && self.hud_sprite_atlas != atlas_id {
+                    let sprites = std::mem::take(&mut self.hud_sprites);
+                    self.draw_buffer(self.hud_sprite_atlas, PrimitiveShape::Triangle, &sprites);
+                    self.hud_sprites = sprites;
+                    self.hud_sprites.clear();
+                }
                 self.hud_sprite_atlas = atlas_id;
-                &mut self.hud_sprites
-            };
-            target_vec.extend_from_slice(builder.get_vertices());
-            return;
+                self.hud_sprites.extend_from_slice(builder.get_vertices());
+                return;
+            }
         }
         self.setup_queue(builder.get_atlas_id(), builder.get_shape());
         self.vertex_queue.extend_from_slice(builder.get_vertices());

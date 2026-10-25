@@ -88,6 +88,12 @@ static ENV_CACHED_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 static LAST_FRAME_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(16_666);
 static LAST_COMBAT_FRAME_TIME_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+pub static ADAPTIVE_FRAMESKIP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+pub fn set_adaptive_frameskip(enabled: bool) {
+    ADAPTIVE_FRAMESKIP.store(enabled, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn update_cached_env_settings() {
     let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
     let fs_val = match mode.as_str() {
@@ -2421,20 +2427,19 @@ impl Game {
             return Ok(());
         }
 
-        #[cfg(target_os = "android")]
-        let skip_visual_frame = {
-            if !ENV_CACHED_INIT.load(std::sync::atomic::Ordering::Relaxed) {
-                update_cached_env_settings();
-            }
-            static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let is_combat = matches!(self.room.id, 47 | 191 | 709);
-            let combat_lagging = is_combat
-                && (FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed)
-                    || LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed) > 18_000);
-            if combat_lagging {
-                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                (c % 2) == 1
-            } else {
+        let skip_visual_frame = if is_combat {
+            let allow_skip = ADAPTIVE_FRAMESKIP.load(std::sync::atomic::Ordering::Relaxed);
+            let last_dur_us = LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed);
+            static COMBAT_FRAME_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let frame_count = COMBAT_FRAME_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            allow_skip && (last_dur_us > 16_666) && (frame_count % 2 == 1)
+        } else {
+            #[cfg(target_os = "android")]
+            {
+                if !ENV_CACHED_INIT.load(std::sync::atomic::Ordering::Relaxed) {
+                    update_cached_env_settings();
+                }
+                static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
                 let fs_mode = CACHED_FRAME_SKIP.load(std::sync::atomic::Ordering::Relaxed);
                 match fs_mode {
                     1 => {
@@ -2456,18 +2461,8 @@ impl Game {
                     _ => false,
                 }
             }
-        };
-        #[cfg(not(target_os = "android"))]
-        let skip_visual_frame = {
-            static FRAME_SKIP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let is_combat = matches!(self.room.id, 47 | 191 | 709);
-            let combat_lagging = is_combat
-                && (FRAME_LAGGING.load(std::sync::atomic::Ordering::Relaxed)
-                    || LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed) > 18_000);
-            if combat_lagging {
-                let c = FRAME_SKIP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                (c % 2) == 1
-            } else {
+            #[cfg(not(target_os = "android"))]
+            {
                 false
             }
         };

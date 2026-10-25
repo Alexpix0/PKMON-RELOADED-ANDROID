@@ -134,6 +134,7 @@ fun SettingsScreen(
     var graphicsBackend by remember { mutableStateOf(prefs.graphicsBackend) }
     var force60Fps by remember { mutableStateOf(prefs.force60Fps) }
     var vsyncEnabled by remember { mutableStateOf(prefs.vsyncEnabled) }
+    var adaptiveFrameskip by remember { mutableStateOf(prefs.adaptiveFrameskip) }
     var bgmVolume by remember { mutableStateOf(prefs.bgmVolume) }
     var sfxVolume by remember { mutableStateOf(prefs.sfxVolume) }
     var autofireEnabled by remember { mutableStateOf(prefs.autofireEnabled) }
@@ -1734,7 +1735,7 @@ fun SettingsScreen(
                             title = "Nativo (30/60 FPS Original)",
                             subtitle = "Mantiene los límites nativos del juego (30 FPS en menús/salas fijas, 60 FPS en combates)",
                             selected = !force60Fps && !asyncRenderThread,
-                            items = 4,
+                            items = 5,
                             index = 0,
                             onSelect = {
                                 force60Fps = false
@@ -1749,7 +1750,7 @@ fun SettingsScreen(
                             title = "60 FPS Forzados (Desbloquear zonas a 30 FPS)",
                             subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
                             selected = force60Fps && !asyncRenderThread,
-                            items = 4,
+                            items = 5,
                             index = 1,
                             onSelect = {
                                 force60Fps = true
@@ -1764,7 +1765,7 @@ fun SettingsScreen(
                             title = "120 FPS (Interpolación Ultra Suave)",
                             subtitle = "Activa renderizado desacoplado e interpolación de cuadros para pantallas de 90/120 Hz",
                             selected = asyncRenderThread,
-                            items = 4,
+                            items = 5,
                             index = 2,
                             onSelect = {
                                 force60Fps = true
@@ -1779,12 +1780,25 @@ fun SettingsScreen(
                             title = "Sincronización Vertical (VSync)",
                             subtitle = "Sincroniza los fotogramas con el refresco de pantalla (60 Hz). Desactívalo para ganar fluidez inmediata en combates a costa de posible tearing.",
                             checked = vsyncEnabled,
-                            items = 4,
+                            items = 5,
                             index = 3,
                             onCheckedChange = {
                                 vsyncEnabled = it
                                 prefs.vsyncEnabled = it
                                 GameActivity.setVsyncEnabled(it)
+                            },
+                        )
+                        SwitchRow(
+                            icon = Icons.Filled.Speed,
+                            title = "Salto de Cuadros Adaptativo (Frameskip)",
+                            subtitle = "Si el combate supera los 16.6 ms, omite el renderizado de fotogramas alternos para mantener la física y la velocidad del juego a 60 FPS estables.",
+                            checked = adaptiveFrameskip,
+                            items = 5,
+                            index = 4,
+                            onCheckedChange = {
+                                adaptiveFrameskip = it
+                                prefs.adaptiveFrameskip = it
+                                GameActivity.setAdaptiveFrameskip(it)
                             },
                         )
                     }
@@ -1968,61 +1982,6 @@ fun SettingsScreen(
                                         onSelect = {
                                             turboMultiplier = 8.0f
                                             prefs.turboMultiplier = 8.0f
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                }
-
-                    SettingsGroup("Salto de Fotogramas (Frame Skip)") {
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Desactivado (0 - Fluidez máxima)",
-                                        subtitle = "Dibuja todos los fotogramas (60 FPS puros)",
-                                        selected = frameSkip == "0",
-                                        items = 4,
-                                        index = 0,
-                                        onSelect = {
-                                            frameSkip = "0"
-                                            prefs.frameSkip = "0"
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Automático Adaptativo",
-                                        subtitle = "Salta cuadros únicamente cuando la GPU experimente caídas",
-                                        selected = frameSkip == "auto",
-                                        items = 4,
-                                        index = 1,
-                                        onSelect = {
-                                            frameSkip = "auto"
-                                            prefs.frameSkip = "auto"
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "1 Fotograma",
-                                        subtitle = "Salta 1 de cada 2 cuadros en pantalla (ideal para chips modestos)",
-                                        selected = frameSkip == "1",
-                                        items = 4,
-                                        index = 2,
-                                        onSelect = {
-                                            frameSkip = "1"
-                                            prefs.frameSkip = "1"
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "2 Fotogramas",
-                                        subtitle = "Máximo ahorro de GPU para dispositivos de gama de entrada",
-                                        selected = frameSkip == "2",
-                                        items = 4,
-                                        index = 3,
-                                        onSelect = {
-                                            frameSkip = "2"
-                                            prefs.frameSkip = "2"
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )

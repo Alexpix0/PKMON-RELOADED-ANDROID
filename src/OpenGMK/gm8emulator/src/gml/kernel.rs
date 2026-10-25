@@ -3295,7 +3295,9 @@ impl Game {
     pub fn action_execute_script(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (script_id, arg1, arg2, arg3, arg4, arg5) = expect_args!(args, [int, any, any, any, any, any])?;
         if let Some(script) = self.assets.scripts.get_asset(script_id) {
-            let instructions = script.compiled.clone();
+            let instructions: &[gml::Instruction] = unsafe {
+                std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
+            };
 
             let mut new_context = Context::copy_with_args(
                 context,
@@ -3319,7 +3321,7 @@ impl Game {
                 ],
                 5,
             );
-            self.execute(&instructions, &mut new_context)?;
+            self.execute(instructions, &mut new_context)?;
             Ok(new_context.return_value)
         } else {
             Err(gml::Error::NonexistentAsset(asset::Type::Script, script_id))
@@ -9678,13 +9680,15 @@ impl Game {
         if let Some(script_id) = args.get(0) {
             let script_id = script_id.round();
             if let Some(script) = self.assets.scripts.get_asset(script_id) {
-                let instructions = script.compiled.clone();
+                let instructions: &[gml::Instruction] = unsafe {
+                    std::slice::from_raw_parts(script.compiled.as_ptr(), script.compiled.len())
+                };
                 let mut new_args: [Value; 16] = Default::default();
                 for (src, dest) in args[1..].iter().zip(new_args.iter_mut()) {
                     *dest = src.clone();
                 }
                 let mut new_context = Context::copy_with_args(context, new_args, args.len() - 1);
-                self.execute(&instructions, &mut new_context)?;
+                self.execute(instructions, &mut new_context)?;
                 Ok(new_context.return_value)
             } else {
                 Err(gml::Error::NonexistentAsset(asset::Type::Script, script_id))
