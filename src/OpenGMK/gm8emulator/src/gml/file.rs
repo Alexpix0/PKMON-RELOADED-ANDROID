@@ -224,7 +224,11 @@ impl TextHandle {
     pub fn flush(&mut self) -> Result<()> {
         match self {
             Self::Read(_) => Ok(()),
-            Self::Write(f) => f.flush().map_err(|e| e.into()),
+            Self::Write(f) => {
+                f.flush().map_err(Error::from)?;
+                let _ = f.get_ref().sync_data();
+                Ok(())
+            },
         }
     }
 }
@@ -345,10 +349,17 @@ impl BinaryHandle {
     pub fn flush(&mut self) -> Result<()> {
         match self {
             Self::Read(_) => Ok(()),
-            Self::Write(f) => f.flush(),
-            Self::ReadWrite(f) => f.flush(),
+            Self::Write(f) => {
+                f.flush().map_err(Error::from)?;
+                let _ = f.get_ref().sync_data();
+                Ok(())
+            },
+            Self::ReadWrite(f) => {
+                f.flush().map_err(Error::from)?;
+                let _ = f.sync_data();
+                Ok(())
+            },
         }
-        .map_err(|e| e.into())
     }
 }
 

@@ -170,6 +170,7 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
                 bbox_bottom: c.bbox_bottom,
                 is_empty_mask,
                 is_solid_rect,
+                bitmask: crate::asset::sprite::build_bitmask_from_data(&c.data, c.width, c.height),
                 data: c.data.clone(),
             }
         })

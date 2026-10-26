@@ -1703,22 +1703,22 @@ pub fn fast_forward_active() -> bool {
 }
 
 pub fn toggle_fast_forward() -> bool {
-    let active = !fast_forward_active();
-    FAST_FORWARD.store(active, Ordering::Relaxed);
-    if !active {
-        TURBO_LEVEL.store(0, Ordering::Relaxed);
-    } else if turbo_level() == 0 {
-        TURBO_LEVEL.store(1, Ordering::Relaxed);
-    }
-    active
+    let next = match turbo_level() {
+        0 => 1, // 1.5x
+        1 => 2, // 2.0x
+        _ => 0, // Desactivado (1.0x)
+    };
+    TURBO_LEVEL.store(next, Ordering::Relaxed);
+    FAST_FORWARD.store(next > 0, Ordering::Relaxed);
+    next > 0
 }
 
 pub fn fast_forward_multiplier() -> f32 {
     if fast_forward_active() {
         match turbo_level() {
-            1 => 2.0,
-            2 => 4.0,
-            _ => FAST_FORWARD_SPEED.load(Ordering::Relaxed) as f32 / 10.0,
+            1 => 1.5,
+            2 => 2.0,
+            _ => (FAST_FORWARD_SPEED.load(Ordering::Relaxed) as f32 / 10.0).max(1.0),
         }
     } else {
         1.0
@@ -2528,6 +2528,13 @@ pub fn set_shader_binary_precache(enabled: bool) { SHADER_BINARY_PRECACHE.store(
 
 pub fn npc_tick_culling_enabled() -> bool { NPC_TICK_CULLING.load(Ordering::Relaxed) }
 pub fn set_npc_tick_culling(enabled: bool) { NPC_TICK_CULLING.store(enabled, Ordering::Relaxed); }
+
+static TACTICAL_TYPE_ASSISTANT: AtomicBool = AtomicBool::new(true);
+pub fn tactical_type_assistant_enabled() -> bool { TACTICAL_TYPE_ASSISTANT.load(Ordering::Relaxed) }
+pub fn set_tactical_type_assistant(enabled: bool) { TACTICAL_TYPE_ASSISTANT.store(enabled, Ordering::Relaxed); }
+
+pub static PENDING_HAPTIC: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+pub fn trigger_haptic_feedback(duration_ms: u32) { PENDING_HAPTIC.store(duration_ms, Ordering::Relaxed); }
 
 
 

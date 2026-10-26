@@ -2283,7 +2283,7 @@ fun SettingsScreen(
                                                 if (found != null) {
                                                     onUpdateFound(found)
                                                 } else {
-                                                    snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v$appVersion EX).")
+                                                    snackbar.showSnackbar("¡Estás al día! Tienes la última versión instalada (v${appVersion.ifEmpty { com.klisee.reloaded.AppInfo.VERSION_NAME }} (Build ${com.klisee.reloaded.AppInfo.VERSION_CODE})).")
                                                 }
                                             }
                                         },

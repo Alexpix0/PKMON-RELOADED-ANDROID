@@ -181,17 +181,18 @@ fun ChoiceRow(
     items: Int,
     index: Int,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onSelect: () -> Unit,
 ) {
     GroupListItem(
         headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
         supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodyMedium) },
         leadingContent = { Icon(icon, contentDescription = null) },
-        trailingContent = { RadioButton(selected = selected, onClick = null) },
+        trailingContent = { RadioButton(selected = selected, onClick = null, enabled = enabled) },
         items = items,
         index = index,
         modifier = modifier,
-        onClick = onSelect,
+        onClick = if (enabled) onSelect else null,
     )
 }
 

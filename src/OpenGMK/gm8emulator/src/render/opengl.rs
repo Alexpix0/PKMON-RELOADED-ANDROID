@@ -3950,6 +3950,7 @@ impl RendererTrait for RendererImpl {
         self.setup_queue(self.white_pixel.atlas_id, PrimitiveShape::Point);
         self.vertex_queue.push(Vertex {
             pos: [x as f32, y as f32, self.depth],
+            interp: [0.0, 0.0],
             tex_coord: [f32::NAN; 2],
             blend: split_colour(colour, alpha),
             atlas_xywh: self.white_pixel.into(),

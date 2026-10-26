@@ -2126,6 +2126,10 @@ pub fn android_entry(app: AndroidApp) {
         }
         flush_delayed_mouse();
         flush_pending_rotate();
+        let pending_haptic = crate::touch_controls::PENDING_HAPTIC.swap(0, std::sync::atomic::Ordering::Relaxed);
+        if pending_haptic > 0 {
+            jni_vibrate(pending_haptic as i64);
+        }
 
         // The keyboard follows the game's text dialog: it comes up by itself the moment the game asks
         // for a name, and goes away when the dialog closes. Only the change is acted on, so closing

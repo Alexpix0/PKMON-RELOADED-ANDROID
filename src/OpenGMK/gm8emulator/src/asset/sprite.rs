@@ -43,6 +43,8 @@ pub struct Collider {
     pub bbox_bottom: u32,
     pub data: Box<[bool]>,
     #[serde(default)]
+    pub bitmask: Vec<u64>,
+    #[serde(default)]
     pub is_empty_mask: bool,
     #[serde(default)]
     pub is_solid_rect: bool,
@@ -157,6 +159,27 @@ fn make_bbox(coll: impl Fn(u32, u32) -> bool, frame_width: u32, frame_height: u3
     BoundingBox { left, right, top, bottom }
 }
 
+/// Packs boolean pixel data into 64-bit word rows for SIMD/u64 bitwise collision acceleration.
+pub fn build_bitmask_from_data(data: &[bool], width: u32, height: u32) -> Vec<u64> {
+    if width == 0 || height == 0 {
+        return Vec::new();
+    }
+    let words_per_row = ((width + 63) / 64) as usize;
+    let mut bitmask = vec![0u64; words_per_row * height as usize];
+    for y in 0..height {
+        let row_offset = y as usize * words_per_row;
+        for x in 0..width {
+            let idx = (y * width + x) as usize;
+            if idx < data.len() && data[idx] {
+                let word_idx = row_offset + (x as usize / 64);
+                let bit_idx = x as usize % 64;
+                bitmask[word_idx] |= 1u64 << bit_idx;
+            }
+        }
+    }
+    bitmask
+}
+
 /// Creates a collider from the given collision data and dimensions, giving it an appropriate bounding box.
 fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
     let bbox = make_bbox(|x, y| data[(y * width + x) as usize], width, height);
@@ -174,6 +197,7 @@ fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
             if !is_solid_rect { break; }
         }
     }
+    let bitmask = build_bitmask_from_data(&data, width, height);
     Collider {
         width,
         height,
@@ -184,6 +208,7 @@ fn complete_bbox(data: Box<[bool]>, width: u32, height: u32) -> Collider {
         is_empty_mask,
         is_solid_rect,
         data,
+        bitmask,
     }
 }
 
@@ -298,6 +323,7 @@ pub fn make_colliders_shaped(
                     if !is_solid_rect { break; }
                 }
             }
+            let bitmask = build_bitmask_from_data(&data, width, height);
             Collider {
                 width,
                 height,
@@ -308,6 +334,7 @@ pub fn make_colliders_shaped(
                 is_empty_mask,
                 is_solid_rect,
                 data,
+                bitmask,
             }
         })
         .collect()
@@ -368,6 +395,24 @@ impl Sprite {
 }
 
 impl Collider {
+    /// Extracts a 64-bit continuous row window starting at bit_start.
+    #[inline(always)]
+    pub fn get_row_u64(&self, row: u32, bit_start: u32) -> u64 {
+        if row >= self.height || bit_start >= self.width || self.bitmask.is_empty() {
+            return 0;
+        }
+        let words_per_row = ((self.width + 63) / 64) as usize;
+        let word_idx = row as usize * words_per_row + (bit_start as usize / 64);
+        let bit_shift = bit_start % 64;
+        let w0 = self.bitmask.get(word_idx).copied().unwrap_or(0);
+        if bit_shift == 0 {
+            w0
+        } else {
+            let w1 = self.bitmask.get(word_idx + 1).copied().unwrap_or(0);
+            (w0 >> bit_shift) | (w1 << (64 - bit_shift))
+        }
+    }
+
     // collision_point but it checks the collider's precise hitbox only, no AABB
     pub fn check_collision_point_precise(&self, x: i32, y: i32, inst_x: i32, inst_y: i32, origin_x: i32, origin_y: i32, xscale: Real, yscale: Real, angle_sin: f64, angle_cos: f64) -> bool {
         if xscale == Real::from(0.0) || yscale == Real::from(0.0) {

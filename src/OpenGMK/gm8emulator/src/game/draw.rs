@@ -3,6 +3,8 @@ use crate::{
     game::{Game, GetAsset, PlayType, Version},
     gml,
     math::Real,
+    render::BlendType,
+    types::Colour,
 };
 use serde::{Deserialize, Serialize};
 

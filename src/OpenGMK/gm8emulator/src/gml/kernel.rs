@@ -5961,15 +5961,24 @@ impl Game {
     pub fn game_save(&mut self, args: &[Value]) -> gml::Result<Value> {
         let fname = expect_args!(args, [string])?;
         let save = GMSave::from_game(self);
-        let mut file = std::fs::File::create(file::to_path(&fname).as_ref())
-            .map(std::io::BufWriter::new)
+        let final_path = file::to_path(&fname);
+        let tmp_path = format!("{}.tmp", final_path);
+        {
+            let mut file = std::fs::File::create(&tmp_path)
+                .map(std::io::BufWriter::new)
+                .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
+            // write magic number (0x21c in GM8)
+            file.write(&[0x1d, 0x02, 0x00, 0x00])
+                .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
+            bincode::serialize_into(&mut file, &save)
+                .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
+            file.flush().map_err(|e| gml::Error::FunctionError("game_save".into(), e.to_string()))?;
+            if let Ok(inner) = file.into_inner() {
+                let _ = inner.sync_all();
+            }
+        }
+        std::fs::rename(&tmp_path, final_path.as_ref())
             .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
-        // write magic number (0x21c in GM8)
-        file.write(&[0x1d, 0x02, 0x00, 0x00])
-            .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
-        bincode::serialize_into(&mut file, &save)
-            .map_err(|e| gml::Error::FunctionError("game_save".into(), format!("{}", e)))?;
-        file.flush().map_err(|e| gml::Error::FunctionError("game_save".into(), e.to_string()))?;
         Ok(Default::default())
     }
 

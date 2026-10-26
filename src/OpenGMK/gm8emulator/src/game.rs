@@ -1005,6 +1005,7 @@ impl Game {
                                     bbox_bottom: c.bbox_bottom,
                                     is_empty_mask,
                                     is_solid_rect,
+                                    bitmask: crate::asset::sprite::build_bitmask_from_data(&c.data, c.width, c.height),
                                     data: c.data,
                                 }
                             })
@@ -3559,7 +3560,53 @@ impl Game {
             let intersect_left = inst1.bbox_left.get().max(inst2.bbox_left.get());
             let intersect_right = inst1.bbox_right.get().min(inst2.bbox_right.get());
 
-            // Go through each pixel in the intersect
+            // Fast path: u64 bitmask collision for orthogonal unscaled instances (the vast majority in GM8)
+            let is_orthogonal = angle1_zero && angle2_zero
+                && inst1.image_xscale.get().into_inner() == 1.0
+                && inst1.image_yscale.get().into_inner() == 1.0
+                && inst2.image_xscale.get().into_inner() == 1.0
+                && inst2.image_yscale.get().into_inner() == 1.0;
+
+            if is_orthogonal && !collider1.bitmask.is_empty() && !collider2.bitmask.is_empty() {
+                let x1_origin = x1.to_i32() - sprite1.origin_x;
+                let y1_origin = y1.to_i32() - sprite1.origin_y;
+                let x2_origin = x2.to_i32() - sprite2.origin_x;
+                let y2_origin = y2.to_i32() - sprite2.origin_y;
+
+                for intersect_y in intersect_top..=intersect_bottom {
+                    let y1_loc = intersect_y - y1_origin;
+                    let y2_loc = intersect_y - y2_origin;
+                    if y1_loc < 0 || y1_loc >= collider1.height as i32 || y2_loc < 0 || y2_loc >= collider2.height as i32 {
+                        continue;
+                    }
+
+                    let x1_start = intersect_left - x1_origin;
+                    let x2_start = intersect_left - x2_origin;
+                    let total_w = (intersect_right - intersect_left + 1) as u32;
+
+                    let mut offset = 0u32;
+                    while offset < total_w {
+                        let remaining = total_w - offset;
+                        let mask = if remaining >= 64 {
+                            !0u64
+                        } else {
+                            (1u64 << remaining) - 1
+                        };
+
+                        let w1 = collider1.get_row_u64(y1_loc as u32, (x1_start + offset as i32) as u32);
+                        let w2 = collider2.get_row_u64(y2_loc as u32, (x2_start + offset as i32) as u32);
+
+                        if ((w1 & w2) & mask) != 0 {
+                            return true;
+                        }
+
+                        offset += 64;
+                    }
+                }
+                return false;
+            }
+
+            // Fallback: standard scalar check for scaled or rotated instances
             for intersect_y in intersect_top..=intersect_bottom {
                 for intersect_x in intersect_left..=intersect_right {
                     // check precise collisions for this pixel

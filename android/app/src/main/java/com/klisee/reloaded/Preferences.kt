@@ -5,7 +5,7 @@ import androidx.core.util.AtomicFile
 import java.io.File
 import java.io.IOException
 
-class Preferences(context: Context) {
+class Preferences(private val context: Context) {
     private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
 
     /** Keep the screen awake while the game is running, so long battles don't lock the phone. */
@@ -667,12 +667,19 @@ class Preferences(context: Context) {
      * 60 when Android does not report one.
      */
     fun detectedRefreshRate(): Float {
-        val manager = appContext.getSystemService(android.hardware.display.DisplayManager::class.java)
+        val manager = context.getSystemService(android.hardware.display.DisplayManager::class.java)
         val display = manager?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
-        return display?.supportedModes?.maxOfOrNull { it.refreshRate }
-            ?: display?.mode?.refreshRate
-            ?: display?.refreshRate
-            ?: 60f
+        val modes = display?.supportedModes
+        val maxHz = if (modes != null && modes.isNotEmpty()) {
+            var max = 60f
+            for (m in modes) {
+                if (m.refreshRate > max) max = m.refreshRate
+            }
+            max
+        } else {
+            display?.mode?.refreshRate ?: display?.refreshRate ?: 60f
+        }
+        return maxHz
     }
 
     /** Mirrors the video mode into the file the emulator reads at startup. */
