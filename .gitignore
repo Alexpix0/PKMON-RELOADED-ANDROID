@@ -45,8 +45,6 @@ android/app/src/main/jniLibs/
 pokemon-reloaded-*.apk
 *.zip
 
-# Internal Roadmap and Planning Documents
-.MD/
 
 # Official reference sources (never commit)
 /SOURCE CODE DEL OFICIAL/
