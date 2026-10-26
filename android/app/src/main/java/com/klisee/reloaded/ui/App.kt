@@ -43,7 +43,7 @@ import com.klisee.reloaded.installUpdate
 import kotlinx.coroutines.launch
 
 /** Screens reached from a tab rather than being tabs themselves. */
-private enum class Pushed { About, Controls, TouchSettings, MySaves, Discord }
+private enum class Pushed { About, Controls, TouchSettings, MySaves, Discord, Fps }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -178,6 +178,7 @@ fun App(
         Pushed.TouchSettings -> TouchSettingsScreen(prefs = prefs, onBack = { pushed = null })
         Pushed.MySaves -> MySavesScreen(repo = repo, onBack = { pushed = null })
         Pushed.Discord -> DiscordScreen(prefs = prefs, onBack = { pushed = null })
+        Pushed.Fps -> FpsScreen(prefs = prefs, onBack = { pushed = null })
         null -> Box(modifier = Modifier.fillMaxSize()) {
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                 when (Tab.entries[page]) {
@@ -206,6 +207,7 @@ fun App(
                         onTouchSettings = { pushed = Pushed.TouchSettings },
                         onMySaves = { pushed = Pushed.MySaves },
                         onDiscord = { pushed = Pushed.Discord },
+                        onFpsSettings = { pushed = Pushed.Fps },
                         onUpdateFound = { update = it },
                         onThemeChange = onThemeChange,
                     )

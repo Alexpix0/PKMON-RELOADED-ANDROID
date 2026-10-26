@@ -108,6 +108,7 @@ fun SettingsScreen(
     onTouchSettings: () -> Unit = {},
     onMySaves: () -> Unit,
     onDiscord: () -> Unit = {},
+    onFpsSettings: () -> Unit = {},
     onUpdateFound: (Update.Release) -> Unit,
     onThemeChange: (String) -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
@@ -1729,14 +1730,22 @@ fun SettingsScreen(
                 }
 
                 "performance" -> {
-                    SettingsGroup("Tasa de Refresco y Fluidez de Cuadros") {
+                    SettingsGroup("Tasa de Refresco e Interpolación Desacoplada (60/120 FPS)") {
+                        NavRow(
+                            icon = Icons.Filled.Speed,
+                            title = "Configurar Tasa de Refresco (30 / 60 / 120 / Max)",
+                            subtitle = "Pantalla dedicada para elegir 30 canónico, 60 interpolado, 120 Hz o Uncapped y contador de FPS",
+                            items = 6,
+                            index = 0,
+                            onClick = onFpsSettings,
+                        )
                         ChoiceRow(
                             icon = Icons.Filled.Speed,
                             title = "Nativo (30/60 FPS Original)",
                             subtitle = "Mantiene los límites nativos del juego (30 FPS en menús/salas fijas, 60 FPS en combates)",
                             selected = !force60Fps && !asyncRenderThread,
-                            items = 5,
-                            index = 0,
+                            items = 6,
+                            index = 1,
                             onSelect = {
                                 force60Fps = false
                                 prefs.force60Fps = false

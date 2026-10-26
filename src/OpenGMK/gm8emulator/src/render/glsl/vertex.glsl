@@ -27,12 +27,14 @@ layout(std140) uniform RenderState {
 };
 
 uniform bool gm81_normalize; // this will never change so we don't need to include it in the state
+uniform float interp_amount;
 
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec4 blend;
 layout (location = 2) in vec2 tex_coord;
 layout (location = 3) in vec3 normal;
 layout (location = 4) in vec4 atlas_xywh;
+layout (location = 5) in vec2 interp;
 
 out vec2 frag_tex_coord;
 out vec4 frag_atlas_xywh;
@@ -85,6 +87,7 @@ void main() {
             frag_blend_flat.rgb += ambient_colour.rgb;
         }
     }
+    world_pos.xy += interp * interp_amount;
     gl_Position = viewproj * world_pos;
     fog_z = gl_Position.z;
 }

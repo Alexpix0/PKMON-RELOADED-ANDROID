@@ -1395,9 +1395,11 @@ impl Game {
             InstanceVariable::Argument13 => self.set_argument(context, 13, value)?,
             InstanceVariable::Argument14 => self.set_argument(context, 14, value)?,
             InstanceVariable::Argument15 => self.set_argument(context, 15, value)?,
-            InstanceVariable::Argument => self.set_argument(context, array_index as usize, value)?,
-            InstanceVariable::Room => self.scene_change = Some(SceneChange::Room(value.into())),
-            InstanceVariable::TransitionKind => self.transition_kind = value.into(),
+            InstanceVariable::Room => {
+                if !self.interp_draw {
+                    self.scene_change = Some(SceneChange::Room(value.into()));
+                }
+            },
             InstanceVariable::TransitionSteps => self.transition_steps = value.into(),
             InstanceVariable::Score => self.score = value.into(),
             InstanceVariable::Lives => {

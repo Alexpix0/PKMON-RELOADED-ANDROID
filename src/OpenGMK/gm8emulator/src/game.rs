@@ -242,6 +242,13 @@ pub struct Game {
 
     pub fps: u32,                 // initially 0
     pub frame_counter: u32,       // for FPS - gets set to 0 about once per second
+    pub render_fps: u32,
+    pub show_fps: bool,
+    pub render_mode: crate::render::RenderMode,
+    pub interp_alpha: f64,
+    pub interp_draw: bool,
+    pub interp_update_views: bool,
+    pub prev_views: Option<Vec<View>>,
     pub transition_kind: i32,     // default 0
     pub transition_steps: i32,    // default 80
     pub cursor_sprite: i32,       // default -1
@@ -1491,6 +1498,13 @@ impl Game {
             ffmpeg_recorder,
             fps: 0,
             frame_counter: 0,
+            render_fps: 0,
+            show_fps: false,
+            render_mode: crate::render::RenderMode::Native,
+            interp_alpha: 1.0,
+            interp_draw: false,
+            interp_update_views: true,
+            prev_views: None,
             parameters: game_arguments,
             encoding,
             esc_close_game: settings.esc_close_game,
@@ -2849,89 +2863,306 @@ impl Game {
         self.init()?;
         handle_scene_change!(self);
 
+        self.render_mode = crate::render::pinned_render_mode();
+        match self.render_mode {
+            crate::render::RenderMode::Auto => self.renderer.set_vsync(true),
+            crate::render::RenderMode::Fixed(_) | crate::render::RenderMode::Uncapped => self.renderer.set_vsync(false),
+            crate::render::RenderMode::Native => (),
+        }
+        let paced_fps = match self.render_mode {
+            crate::render::RenderMode::Fixed(fps) => Some(fps),
+            crate::render::RenderMode::Auto => crate::render::pinned_render_hz(),
+            _ => None,
+        };
+        self.show_fps = std::env::var("OPENGMK_SHOW_FPS").map(|value| value != "0").unwrap_or(false);
+        self.render_fps = self.room.speed;
+        self.prev_views = Some(self.room.views.clone());
+
         let mut time_now = Instant::now();
         let mut time_last = time_now;
+        let mut step_clock = time_now;
+        let mut accumulator = Duration::ZERO;
         let mut current_frame_time: u32 = 0;
+        let mut render_frames: u32 = 0;
+        let mut step_frames: u32 = 0;
+        let mut last_render_report = time_now;
+        let mut next_present = time_now;
+        let log_render = std::env::var_os("OPENGMK_RENDER_LOG").is_some();
+
         loop {
             self.process_window_events();
 
-            // The room goes with the error: the error alone names a function, not where it was
-            // called from, and with 34388 files and hundreds of scripts that is not enough to find
-            // anything. This is what turns a report into something that can be chased.
-            if let Err(e) = self.frame() {
-                println!("Runtime error: {} (room {})", e, self.room.id);
-                return Err(e.into())
-            }
-
-            self.capture_recording_frame(&mut current_frame_time, self.room.speed);
-            if let Some(SceneChange::End) = self.scene_change {
-                println!("game ending");
-                if let Some(recorder) = self.ffmpeg_recorder.take() {
-                    self.stop_recording_capture(recorder);
-                }
-            }
-            handle_scene_change!(self);
-
-            // Exit if the window was closed by the user, such as by pressing 'X'
-            if self.close_requested {
-                break Ok(self.run_game_end_events()?);
-            }
-
-            // frame limiter
-            let diff = Instant::now().duration_since(time_now);
-            LAST_FRAME_MICROS.store(diff.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            #[cfg(target_os = "android")]
-            let speed_mult = crate::touch_controls::fast_forward_multiplier();
-            #[cfg(not(target_os = "android"))]
-            let speed_mult = 1.0f32;
-
-            #[cfg(target_os = "android")]
-            let effective_speed = if crate::touch_controls::force_60fps_active() && self.room.speed <= 30 {
-                60
-            } else {
-                self.room.speed.max(1)
-            };
-            #[cfg(not(target_os = "android"))]
-            let effective_speed = self.room.speed.max(1);
-
-            let base_nanos = 1_000_000_000 / effective_speed as u64;
-            let target_nanos = if speed_mult > 1.0 {
-                (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
-            } else {
-                base_nanos
-            };
-            let duration = Duration::from_nanos(target_nanos);
-            if let GameClock::SpoofedNanos(t) = &mut self.clock {
-                *t += duration.as_nanos();
-                self.fps = (self.room.speed as f32 * speed_mult) as u32;
-            } else {
-                // gm8 just ignores any leftover time after a second has passed, so we do the same
-                if time_now.duration_since(time_last) >= Duration::from_secs(1) {
-                    time_last = time_now;
-                    self.fps = self.frame_counter;
-                    self.frame_counter = 0;
-                }
-            }
-            self.frame_counter += 1;
-
-            if let (Some(time), true) = (duration.checked_sub(diff), self.frame_limiter) {
-                FRAME_LAGGING.store(false, std::sync::atomic::Ordering::Relaxed);
-                gml::datetime::sleep(time);
-                time_now += duration;
-            } else {
-                FRAME_LAGGING.store(true, std::sync::atomic::Ordering::Relaxed);
+            if self.render_mode.interpolates() {
+                let now = Instant::now();
+                // While Android has no surface (app in the background) do not accumulate wall time:
+                // otherwise the game would fast-forward to catch up when the window comes back.
                 #[cfg(target_os = "android")]
-                if diff <= duration + Duration::from_millis(3) {
+                if !crate::render::opengl::egl::has_surface() {
+                    step_clock = now;
+                    accumulator = Duration::ZERO;
+                    std::thread::sleep(Duration::from_millis(16));
+                    continue;
+                }
+                accumulator += now.duration_since(step_clock);
+                step_clock = now;
+
+                #[cfg(target_os = "android")]
+                let speed_mult = crate::touch_controls::fast_forward_multiplier();
+                #[cfg(not(target_os = "android"))]
+                let speed_mult = 1.0f32;
+
+                let effective_speed = self.room.speed.max(1);
+                let base_nanos = 1_000_000_000 / effective_speed as u64;
+                let target_nanos = if speed_mult > 1.0 {
+                    (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
+                } else {
+                    base_nanos
+                };
+                let duration = Duration::from_nanos(target_nanos);
+
+                if accumulator > duration * 3 {
+                    if log_render {
+                        eprintln!("[render] pausa de {:?}; se descarta el atraso", accumulator);
+                    }
+                    accumulator = duration;
+                }
+
+                if accumulator >= duration {
+                    self.interp_alpha = 0.0;
+                    self.interp_draw = false;
+                    self.interp_update_views = true;
+
+                    if let Err(e) = self.frame() {
+                        println!("Runtime error: {} (room {})", e, self.room.id);
+                        return Err(e.into());
+                    }
+
+                    accumulator -= duration;
+                    self.capture_recording_frame(&mut current_frame_time, self.room.speed);
+                    if let Some(SceneChange::End) = self.scene_change {
+                        println!("game ending");
+                        if let Some(recorder) = self.ffmpeg_recorder.take() {
+                            self.stop_recording_capture(recorder);
+                        }
+                    }
+                    let scene_changed = self.scene_change.is_some();
+                    if scene_changed {
+                        self.prev_views = None;
+                        self.interp_alpha = 1.0;
+                    }
+                    handle_scene_change!(self);
+                    if scene_changed {
+                        self.prev_views = Some(self.room.views.clone());
+                    }
+
+                    if self.close_requested {
+                        break Ok(self.run_game_end_events()?);
+                    }
+
+                    if let GameClock::SpoofedNanos(t) = &mut self.clock {
+                        *t += duration.as_nanos();
+                        self.fps = (self.room.speed as f32 * speed_mult) as u32;
+                    } else {
+                        if step_clock.duration_since(time_last) >= Duration::from_secs(1) {
+                            time_last = step_clock;
+                            self.fps = self.frame_counter;
+                            self.frame_counter = 0;
+                        }
+                    }
+                    self.frame_counter += 1;
+                    step_frames += 1;
+                } else {
+                    self.interp_alpha =
+                        (accumulator.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
+                    self.interp_draw = true;
+                    self.interp_update_views = false;
+                    if let Err(e) = self.render_only() {
+                        println!("Runtime error: {} (room {})", e, self.room.id);
+                        return Err(e.into());
+                    }
+                }
+
+                if let Some(fps) = paced_fps {
+                    let frame = Duration::from_nanos(1_000_000_000 / fps.max(1) as u64);
+                    next_present += frame;
+                    let now = Instant::now();
+                    if next_present > now {
+                        std::thread::sleep(next_present - now);
+                    } else {
+                        next_present = now;
+                    }
+                }
+                render_frames += 1;
+                if last_render_report.elapsed() >= Duration::from_secs(1) {
+                    self.render_fps = render_frames;
+                    if log_render {
+                        eprintln!(
+                            "[render] {} dibujos/s ({} pasos/s, room {})",
+                            render_frames, step_frames, self.room.speed
+                        );
+                    }
+                    render_frames = 0;
+                    step_frames = 0;
+                    last_render_report = Instant::now();
+                }
+            } else {
+                self.interp_alpha = 1.0;
+                self.interp_draw = false;
+                self.interp_update_views = true;
+
+                if let Err(e) = self.frame() {
+                    println!("Runtime error: {} (room {})", e, self.room.id);
+                    return Err(e.into());
+                }
+
+                self.capture_recording_frame(&mut current_frame_time, self.room.speed);
+                if let Some(SceneChange::End) = self.scene_change {
+                    println!("game ending");
+                    if let Some(recorder) = self.ffmpeg_recorder.take() {
+                        self.stop_recording_capture(recorder);
+                    }
+                }
+                handle_scene_change!(self);
+
+                if self.close_requested {
+                    break Ok(self.run_game_end_events()?);
+                }
+
+                let diff = Instant::now().duration_since(time_now);
+                LAST_FRAME_MICROS.store(diff.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+                #[cfg(target_os = "android")]
+                let speed_mult = crate::touch_controls::fast_forward_multiplier();
+                #[cfg(not(target_os = "android"))]
+                let speed_mult = 1.0f32;
+
+                #[cfg(target_os = "android")]
+                let effective_speed = if crate::touch_controls::force_60fps_active() && self.room.speed <= 30 {
+                    60
+                } else {
+                    self.room.speed.max(1)
+                };
+                #[cfg(not(target_os = "android"))]
+                let effective_speed = self.room.speed.max(1);
+
+                let base_nanos = 1_000_000_000 / effective_speed as u64;
+                let target_nanos = if speed_mult > 1.0 {
+                    (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
+                } else {
+                    base_nanos
+                };
+                let duration = Duration::from_nanos(target_nanos);
+                if let GameClock::SpoofedNanos(t) = &mut self.clock {
+                    *t += duration.as_nanos();
+                    self.fps = (self.room.speed as f32 * speed_mult) as u32;
+                } else {
+                    if time_now.duration_since(time_last) >= Duration::from_secs(1) {
+                        time_last = time_now;
+                        self.fps = self.frame_counter;
+                        self.frame_counter = 0;
+                    }
+                }
+                self.frame_counter += 1;
+                step_frames += 1;
+
+                if let (Some(time), true) = (duration.checked_sub(diff), self.frame_limiter) {
+                    FRAME_LAGGING.store(false, std::sync::atomic::Ordering::Relaxed);
+                    gml::datetime::sleep(time);
                     time_now += duration;
                 } else {
-                    time_now = Instant::now();
+                    FRAME_LAGGING.store(true, std::sync::atomic::Ordering::Relaxed);
+                    #[cfg(target_os = "android")]
+                    if diff <= duration + Duration::from_millis(3) {
+                        time_now += duration;
+                    } else {
+                        time_now = Instant::now();
+                    }
+                    #[cfg(not(target_os = "android"))]
+                    {
+                        time_now = Instant::now();
+                    }
                 }
-                #[cfg(not(target_os = "android"))]
-                {
-                    time_now = Instant::now();
+
+                render_frames += 1;
+                if last_render_report.elapsed() >= Duration::from_secs(1) {
+                    self.render_fps = render_frames;
+                    if log_render {
+                        eprintln!(
+                            "[render] {} dibujos/s ({} pasos/s, room {})",
+                            render_frames, step_frames, self.room.speed
+                        );
+                    }
+                    render_frames = 0;
+                    step_frames = 0;
+                    last_render_report = Instant::now();
                 }
             }
         }
+    }
+
+    /// Draws one frame between two game steps. It runs the game's draw events with the same state
+    /// the step left behind, so visuals that depend on it (menus, checks for nearby instances) keep
+    /// working, but anything that could alter the simulation is suppressed and the few pieces of
+    /// state the draw path normally writes are restored afterwards.
+    fn render_only(&mut self) -> gml::Result<()> {
+        #[cfg(target_os = "android")]
+        let _frame = crate::render::opengl::egl::frame_guard();
+
+        #[cfg(target_os = "android")]
+        {
+            if crate::render::opengl::egl::context_lost() {
+                eprintln!("[gl] contexto perdido: terminando la sesion para reconstruir el renderer");
+                self.scene_change = Some(SceneChange::End);
+                return Ok(());
+            }
+            if !crate::render::opengl::egl::has_surface() {
+                std::thread::sleep(Duration::from_millis(8));
+                return Ok(());
+            }
+            unsafe { crate::render::opengl::egl::bind_surface() };
+        }
+
+        if self.close_requested {
+            return Ok(());
+        }
+
+        if !self.auto_draw || self.scene_change.is_some() {
+            std::thread::sleep(Duration::from_millis(4));
+            return Ok(());
+        }
+
+        let rand = self.rand.clone();
+        let render_state = self.renderer.draw_state();
+        let draw_font_id = self.draw_font_id;
+        let draw_colour = self.draw_colour;
+        let draw_alpha = self.draw_alpha;
+        let draw_halign = self.draw_halign;
+        let draw_valign = self.draw_valign;
+        let scene_change = self.scene_change.clone();
+        let views = self.room.views.clone();
+        let view_current = self.view_current;
+
+        self.interp_draw = true;
+        self.interp_update_views = false;
+        let result = self.draw();
+
+        self.interp_draw = false;
+        self.rand = rand;
+        self.renderer.restore_draw_state(&render_state);
+        self.draw_font_id = draw_font_id;
+        self.draw_colour = draw_colour;
+        self.draw_alpha = draw_alpha;
+        self.draw_halign = draw_halign;
+        self.draw_valign = draw_valign;
+        self.scene_change = scene_change;
+        self.room.views = views;
+        self.view_current = view_current;
+
+        result?;
+
+        if self.scene_change.is_none() && self.play_type != PlayType::Record {
+            self.renderer.present(self.window_inner_size.0, self.window_inner_size.1, self.scaling);
+        }
+        Ok(())
     }
 
     fn capture_recording_frame(&mut self, current_frame_time: &mut u32, game_speed: u32) {

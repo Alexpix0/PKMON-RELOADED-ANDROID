@@ -183,6 +183,20 @@ fn load_video() {
                     // Read by the engine when it builds its renderer.
                     std::env::set_var("OPENGMK_SCALING", value);
                 }
+            } else if name == "render" {
+                // Named modes plus the numeric caps the Settings screen writes (60/120/...).
+                let numeric = value.parse::<u32>().map(|hz| hz > 0).unwrap_or(false);
+                if matches!(value, "native" | "auto" | "uncapped") || numeric {
+                    eprintln!("[video] render: {}", value);
+                    std::env::set_var("OPENGMK_RENDER", value);
+                }
+            } else if name == "detected_hz" {
+                if let Ok(hz) = value.parse::<u32>() {
+                    if hz > 0 {
+                        eprintln!("[video] pantalla: {} Hz", hz);
+                        std::env::set_var("OPENGMK_RENDER_HZ", hz.to_string());
+                    }
+                }
             } else if name == "show_fps" {
                 let show = value == "1" || value.eq_ignore_ascii_case("true");
                 eprintln!("[video] show_fps: {}", show);

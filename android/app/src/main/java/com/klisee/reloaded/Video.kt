@@ -63,11 +63,22 @@ fun writeVideoFile(
     asyncRenderThread: Boolean = true,
     townZsortBaking: Boolean = true,
     shaderBinaryPrecache: Boolean = true,
-    npcTickCulling: Boolean = true
+    npcTickCulling: Boolean = true,
+    renderMode: String = "native",
+    detectedHz: Float = 60f
 ) {
+    val hz = detectedHz.takeIf { it.isFinite() && it > 0f }?.let { kotlin.math.round(it).toInt() }?.coerceAtLeast(1) ?: 60
+    val render = when {
+        renderMode == "60" && hz >= 60 -> "60"
+        renderMode == "120" && hz >= 120 -> "120"
+        renderMode == "uncapped" && hz >= 120 -> "uncapped"
+        else -> "native"
+    }
     val text = buildString {
-        appendLine("# Escrito por Ajustes (v0.9.0). El motor OpenGMK lo lee al arrancar.")
+        appendLine("# Escrito por Ajustes (v1.1.7). El motor OpenGMK lo lee al arrancar.")
         appendLine("scaling=$scaling")
+        appendLine("render=$render")
+        appendLine("detected_hz=$hz")
         appendLine("show_fps=${if (showFps) 1 else 0}")
         appendLine("bezel=$bezel")
         appendLine("turbo_speed=$turboSpeed")

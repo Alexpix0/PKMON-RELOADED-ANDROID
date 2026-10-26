@@ -641,6 +641,40 @@ class Preferences(context: Context) {
             prefs.edit().putString("uiStyle", value).apply()
         }
 
+    /**
+     * How drawing is paced: "native" keeps the original one frame per game step (the safe default),
+     * "60" and "120" interpolate at those fixed rates, and "uncapped" never waits.
+     */
+    var renderMode: String
+        get() {
+            val stored = prefs.getString("renderMode", "native") ?: "native"
+            val hz = detectedRefreshRate()
+            return when (stored) {
+                "auto", "experimental" -> if (hz >= 119.5f) "120" else "60"
+                "120" -> if (hz >= 119.5f) "120" else "native"
+                "uncapped" -> if (hz >= 119.5f) "uncapped" else "native"
+                "60" -> if (hz >= 59.5f) "60" else "native"
+                else -> "native"
+            }
+        }
+        set(value) {
+            val safe = if (value in setOf("60", "120", "uncapped")) value else "native"
+            prefs.edit().putString("renderMode", safe).apply()
+        }
+
+    /**
+     * Highest refresh rate the panel advertises, in Hz. Falls back to the active mode and then to
+     * 60 when Android does not report one.
+     */
+    fun detectedRefreshRate(): Float {
+        val manager = appContext.getSystemService(android.hardware.display.DisplayManager::class.java)
+        val display = manager?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+        return display?.supportedModes?.maxOfOrNull { it.refreshRate }
+            ?: display?.mode?.refreshRate
+            ?: display?.refreshRate
+            ?: 60f
+    }
+
     /** Mirrors the video mode into the file the emulator reads at startup. */
     fun writeVideo(filesDir: File) = writeVideoFile(
         filesDir = filesDir,
@@ -697,7 +731,9 @@ class Preferences(context: Context) {
         asyncRenderThread = asyncRenderThread,
         townZsortBaking = townZsortBaking,
         shaderBinaryPrecache = shaderBinaryPrecache,
-        npcTickCulling = npcTickCulling
+        npcTickCulling = npcTickCulling,
+        renderMode = renderMode,
+        detectedHz = detectedRefreshRate()
     )
 
     /**

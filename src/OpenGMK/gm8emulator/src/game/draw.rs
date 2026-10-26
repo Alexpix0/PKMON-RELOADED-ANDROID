@@ -200,11 +200,42 @@ impl Game {
     /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
     /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
     pub fn draw(&mut self) -> gml::Result<()> {
+        self.renderer.set_interp_amount(if self.render_mode.interpolates() {
+            (1.0 - self.interp_alpha).clamp(0.0, 1.0) as f32
+        } else {
+            0.0
+        });
+
         // Update views that should be following objects
-        self.update_views();
+        if self.interp_update_views {
+            if self.render_mode.interpolates() {
+                self.prev_views = Some(self.room.views.clone());
+            }
+            self.update_views();
+        }
         if self.room.views_enabled {
             self.renderer.clear_view(self.background_colour, 1.0);
         }
+
+        let saved_views = if self.room.views_enabled && self.render_mode.interpolates() && self.interp_alpha < 1.0 {
+            if let Some(prev) = &self.prev_views {
+                let alpha = self.interp_alpha;
+                let current = self.room.views.clone();
+                for (view, prev_view) in self.room.views.iter_mut().zip(prev.iter()) {
+                    if !view.visible || !prev_view.visible {
+                        continue;
+                    }
+                    let lerp_i32 = |a: i32, b: i32| (a as f64 + (b as f64 - a as f64) * alpha).round() as i32;
+                    view.source_x = lerp_i32(prev_view.source_x, view.source_x);
+                    view.source_y = lerp_i32(prev_view.source_y, view.source_y);
+                }
+                Some(current)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Draw all views
         if self.room.views_enabled {
@@ -232,6 +263,10 @@ impl Game {
             self.draw_view(0, 0, self.room.width, self.room.height, 0, 0, self.room.width, self.room.height, 0.0)?;
         }
 
+        if let Some(views) = saved_views {
+            self.room.views = views;
+        }
+
         // Reset viewport
         self.renderer.set_view(
             0,
@@ -245,16 +280,108 @@ impl Game {
             self.unscaled_height as _,
         );
 
-        // Apply room caption
-        let title = self.get_window_title();
-        if self.play_type != PlayType::Record {
-            self.window.set_title(title.as_ref());
+        if self.show_fps {
+            self.draw_fps_overlay();
+        }
+
+        // Apply room caption. The extra interpolation frames are not new game frames, so they must
+        // not keep poking the window manager.
+        if !self.interp_draw {
+            let title = self.get_window_title();
+            if self.play_type != PlayType::Record {
+                self.window.set_title(title.as_ref());
+            }
         }
 
         // Safety guarantee: Never leave secondary FBO/surface bound after draw completes
         self.renderer.reset_target();
 
         Ok(())
+    }
+
+    /// Draws the optional "FPS: N" label in the game's own font, at the top centre of the game
+    /// framebuffer. Uses the dialogue font when the game has one so it matches the rest of the UI.
+    fn draw_fps_overlay(&mut self) {
+        let font_id = if self.assets.fonts.get_asset(2).is_some() {
+            2
+        } else if self.assets.fonts.get_asset(self.draw_font_id).is_some() {
+            self.draw_font_id
+        } else {
+            -1
+        };
+
+        let old_font = self.draw_font_id;
+        let old_colour = self.draw_colour;
+        let old_alpha = self.draw_alpha;
+        let old_halign = self.draw_halign;
+        let old_valign = self.draw_valign;
+        let old_depth = self.renderer.get_depth();
+        let old_depth_test = self.renderer.get_depth_test();
+        let old_write_depth = self.renderer.get_write_depth();
+        let old_alpha_blending = self.renderer.get_alpha_blending();
+        let old_blend_mode = self.renderer.get_blend_mode();
+
+        self.draw_font_id = font_id;
+        self.draw_halign = Halign::Middle;
+        self.draw_valign = Valign::Top;
+        self.draw_alpha = Real::from(1.0);
+        self.renderer.set_draw_offset(0.0, 0.0);
+        self.renderer.set_depth(-32000.0);
+        self.renderer.set_depth_test(false);
+        self.renderer.set_write_depth(false);
+        self.renderer.set_alpha_blending(true);
+        self.renderer.set_blend_mode(BlendType::SrcAlpha, BlendType::InvSrcAlpha);
+
+        let text = gml::String::from(format!("FPS: {}", self.render_fps));
+        let (text_w, text_h) = self.get_string_size(text.clone(), None, None);
+        let center = self.unscaled_width as f64 / 2.0;
+        let pad_x = 3.0;
+        let pad_y = 2.0;
+        let x1 = center - f64::from(text_w) / 2.0 - pad_x;
+        let x2 = center + f64::from(text_w) / 2.0 + pad_x;
+        let y1 = 1.0;
+        let y2 = 2.0 + f64::from(text_h) + pad_y;
+        self.renderer.draw_roundrect(x1, y1, x2, y2, 0, 0, 0.65, false);
+
+        let x = Real::from(self.unscaled_width as i32 / 2);
+        let y = Real::from(2);
+        self.draw_colour = Colour::new(0.0, 0.0, 0.0);
+        self.draw_string(
+            x + Real::from(1.0),
+            y + Real::from(1.0),
+            text.clone(),
+            None,
+            None,
+            Real::from(1.0),
+            Real::from(1.0),
+            Real::from(0.0),
+            None,
+            Real::from(1.0),
+        );
+        self.draw_colour = Colour::new(1.0, 1.0, 1.0);
+        self.draw_string(
+            x,
+            y,
+            text,
+            None,
+            None,
+            Real::from(1.0),
+            Real::from(1.0),
+            Real::from(0.0),
+            None,
+            Real::from(1.0),
+        );
+
+        self.renderer.set_depth(old_depth);
+        self.renderer.set_depth_test(old_depth_test);
+        self.renderer.set_write_depth(old_write_depth);
+        self.renderer.set_alpha_blending(old_alpha_blending);
+        self.renderer.set_blend_mode(old_blend_mode.0, old_blend_mode.1);
+        self.draw_font_id = old_font;
+        self.draw_colour = old_colour;
+        self.draw_alpha = old_alpha;
+        self.draw_halign = old_halign;
+        self.draw_valign = old_valign;
     }
 
     pub fn draw_instance_default(&mut self, idx: usize) -> gml::Result<()> {
@@ -306,8 +433,12 @@ impl Game {
         fn draw_instance(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
+                let dx: f64 = (instance.xprevious.get() - instance.x.get()).into();
+                let dy: f64 = (instance.yprevious.get() - instance.y.get()).into();
+                game.renderer.set_draw_offset(dx, dy);
+
                 let in_battle = matches!(game.room.id, 47 | 191 | 709);
-                if !game.custom_draw_objects.contains(&instance.object_index.get()) {
+                let result = if !game.custom_draw_objects.contains(&instance.object_index.get()) {
                     // Viewport Frustum Culling for default-drawn instances (+32px margin)
                     // In battle rooms (47, 191, 709), disable culling so aerial/fly moves and shadows never cut off
                     if !in_battle {
@@ -315,6 +446,7 @@ impl Game {
                         let iy = instance.y.get().into_inner() as i32;
                         const MARGIN: i32 = 32;
                         if ix < src_x - MARGIN || ix > src_x + src_w + MARGIN || iy < src_y - MARGIN || iy > src_y + src_h + MARGIN {
+                            game.renderer.set_draw_offset(0.0, 0.0);
                             return Ok(());
                         }
                     }
@@ -339,7 +471,9 @@ impl Game {
                     } else {
                         game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
                     }
-                }
+                };
+                game.renderer.set_draw_offset(0.0, 0.0);
+                result
             } else {
                 Ok(())
             }

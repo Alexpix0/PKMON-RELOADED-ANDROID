@@ -243,7 +243,10 @@ pub struct RendererImpl {
 
     loc_gm81_normalize: GLint, // uniform bool gm81_normalize
     loc_tex: GLint,            // uniform sampler2D tex
+    loc_interp: GLint,         // uniform float interp_amount
     buf_state: GLuint,         // uniform RenderState state
+    draw_offset: [f32; 2],
+    interp_amount: f32,
 
     hud_batch_active: bool,
     hud_quads: Vec<Vertex>,
@@ -699,6 +702,15 @@ impl RendererImpl {
                 size_of::<Vertex>() as i32,
                 offset_of!(Vertex, atlas_xywh) as *const _,
             );
+            gl.EnableVertexAttribArray(5);
+            gl.VertexAttribPointer(
+                5,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                size_of::<Vertex>() as i32,
+                offset_of!(Vertex, interp) as *const _,
+            );
 
             // Use program
             gl.UseProgram(program);
@@ -809,7 +821,10 @@ impl RendererImpl {
 
                 loc_gm81_normalize: gl.GetUniformLocation(program, b"gm81_normalize\0".as_ptr().cast()),
                 loc_tex: gl.GetUniformLocation(program, b"tex\0".as_ptr().cast()),
+                loc_interp: gl.GetUniformLocation(program, b"interp_amount\0".as_ptr().cast()),
                 buf_state,
+                draw_offset: [0.0, 0.0],
+                interp_amount: 0.0,
 
                 hud_batch_active: false,
                 hud_quads: Vec::new(),
@@ -828,6 +843,7 @@ impl RendererImpl {
             // default uniform values
             renderer.gl.Uniform1i(renderer.loc_gm81_normalize, options.normalize_normals as _);
             renderer.gl.Uniform1i(renderer.loc_tex, 0 as _);
+            renderer.gl.Uniform1f(renderer.loc_interp, 0.0);
             renderer.gl.BindBuffer(gl::UNIFORM_BUFFER, renderer.buf_state);
             renderer.gl.BufferData(
                 gl::UNIFORM_BUFFER,
@@ -952,12 +968,12 @@ impl RendererImpl {
             let atlas_xywh = atlas_ref.into();
             if atlas_ref.atlas_id == self.white_pixel.atlas_id {
                 self.hud_quads.reserve(6);
-                self.hud_quads.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-                self.hud_quads.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
-                self.hud_quads.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-                self.hud_quads.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-                self.hud_quads.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-                self.hud_quads.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p1, interp: [0.0, 0.0], tex_coord: uv1, blend: c1, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_quads.push(Vertex { pos: p3, interp: [0.0, 0.0], tex_coord: uv3, blend: c3, atlas_xywh, normal });
                 return;
             } else {
                 if !self.hud_sprites.is_empty() && self.hud_sprite_atlas != atlas_ref.atlas_id {
@@ -968,12 +984,12 @@ impl RendererImpl {
                 }
                 self.hud_sprite_atlas = atlas_ref.atlas_id;
                 self.hud_sprites.reserve(6);
-                self.hud_sprites.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-                self.hud_sprites.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
-                self.hud_sprites.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-                self.hud_sprites.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-                self.hud_sprites.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-                self.hud_sprites.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p1, interp: [0.0, 0.0], tex_coord: uv1, blend: c1, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, blend: c0, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, blend: c2, atlas_xywh, normal });
+                self.hud_sprites.push(Vertex { pos: p3, interp: [0.0, 0.0], tex_coord: uv3, blend: c3, atlas_xywh, normal });
                 return;
             }
         }
@@ -984,13 +1000,14 @@ impl RendererImpl {
         self.setup_queue(atlas_ref.atlas_id, PrimitiveShape::Triangle);
         let normal = [0.0, 0.0, 0.0];
         let atlas_xywh = atlas_ref.into();
+        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
         self.vertex_queue.reserve(6);
-        self.vertex_queue.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-        self.vertex_queue.push(Vertex { pos: p1, tex_coord: uv1, blend: c1, atlas_xywh, normal });
-        self.vertex_queue.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-        self.vertex_queue.push(Vertex { pos: p0, tex_coord: uv0, blend: c0, atlas_xywh, normal });
-        self.vertex_queue.push(Vertex { pos: p2, tex_coord: uv2, blend: c2, atlas_xywh, normal });
-        self.vertex_queue.push(Vertex { pos: p3, tex_coord: uv3, blend: c3, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p0, interp, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p1, interp, tex_coord: uv1, blend: c1, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p2, interp, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p0, interp, tex_coord: uv0, blend: c0, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p2, interp, tex_coord: uv2, blend: c2, atlas_xywh, normal });
+        self.vertex_queue.push(Vertex { pos: p3, interp, tex_coord: uv3, blend: c3, atlas_xywh, normal });
     }
 
     fn push_primitive(&mut self, builder: &PrimitiveBuilder) {
@@ -1056,6 +1073,7 @@ impl RendererImpl {
             );
             debug_assert_eq!(self.gl.GetError(), 0);
 
+            self.gl.Uniform1f(self.loc_interp, self.interp_amount);
             self.gl.DrawArrays(shape.into(), 0, buffer.len() as i32);
         }
     }
@@ -3036,6 +3054,18 @@ impl RendererTrait for RendererImpl {
 
     fn wait_vsync(&self) {
         unsafe { self.imp.wait_vsync() }
+    }
+
+    fn set_draw_offset(&mut self, x: f64, y: f64) {
+        let finite = |v: f64| {
+            let v = v as f32;
+            if v.is_finite() { v } else { 0.0 }
+        };
+        self.draw_offset = [finite(x), finite(y)];
+    }
+
+    fn set_interp_amount(&mut self, amount: f32) {
+        self.interp_amount = amount.clamp(0.0, 1.0);
     }
 
     fn create_sprite_colour(&mut self, width: i32, height: i32, col: Colour) -> Result<AtlasRef, String> {
