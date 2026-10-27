@@ -343,11 +343,54 @@ impl Game {
             self.renderer.clear_zbuf();
         }
 
-        fn draw_instance(game: &mut Game, idx: usize, src_x: i32, src_y: i32, src_w: i32, src_h: i32) -> gml::Result<()> {
+        // Identify player instance follow target (if any view follows an object) to synchronize shadow offset
+        let player_delta: Option<(f64, f64)> = if self.room.views_enabled {
+            self.room.views.iter().find(|x| x.visible).and_then(|v| {
+                let handle = match v.follow_target {
+                    obj_id if obj_id < 100000 => {
+                        self.room.instance_list.iter_by_identity(v.follow_target).next(&self.room.instance_list)
+                    },
+                    inst_id => self.room.instance_list.get_by_instid(inst_id),
+                };
+                handle.map(|h| {
+                    let inst = self.room.instance_list.get(h);
+                    let dx: f64 = (inst.xprevious.get() - inst.x.get()).into();
+                    let dy: f64 = (inst.yprevious.get() - inst.y.get()).into();
+                    (dx, dy)
+                })
+            })
+        } else {
+            None
+        };
+
+        fn draw_instance(
+            game: &mut Game,
+            idx: usize,
+            src_x: i32,
+            src_y: i32,
+            src_w: i32,
+            src_h: i32,
+            player_delta: Option<(f64, f64)>,
+        ) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
-                let dx: f64 = (instance.xprevious.get() - instance.x.get()).into();
-                let dy: f64 = (instance.yprevious.get() - instance.y.get()).into();
+                let (mut dx, mut dy) = {
+                    let dx: f64 = (instance.xprevious.get() - instance.x.get()).into();
+                    let dy: f64 = (instance.yprevious.get() - instance.y.get()).into();
+                    (dx, dy)
+                };
+
+                // Shadow Rigid Synchronization: if drawing a shadow object or sprite, inherit the player's exact offset
+                if let Some((pdx, pdy)) = player_delta {
+                    if let Some(obj) = game.assets.objects.get_asset(instance.object_index.get()) {
+                        let name = obj.name.decode_utf8();
+                        let lower = name.to_ascii_lowercase();
+                        if lower.contains("sombra") || lower.contains("shadow") {
+                            dx = pdx;
+                            dy = pdy;
+                        }
+                    }
+                }
                 game.renderer.set_draw_offset(dx, dy);
 
                 let in_battle = matches!(game.room.id, 47 | 191 | 709);
@@ -456,9 +499,28 @@ impl Game {
         self.room.instance_list.draw_sort();
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
-        // Tiles are pre-sorted at room load / modification. Iterate non-borrowing TLIterDrawOrder directly with zero per-frame allocations.
+        let (cam_left, cam_right, cam_top, cam_bottom) = (src_x - 32, src_x + src_w + 32, src_y - 32, src_y + src_h + 32);
+        // Fast advance to next visible tile within viewport bounds
+        let next_visible_tile = |iter: &mut crate::instancelist::TLIterDrawOrder, tile_list: &crate::instancelist::TileList| -> Option<usize> {
+            while let Some(idx) = iter.next(tile_list) {
+                let tile = tile_list.get(idx);
+                if !tile.visible.get() {
+                    continue;
+                }
+                let tx = tile.x.get().into_inner() as i32;
+                let ty = tile.y.get().into_inner() as i32;
+                let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
+                let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
+                if tx + tw < cam_left || tx > cam_right || ty + th < cam_top || ty > cam_bottom {
+                    continue;
+                }
+                return Some(idx);
+            }
+            None
+        };
+
         let mut iter_tile = self.room.tile_list.iter_by_drawing();
-        let mut iter_tile_v = iter_tile.next(&self.room.tile_list);
+        let mut iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
         let mut iter_part_v = iter_part.next(&self.particles);
@@ -467,15 +529,15 @@ impl Game {
             match (iter_inst_v, iter_tile_v, iter_part_v) {
                 (None, None, None) => break,
                 (Some(idx_inst), None, None) => {
-                    draw_instance(self, idx_inst, src_x, src_y, src_w, src_h)?;
+                    draw_instance(self, idx_inst, src_x, src_y, src_w, src_h, player_delta)?;
                     while let Some(idx_inst) = iter_inst.next(&self.room.instance_list) {
-                        draw_instance(self, idx_inst, src_x, src_y, src_w, src_h)?;
+                        draw_instance(self, idx_inst, src_x, src_y, src_w, src_h, player_delta)?;
                     }
                     break
                 },
                 (None, Some(idx_tile), None) => {
                     draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
-                    while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
+                    while let Some(idx_tile) = next_visible_tile(&mut iter_tile, &self.room.tile_list) {
                         draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     }
                     break
@@ -494,9 +556,9 @@ impl Game {
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
                             draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
-                            iter_tile_v = iter_tile.next(&self.room.tile_list);
+                            iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
                         } else {
-                            draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h)?;
+                            draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h, player_delta)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
                         }
                     } else {

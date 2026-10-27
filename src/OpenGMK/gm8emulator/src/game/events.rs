@@ -39,6 +39,36 @@ impl Game {
         }
     }
 
+    #[inline]
+    fn is_global_control_entity(&self, object_id: i32) -> bool {
+        if let Some(obj) = self.assets.objects.get_asset(object_id) {
+            let name = obj.name.decode_utf8();
+            let lower = name.to_ascii_lowercase();
+            lower.contains("control")
+                || lower.contains("jugador")
+                || lower.contains("player")
+                || lower.contains("protagonista")
+                || lower.contains("personaje")
+                || lower.contains("camera")
+                || lower.contains("camara")
+                || lower.contains("view")
+                || lower.contains("manager")
+                || lower.contains("sistema")
+                || lower.contains("system")
+                || lower.contains("hud")
+                || lower.contains("gui")
+                || lower.contains("menu")
+                || lower.contains("sonido")
+                || lower.contains("audio")
+                || lower.contains("music")
+                || lower.contains("tiempo")
+                || lower.contains("clima")
+                || lower.contains("weather")
+        } else {
+            false
+        }
+    }
+
     /// Runs an event for all objects which hold the given event.
     /// If no "other" instance is provided, "self" will be used as "other". This is what GM8 tends to do.
     pub fn run_object_event(&mut self, event_id: usize, event_sub: u32, other: Option<usize>) -> gml::Result<()> {
@@ -55,6 +85,21 @@ impl Game {
             0
         };
 
+        let mut view_bounds: Option<(i32, i32, i32, i32)> = None;
+        if !is_battle_room && event_id == gml::ev::STEP {
+            if self.room.views_enabled {
+                if let Some(v) = self.room.views.iter().find(|x| x.visible) {
+                    const MARGIN: i32 = 128;
+                    view_bounds = Some((
+                        v.source_x - MARGIN,
+                        v.source_y - MARGIN,
+                        v.source_x + v.source_w + MARGIN,
+                        v.source_y + v.source_h + MARGIN,
+                    ));
+                }
+            }
+        }
+
         let mut position = 0;
         while let Some(&object_id) = holders.borrow().get(position) {
             if throttle_step {
@@ -67,8 +112,24 @@ impl Game {
                     }
                 }
             }
+            let is_global = if view_bounds.is_some() {
+                self.is_global_control_entity(object_id)
+            } else {
+                true
+            };
+
             let mut iter = self.room.instance_list.iter_by_object(object_id);
             while let Some(instance) = iter.next(&self.room.instance_list) {
+                if let Some((vx1, vy1, vx2, vy2)) = view_bounds {
+                    if !is_global {
+                        let inst = self.room.instance_list.get(instance);
+                        let ix = inst.x.get().into_inner() as i32;
+                        let iy = inst.y.get().into_inner() as i32;
+                        if ix < vx1 || ix > vx2 || iy < vy1 || iy > vy2 {
+                            continue;
+                        }
+                    }
+                }
                 self.run_instance_event(event_id, event_sub, instance, other.unwrap_or(instance), None)?;
             }
             position += 1;
@@ -645,16 +706,44 @@ impl Game {
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
         let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
+        let mut view_bounds: Option<(i32, i32, i32, i32)> = None;
+        if !is_battle_room && self.room.views_enabled {
+            if let Some(v) = self.room.views.iter().find(|x| x.visible) {
+                const MARGIN: i32 = 128;
+                view_bounds = Some((
+                    v.source_x - MARGIN,
+                    v.source_y - MARGIN,
+                    v.source_x + v.source_w + MARGIN,
+                    v.source_y + v.source_h + MARGIN,
+                ));
+            }
+        }
+
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =
             self.event_holders[gml::ev::COLLISION].get_index(i).map(|(x, y)| (*x, y.clone()))
         {
+            let is_global1 = if view_bounds.is_some() {
+                self.is_global_control_entity(object as i32)
+            } else {
+                true
+            };
+
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
                 let inst1 = self.room.instance_list.get(instance);
                 let obj1 = inst1.object_index.get();
+                if let Some((vx1, vy1, vx2, vy2)) = view_bounds {
+                    if !is_global1 {
+                        let ix = inst1.x.get().into_inner() as i32;
+                        let iy = inst1.y.get().into_inner() as i32;
+                        if ix < vx1 || ix > vx2 || iy < vy1 || iy > vy2 {
+                            continue 'iter1;
+                        }
+                    }
+                }
                 let is_combat1 = if is_battle_room {
                     let alpha1 = inst1.image_alpha.get().into_inner();
                     if alpha1 <= 0.0 && !self.is_pokemon_fighter(obj1) {
@@ -673,6 +762,12 @@ impl Game {
 
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
+                    let is_global2 = if view_bounds.is_some() {
+                        self.is_global_control_entity(target_obj)
+                    } else {
+                        true
+                    };
+
                     // And iter every instance of the target object
                     let mut iter2 = self.room.instance_list.iter_by_object(target_obj);
                     while let Some(target) = iter2.next(&self.room.instance_list) {
@@ -682,6 +777,15 @@ impl Game {
 
                         let inst2 = self.room.instance_list.get(target);
                         let obj2 = inst2.object_index.get();
+                        if let Some((vx1, vy1, vx2, vy2)) = view_bounds {
+                            if !is_global2 {
+                                let ix = inst2.x.get().into_inner() as i32;
+                                let iy = inst2.y.get().into_inner() as i32;
+                                if ix < vx1 || ix > vx2 || iy < vy1 || iy > vy2 {
+                                    continue;
+                                }
+                            }
+                        }
                         if is_battle_room {
                             let alpha2 = inst2.image_alpha.get().into_inner();
                             if alpha2 <= 0.0 && !self.is_pokemon_fighter(obj2) {
