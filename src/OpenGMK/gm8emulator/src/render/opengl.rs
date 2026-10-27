@@ -345,8 +345,8 @@ static VERTEX_SHADER_SOURCE: &str = shader_file!("glsl/vertex.glsl");
 static FRAGMENT_SHADER_SOURCE: &str = shader_file!("glsl/fragment.glsl");
 
 static SHARP_VS_SOURCE: &str = r#"
-in vec2 a_pos;
-in vec2 a_uv;
+layout (location = 0) in vec2 a_pos;
+layout (location = 1) in vec2 a_uv;
 out vec2 v_texcoord;
 void main() {
     v_texcoord = a_uv;

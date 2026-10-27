@@ -233,6 +233,7 @@ pub struct Game {
     pub picker_frame_throttle: std::cell::Cell<u32>,
     pub rewind_manager: rewind::RewindManager,
     pub battle_arena_bake: Option<(i32, crate::render::AtlasRef)>,
+    pub reset_accumulator: bool,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
 
@@ -1471,6 +1472,7 @@ impl Game {
             picker_frame_throttle: std::cell::Cell::new(0),
             rewind_manager: rewind::RewindManager::new(),
             battle_arena_bake: None,
+            reset_accumulator: false,
             potential_step_settings: Default::default(),
             transition_kind: 0,
             transition_steps: 80,
@@ -2306,6 +2308,7 @@ impl Game {
             };
             if let Some(state) = state_opt {
                 state.load_into(self);
+                self.reset_accumulator = true;
                 #[cfg(target_os = "android")]
                 crate::touch_controls::show_toast("QUICK LOAD RAM: RESTAURADO (<2.0 ms)");
                 eprintln!("[quicksave] Snapshot restaurado desde RAM");
@@ -2946,7 +2949,12 @@ impl Game {
                         return Err(e.into());
                     }
 
-                    accumulator -= duration;
+                    if self.reset_accumulator {
+                        self.reset_accumulator = false;
+                        accumulator = Duration::ZERO;
+                    } else {
+                        accumulator -= duration;
+                    }
                     self.capture_recording_frame(&mut current_frame_time, self.room.speed);
                     if let Some(SceneChange::End) = self.scene_change {
                         println!("game ending");
