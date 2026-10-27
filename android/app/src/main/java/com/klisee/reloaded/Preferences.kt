@@ -404,8 +404,6 @@ class Preferences(private val context: Context) {
         set(value) {
             val editor = prefs.edit().putBoolean("extremeCombat", value)
             if (value) {
-                editor.putBoolean("drsEnabled", false)
-                editor.putInt("fsrMode", 0)
                 editor.putString("renderScale", "0.85")
             }
             editor.apply()
@@ -465,30 +463,6 @@ class Preferences(private val context: Context) {
         get() = prefs.getBoolean("megaAtlas", false)
         set(value) {
             prefs.edit().putBoolean("megaAtlas", value).apply()
-        }
-
-    /** Perfil AMD FidelityFX FSR 1.0 (0=Off, 1=Ultra Calidad, 2=Equilibrado, 3=Rendimiento) */
-    var fsrMode: Int
-        get() = prefs.getInt("fsrMode", 0)
-        set(value) {
-            val editor = prefs.edit().putInt("fsrMode", value)
-            if (value > 0) {
-                editor.putBoolean("extremeCombat", false)
-                editor.putBoolean("drsEnabled", false)
-            }
-            editor.apply()
-        }
-
-    /** Resolución Dinámica DRS con Bucle PID Continuo */
-    var drsEnabled: Boolean
-        get() = prefs.getBoolean("drsEnabled", false)
-        set(value) {
-            val editor = prefs.edit().putBoolean("drsEnabled", value)
-            if (value) {
-                editor.putBoolean("extremeCombat", false)
-                editor.putInt("fsrMode", 0)
-            }
-            editor.apply()
         }
 
     /** Super-Resolución Neuronal xBRZ 4x/6x HD */
@@ -578,25 +552,11 @@ class Preferences(private val context: Context) {
     // ------------------------------------------------------------------------------------------
     // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
 
-    /** Fusión de Superficies TBDR (Zero-Copy Battle FBO) */
-    var tbdrSurfaceFusion: Boolean
-        get() = prefs.getBoolean("tbdrSurfaceFusion", true)
-        set(value) {
-            prefs.edit().putBoolean("tbdrSurfaceFusion", value).apply()
-        }
-
     /** Hilo de Renderizado Desacoplado (Async Render + Frame Interpolation) */
     var asyncRenderThread: Boolean
         get() = prefs.getBoolean("asyncRenderThread", true)
         set(value) {
             prefs.edit().putBoolean("asyncRenderThread", value).apply()
-        }
-
-    /** Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking) */
-    var townZsortBaking: Boolean
-        get() = prefs.getBoolean("townZsortBaking", true)
-        set(value) {
-            prefs.edit().putBoolean("townZsortBaking", value).apply()
         }
 
     /** Caché Binaria Precompilada de Shaders (Vulkan PSO / GL Program Binary) */
@@ -697,8 +657,6 @@ class Preferences(private val context: Context) {
         liveActivity = liveActivity,
         activeStaticPartition = activeStaticPartition,
         megaAtlas = megaAtlas,
-        fsrMode = fsrMode,
-        drsEnabled = drsEnabled,
         xbrzEnabled = xbrzEnabled,
         lighting2d = lighting2d,
         audio3d = audio3d,
@@ -712,9 +670,7 @@ class Preferences(private val context: Context) {
         replayBlackbox = replayBlackbox,
         achievements = achievements,
         bigLittleAffinity = bigLittleAffinity,
-        tbdrSurfaceFusion = tbdrSurfaceFusion,
         asyncRenderThread = asyncRenderThread,
-        townZsortBaking = townZsortBaking,
         shaderBinaryPrecache = shaderBinaryPrecache,
         npcTickCulling = npcTickCulling,
         renderMode = renderMode,
@@ -765,8 +721,6 @@ class Preferences(private val context: Context) {
                 extremeCombat = true
                 maliEarlyZ = true
                 gpuWakeup = true
-                fsrMode = 0
-                drsEnabled = false
                 activeStaticPartition = true
                 batterySaver = false
             }

@@ -42,8 +42,6 @@ fun writeVideoFile(
     liveActivity: Boolean = false,
     activeStaticPartition: Boolean = false,
     megaAtlas: Boolean = false,
-    fsrMode: Int = 0,
-    drsEnabled: Boolean = false,
     xbrzEnabled: Boolean = false,
     lighting2d: Boolean = false,
     audio3d: Boolean = false,
@@ -58,9 +56,7 @@ fun writeVideoFile(
     achievements: Boolean = false,
     bigLittleAffinity: Boolean = true,
     // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
-    tbdrSurfaceFusion: Boolean = true,
     asyncRenderThread: Boolean = true,
-    townZsortBaking: Boolean = true,
     shaderBinaryPrecache: Boolean = true,
     npcTickCulling: Boolean = true,
     renderMode: String = "native",
@@ -74,7 +70,7 @@ fun writeVideoFile(
         else -> "native"
     }
     val text = buildString {
-        appendLine("# Escrito por Ajustes (v1.2.2). El motor OpenGMK lo lee al arrancar.")
+        appendLine("# Escrito por Ajustes (v1.2.3). El motor OpenGMK lo lee al arrancar.")
         appendLine("scaling=$scaling")
         appendLine("render=$render")
         appendLine("detected_hz=$hz")
@@ -112,8 +108,6 @@ fun writeVideoFile(
         appendLine("live_activity=${if (liveActivity) 1 else 0}")
         appendLine("active_static_partition=${if (activeStaticPartition) 1 else 0}")
         appendLine("mega_atlas=${if (megaAtlas) 1 else 0}")
-        appendLine("fsr_mode=$fsrMode")
-        appendLine("drs_enabled=${if (drsEnabled) 1 else 0}")
         appendLine("xbrz_enabled=${if (xbrzEnabled) 1 else 0}")
         appendLine("lighting2d=${if (lighting2d) 1 else 0}")
         appendLine("audio_3d=${if (audio3d) 1 else 0}")
@@ -128,9 +122,7 @@ fun writeVideoFile(
         appendLine("achievements=${if (achievements) 1 else 0}")
         appendLine("big_little_affinity=${if (bigLittleAffinity) 1 else 0}")
         // Complementos v9.7 Ultra Engine
-        appendLine("tbdr_surface_fusion=${if (tbdrSurfaceFusion) 1 else 0}")
         appendLine("async_render_thread=${if (asyncRenderThread) 1 else 0}")
-        appendLine("town_zsort_baking=${if (townZsortBaking) 1 else 0}")
         appendLine("shader_binary_precache=${if (shaderBinaryPrecache) 1 else 0}")
         appendLine("npc_tick_culling=${if (npcTickCulling) 1 else 0}")
     }

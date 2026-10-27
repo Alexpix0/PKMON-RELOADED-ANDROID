@@ -155,8 +155,6 @@ fun SettingsScreen(
     var extremeCombat by remember { mutableStateOf(prefs.extremeCombat) }
     var maliEarlyZ by remember { mutableStateOf(prefs.maliEarlyZ) }
     var gpuWakeup by remember { mutableStateOf(prefs.gpuWakeup) }
-    var fsrMode by remember { mutableStateOf(prefs.fsrMode) }
-    var drsEnabled by remember { mutableStateOf(prefs.drsEnabled) }
     var xbrzEnabled by remember { mutableStateOf(prefs.xbrzEnabled) }
     var lighting2d by remember { mutableStateOf(prefs.lighting2d) }
     var adaptiveLtpo by remember { mutableStateOf(prefs.adaptiveLtpo) }
@@ -178,9 +176,7 @@ fun SettingsScreen(
     var uiStyle by remember { mutableStateOf(prefs.uiStyle) }
 
     // Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)
-    var tbdrSurfaceFusion by remember { mutableStateOf(prefs.tbdrSurfaceFusion) }
     var asyncRenderThread by remember { mutableStateOf(prefs.asyncRenderThread) }
-    var townZsortBaking by remember { mutableStateOf(prefs.townZsortBaking) }
     var shaderBinaryPrecache by remember { mutableStateOf(prefs.shaderBinaryPrecache) }
     var npcTickCulling by remember { mutableStateOf(prefs.npcTickCulling) }
 
@@ -853,75 +849,7 @@ fun SettingsScreen(
                                             if (it) {
                                                 prefs.applyPerformanceProfile("extreme_combat")
                                                 renderScale = prefs.renderScale
-                                                fsrMode = 0
-                                                prefs.fsrMode = 0
-                                                drsEnabled = false
-                                                prefs.drsEnabled = false
                                             }
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        title = "AMD FSR 1.0: Desactivado",
-                                        subtitle = "Renderizado a resolución nativa estándar sin upscaling espacial",
-                                        selected = fsrMode == 0,
-                                        items = 11,
-                                        index = 1,
-                                        onSelect = {
-                                            fsrMode = 0
-                                            prefs.fsrMode = 0
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        title = "AMD FSR 1.0: Ultra Calidad (0.77x)",
-                                        subtitle = "Edge-Adaptive Spatial Upsampling (EASU) + Robust Contrast Adaptive Sharpening (RCAS)",
-                                        selected = fsrMode == 1,
-                                        items = 11,
-                                        index = 2,
-                                        onSelect = {
-                                            fsrMode = 1
-                                            prefs.fsrMode = 1
-                                            extremeCombat = false
-                                            prefs.extremeCombat = false
-                                            drsEnabled = false
-                                            prefs.drsEnabled = false
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        title = "AMD FSR 1.0: Equilibrado (0.67x)",
-                                        subtitle = "Balance ideal entre nitidez visual reconstruida y ganancia de fotogramas",
-                                        selected = fsrMode == 2,
-                                        items = 11,
-                                        index = 3,
-                                        onSelect = {
-                                            fsrMode = 2
-                                            prefs.fsrMode = 2
-                                            extremeCombat = false
-                                            prefs.extremeCombat = false
-                                            drsEnabled = false
-                                            prefs.drsEnabled = false
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    ChoiceRow(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        title = "AMD FSR 1.0: Máximo Rendimiento (0.50x)",
-                                        subtitle = "Reconstruye la imagen desde la mitad de resolución para máxima tasa de cuadros",
-                                        selected = fsrMode == 3,
-                                        items = 11,
-                                        index = 4,
-                                        onSelect = {
-                                            fsrMode = 3
-                                            prefs.fsrMode = 3
-                                            extremeCombat = false
-                                            prefs.extremeCombat = false
-                                            drsEnabled = false
-                                            prefs.drsEnabled = false
                                             prefs.writeVideo(context.filesDir)
                                         },
                                     )
@@ -1752,25 +1680,6 @@ fun SettingsScreen(
                                         },
                                     )
                                     SwitchRow(
-                                        icon = Icons.Filled.Speed,
-                                        title = "Resolución Dinámica DRS con Controlador PID",
-                                        subtitle = "Muestrea el frametime cada 20 cuadros: modula la resolución entre 0.85x y 1.0x para garantizar 60 FPS",
-                                        checked = drsEnabled,
-                                        items = 4,
-                                        index = 1,
-                                        onCheckedChange = {
-                                            drsEnabled = it
-                                            prefs.drsEnabled = it
-                                            if (it) {
-                                                extremeCombat = false
-                                                prefs.extremeCombat = false
-                                                fsrMode = 0
-                                                prefs.fsrMode = 0
-                                            }
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
                                         icon = Icons.Filled.Shield,
                                         title = "Despertador de Frecuencia GPU Mali (Anti-Downclock)",
                                         subtitle = "Sincroniza eglPresentationTimeANDROID y frame-pacing adaptable sin bloqueos síncronos de pipeline",
@@ -1799,32 +1708,6 @@ fun SettingsScreen(
                                 }
 
                     SettingsGroup("Complementos Avanzados de Rendimiento (v9.7 Ultra Engine)") {
-                                    SwitchRow(
-                                        icon = Icons.Filled.AutoAwesome,
-                                        title = "Fusión de Superficies TBDR (Zero-Copy Battle FBO)",
-                                        subtitle = "Unifica las capas de interfaz, sombras y efectos de combate en un solo pase de memoria para eliminar la subida a 35ms",
-                                        checked = tbdrSurfaceFusion,
-                                        items = 4,
-                                        index = 0,
-                                        onCheckedChange = {
-                                            tbdrSurfaceFusion = it
-                                            prefs.tbdrSurfaceFusion = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
-                                    SwitchRow(
-                                        icon = Icons.Filled.AspectRatio,
-                                        title = "Acelerador de Pueblos (Z-Buffer Hardware Y-Sort + Tile Baking)",
-                                        subtitle = "Delega el orden de profundidad de edificios/NPCs a la GPU y pre-renderiza el suelo estático para evitar caídas a 30 FPS al caminar",
-                                        checked = townZsortBaking,
-                                        items = 4,
-                                        index = 1,
-                                        onCheckedChange = {
-                                            townZsortBaking = it
-                                            prefs.townZsortBaking = it
-                                            prefs.writeVideo(context.filesDir)
-                                        },
-                                    )
                                     SwitchRow(
                                         icon = Icons.Filled.Memory,
                                         title = "Caché Binaria Precompilada de Shaders (Vulkan PSO / GL Program Binary)",

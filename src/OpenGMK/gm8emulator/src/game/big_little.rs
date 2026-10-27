@@ -98,9 +98,6 @@ impl CpuTopology {
 
     /// Pins the current calling thread to high-performance Big cores.
     pub fn pin_current_thread_to_big(&self) {
-        if !is_big_little_affinity_enabled() {
-            return;
-        }
         if !self.big_cores.is_empty() {
             self.apply_affinity(&self.big_cores);
         }

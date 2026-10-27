@@ -139,10 +139,10 @@ unsafe fn create_stream(sample_rate: i32, channel_count: i32) -> Result<*mut c_v
     AAudioStreamBuilder_delete(builder);
     check(result, "AAudioStreamBuilder_openStream")?;
 
-    // Dynamic latency optimization: configure double-burst initial buffer size for optimal responsiveness
+    // Static latency optimization: configure triple-burst (burst * 3) buffer size for rock-solid stability
     let burst = AAudioStream_getFramesPerBurst(stream).max(64);
-    let initial_frames = burst * 2;
-    let _ = AAudioStream_setBufferSizeInFrames(stream, initial_frames);
+    let target_buffer_frames = burst * 3;
+    let _ = AAudioStream_setBufferSizeInFrames(stream, target_buffer_frames);
 
     Ok(stream)
 }
@@ -232,18 +232,6 @@ extern "C" fn data_callback(
     }
     if to_read < len {
         buffer[to_read..].fill(0.0);
-        // Dynamic underrun guard: if ring buffer starved during heavy map transition or GC,
-        // expand AAudio buffer size by 1 hardware burst (up to stream capacity) to eradicate clicks.
-        if !stream.is_null() {
-            unsafe {
-                let current_size = AAudioStream_getBufferSizeInFrames(stream);
-                let capacity = AAudioStream_getBufferCapacityInFrames(stream);
-                let burst = AAudioStream_getFramesPerBurst(stream).max(64);
-                if current_size > 0 && current_size + burst <= capacity {
-                    let _ = AAudioStream_setBufferSizeInFrames(stream, current_size + burst);
-                }
-            }
-        }
     }
     READ_POS.store(r.wrapping_add(to_read), Ordering::Release);
 

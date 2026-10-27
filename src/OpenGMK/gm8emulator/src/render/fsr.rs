@@ -24,12 +24,11 @@ pub fn set_fsr_mode(mode: u32) {
 
 #[inline(always)]
 pub fn is_drs_enabled() -> bool {
-    DRS_ENABLED.load(Ordering::Relaxed)
+    false
 }
 
 #[inline(always)]
-pub fn set_drs_enabled(enabled: bool) {
-    DRS_ENABLED.store(enabled, Ordering::Relaxed);
+pub fn set_drs_enabled(_enabled: bool) {
 }
 
 #[inline(always)]
@@ -82,30 +81,9 @@ impl DrsPidController {
 
     /// Feeds a new frame duration (in ms) into the PID controller.
     /// Evaluates and adjusts internal render scale every 20 frames.
-    pub fn record_frame(&mut self, frametime_ms: f32) -> f32 {
-        if !is_drs_enabled() {
-            self.current_scale = 1.0;
-            return 1.0;
-        }
-
-        self.accumulated_frametime += frametime_ms;
-        self.frame_sample_counter += 1;
-
-        if self.frame_sample_counter >= 20 {
-            let avg_frametime = self.accumulated_frametime / 20.0;
-            self.accumulated_frametime = 0.0;
-            self.frame_sample_counter = 0;
-
-            let error = self.target_frametime_ms - avg_frametime;
-            self.integral = (self.integral + error).clamp(-10.0, 10.0);
-            let derivative = error - self.last_error;
-            self.last_error = error;
-
-            let adjustment = (self.p_gain * error) + (self.i_gain * self.integral) + (self.d_gain * derivative);
-            self.current_scale = (self.current_scale + adjustment * 0.1).clamp(0.70, 1.0);
-        }
-
-        self.current_scale
+    pub fn record_frame(&mut self, _frametime_ms: f32) -> f32 {
+        self.current_scale = 1.0;
+        1.0
     }
 
     pub fn current_scale(&self) -> f32 {

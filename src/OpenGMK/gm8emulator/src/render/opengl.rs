@@ -221,7 +221,6 @@ pub struct RendererImpl {
     /// What is bound right now, so the texture state is only touched when it actually changes.
     current_texture: Option<GLuint>,
     last_filter_mode: Option<GLenum>,
-    current_draw_fbo: Option<GLuint>,
     current_program: Option<GLuint>,
     framebuffer: Framebuffer,
     stored_framebuffer: Option<Framebuffer>,
@@ -873,7 +872,6 @@ impl RendererImpl {
                 current_atlas: 0,
                 current_texture: None,
                 last_filter_mode: None,
-                current_draw_fbo: Some(framebuffer_fbo),
                 current_program: Some(program),
                 framebuffer: Framebuffer {
                     texture: framebuffer_texture,
@@ -3283,10 +3281,7 @@ impl RendererTrait for RendererImpl {
         {
             let AtlasRect { x, y, w, h, .. } = *rect;
             unsafe {
-                if self.current_draw_fbo != Some(*fbo_id) {
-                    self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, *fbo_id);
-                    self.current_draw_fbo = Some(*fbo_id);
-                }
+                self.gl.BindFramebuffer(gl::FRAMEBUFFER, *fbo_id);
                 // set viewport here since set_view doesn't
                 self.gl.Viewport(x, y, w, h);
                 self.gl.Scissor(x, y, w, h);
@@ -3299,10 +3294,7 @@ impl RendererTrait for RendererImpl {
     fn reset_target(&mut self) {
         self.flush_queue();
         unsafe {
-            if self.current_draw_fbo != Some(self.framebuffer.fbo) {
-                self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, self.framebuffer.fbo);
-                self.current_draw_fbo = Some(self.framebuffer.fbo);
-            }
+            self.gl.BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer.fbo);
 
             // reset view
             let fb_width = self.framebuffer.width as i32;
@@ -3398,26 +3390,8 @@ impl RendererTrait for RendererImpl {
         }
     }
 
-    fn set_zbuf_trashed(&mut self, trashed: bool) {
-        if trashed != self.zbuf_trashed {
-            self.flush_queue();
-            self.zbuf_trashed = trashed;
-            unsafe {
-                let mut prev_fbo = 0;
-                self.gl.GetIntegerv(gl::READ_FRAMEBUFFER_BINDING, &mut prev_fbo);
-                self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
-                debug_assert_eq!(self.gl.GetError(), 0);
-                self.gl.FramebufferTexture2D(
-                    gl::READ_FRAMEBUFFER,
-                    gl::DEPTH_ATTACHMENT,
-                    gl::TEXTURE_2D,
-                    if trashed { 0 } else { self.framebuffer.zbuf },
-                    0,
-                );
-                debug_assert_eq!(self.gl.GetError(), 0);
-                self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, prev_fbo as _);
-            }
-        }
+    fn set_zbuf_trashed(&mut self, _trashed: bool) {
+        // No-op: keep depth buffer attached at all times to prevent TBDR dirty depth stalls & ghost artifacts
     }
 
     fn get_zbuf_trashed(&self) -> bool {
@@ -4677,10 +4651,7 @@ impl RendererTrait for RendererImpl {
             }
 
             // Reset target surface to avoid black screen if GM8 script didn't call surface_reset_target
-            if self.current_draw_fbo.is_some() {
-                self.current_draw_fbo = None;
-                self.gl.BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer.fbo);
-            }
+            self.gl.BindFramebuffer(gl::FRAMEBUFFER, self.framebuffer.fbo);
 
             // On Intel, glBlitFrameBuffer just does nothing if the scissor box is too big, which it
             // very well could be. So just disable the scissor test for now.

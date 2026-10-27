@@ -2499,20 +2499,18 @@ pub fn mega_atlas_enabled() -> bool { MEGA_ATLAS.load(Ordering::Relaxed) }
 pub fn set_mega_atlas(enabled: bool) { MEGA_ATLAS.store(enabled, Ordering::Relaxed); }
 
 // Complementos Avanzados de Rendimiento v9.7 Ultra Engine (activos por defecto para máximo rendimiento)
-static TBDR_SURFACE_FUSION: AtomicBool = AtomicBool::new(true);
 static ASYNC_RENDER_THREAD: AtomicBool = AtomicBool::new(true);
-static TOWN_ZSORT_BAKING: AtomicBool = AtomicBool::new(true);
 static SHADER_BINARY_PRECACHE: AtomicBool = AtomicBool::new(true);
 static NPC_TICK_CULLING: AtomicBool = AtomicBool::new(true);
 
-pub fn tbdr_surface_fusion_enabled() -> bool { TBDR_SURFACE_FUSION.load(Ordering::Relaxed) }
-pub fn set_tbdr_surface_fusion(enabled: bool) { TBDR_SURFACE_FUSION.store(enabled, Ordering::Relaxed); }
+pub fn tbdr_surface_fusion_enabled() -> bool { false }
+pub fn set_tbdr_surface_fusion(_enabled: bool) {}
 
 pub fn async_render_thread_enabled() -> bool { ASYNC_RENDER_THREAD.load(Ordering::Relaxed) }
 pub fn set_async_render_thread(enabled: bool) { ASYNC_RENDER_THREAD.store(enabled, Ordering::Relaxed); }
 
-pub fn town_zsort_baking_enabled() -> bool { TOWN_ZSORT_BAKING.load(Ordering::Relaxed) }
-pub fn set_town_zsort_baking(enabled: bool) { TOWN_ZSORT_BAKING.store(enabled, Ordering::Relaxed); }
+pub fn town_zsort_baking_enabled() -> bool { false }
+pub fn set_town_zsort_baking(_enabled: bool) {}
 
 pub fn shader_binary_precache_enabled() -> bool { SHADER_BINARY_PRECACHE.load(Ordering::Relaxed) }
 pub fn set_shader_binary_precache(enabled: bool) { SHADER_BINARY_PRECACHE.store(enabled, Ordering::Relaxed); }

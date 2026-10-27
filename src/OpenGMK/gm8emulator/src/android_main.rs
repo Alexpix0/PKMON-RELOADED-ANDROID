@@ -357,15 +357,9 @@ fn load_video() {
             } else if name == "big_little_affinity" {
                 let bla = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::game::big_little::set_big_little_affinity_enabled(bla);
-            } else if name == "tbdr_surface_fusion" {
-                let val = value == "1" || value.eq_ignore_ascii_case("true");
-                crate::touch_controls::set_tbdr_surface_fusion(val);
             } else if name == "async_render_thread" {
                 let val = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::touch_controls::set_async_render_thread(val);
-            } else if name == "town_zsort_baking" {
-                let val = value == "1" || value.eq_ignore_ascii_case("true");
-                crate::touch_controls::set_town_zsort_baking(val);
             } else if name == "shader_binary_precache" {
                 let val = value == "1" || value.eq_ignore_ascii_case("true");
                 crate::touch_controls::set_shader_binary_precache(val);
