@@ -255,6 +255,12 @@ pub struct RendererImpl {
     hud_sprite_atlas: u32,
     hud_text_atlas: u32,
 
+    sharp_program: GLuint,
+    sharp_vao: GLuint,
+    sharp_vbo: GLuint,
+    sharp_loc_tex: GLint,
+    sharp_loc_size: GLint,
+
     /// Lazily-built program/buffers for the on-screen touch controls (Android only).
     #[cfg(target_os = "android")]
     overlay: Option<Overlay>,
@@ -337,6 +343,29 @@ struct Framebuffer {
 
 static VERTEX_SHADER_SOURCE: &str = shader_file!("glsl/vertex.glsl");
 static FRAGMENT_SHADER_SOURCE: &str = shader_file!("glsl/fragment.glsl");
+
+static SHARP_VS_SOURCE: &str = r#"
+in vec2 a_pos;
+in vec2 a_uv;
+out vec2 v_texcoord;
+void main() {
+    v_texcoord = a_uv;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+"#;
+
+static SHARP_FS_SOURCE: &str = r#"
+in vec2 v_texcoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec2 u_tex_size;
+void main() {
+    vec2 uv = v_texcoord * u_tex_size - 0.5;
+    vec2 f = fract(uv);
+    vec2 uv_sharp = (floor(uv) + 0.5 + clamp(f / fwidth(uv), 0.0, 1.0)) / u_tex_size;
+    fragColor = texture(u_texture, uv_sharp);
+}
+"#;
 
 unsafe fn shader_info_log(gl: &gl::Gl, name: &str, id: GLuint) -> String {
     let mut info_len: GLint = 0;
@@ -771,6 +800,67 @@ impl RendererImpl {
             gl.BindBufferBase(gl::UNIFORM_BUFFER, loc_state, buf_state);
             debug_assert_eq!(gl.GetError(), 0);
 
+            // Create Sharp Bilinear Fullscreen Quad shader and buffers (Eliminates glBlitFramebuffer)
+            let (sharp_program, sharp_vao, sharp_vbo, sharp_loc_tex, sharp_loc_size) = {
+                let vs = gl.CreateShader(gl::VERTEX_SHADER);
+                let vs_src = shader_source(SHARP_VS_SOURCE);
+                gl.ShaderSource(vs, 1, &(vs_src.as_ptr().cast()), ptr::null());
+                gl.CompileShader(vs);
+
+                let fs = gl.CreateShader(gl::FRAGMENT_SHADER);
+                let fs_src = shader_source(SHARP_FS_SOURCE);
+                gl.ShaderSource(fs, 1, &(fs_src.as_ptr().cast()), ptr::null());
+                gl.CompileShader(fs);
+
+                let prog = gl.CreateProgram();
+                gl.AttachShader(prog, vs);
+                gl.AttachShader(prog, fs);
+                gl.LinkProgram(prog);
+
+                gl.DeleteShader(vs);
+                gl.DeleteShader(fs);
+
+                let loc_tex = gl.GetUniformLocation(prog, b"u_texture\0".as_ptr().cast());
+                let loc_size = gl.GetUniformLocation(prog, b"u_tex_size\0".as_ptr().cast());
+
+                let mut s_vao = 0;
+                gl.GenVertexArrays(1, &mut s_vao);
+                gl.BindVertexArray(s_vao);
+
+                let mut s_vbo = 0;
+                gl.GenBuffers(1, &mut s_vbo);
+                gl.BindBuffer(gl::ARRAY_BUFFER, s_vbo);
+
+                #[rustfmt::skip]
+                let quad_verts: [f32; 24] = [
+                    -1.0,  1.0, 0.0, 0.0,
+                    -1.0, -1.0, 0.0, 1.0,
+                     1.0, -1.0, 1.0, 1.0,
+
+                    -1.0,  1.0, 0.0, 0.0,
+                     1.0, -1.0, 1.0, 1.0,
+                     1.0,  1.0, 1.0, 0.0,
+                ];
+
+                gl.BufferData(
+                    gl::ARRAY_BUFFER,
+                    (quad_verts.len() * std::mem::size_of::<f32>()) as _,
+                    quad_verts.as_ptr().cast(),
+                    gl::STATIC_DRAW,
+                );
+
+                const STRIDE: i32 = 4 * std::mem::size_of::<f32>() as i32;
+                gl.EnableVertexAttribArray(0);
+                gl.VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, STRIDE, ptr::null());
+                gl.EnableVertexAttribArray(1);
+                gl.VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, STRIDE, (2 * std::mem::size_of::<f32>()) as *const _);
+
+                gl.BindVertexArray(0);
+                gl.BindBuffer(gl::ARRAY_BUFFER, 0);
+
+                (prog, s_vao, s_vbo, loc_tex, loc_size)
+            };
+
             // Create Renderer
             let mut renderer = Self {
                 imp,
@@ -832,6 +922,12 @@ impl RendererImpl {
                 hud_text: Vec::new(),
                 hud_sprite_atlas: 0,
                 hud_text_atlas: 0,
+
+                sharp_program,
+                sharp_vao,
+                sharp_vbo,
+                sharp_loc_tex,
+                sharp_loc_size,
 
                 #[cfg(target_os = "android")]
                 overlay: None,
@@ -4599,39 +4695,37 @@ impl RendererTrait for RendererImpl {
             self.gl.GetIntegerv(gl::DRAW_FRAMEBUFFER_BINDING, &mut fb_old);
             debug_assert_eq!(self.gl.GetError(), 0);
 
-            // Draw framebuffer to screen
+            // Draw framebuffer to screen via Fullscreen Quad with Sharp Bilinear shader (Zero glBlitFramebuffer stalls)
             self.current_texture = None;
-            self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
+            self.gl.BindFramebuffer(gl::FRAMEBUFFER, 0);
             debug_assert_eq!(self.gl.GetError(), 0);
-            self.clear_view((0.0, 0.0, 0.0).into(), 1.0); // to avoid weird strobe lights (???)
+            self.clear_view((0.0, 0.0, 0.0).into(), 1.0);
             debug_assert_eq!(self.gl.GetError(), 0);
-            self.gl.BindFramebuffer(gl::READ_FRAMEBUFFER, self.framebuffer.fbo);
-            debug_assert_eq!(self.gl.GetError(), 0);
-            // `display_rect` gives a rectangle in window coordinates, top-left origin (the same one
-            // the touches use). GL's origin is the bottom-left, so the vertical position is flipped
-            // here. For a full-height or centred rectangle the two agree, so only the keyboard inset
-            // - which anchors the game to the top - actually needs the flip.
+
             let blit_y = window_height - w_y - w_h;
-            self.gl.BlitFramebuffer(
-                0,
-                fb_height,
-                fb_width,
-                0,
-                w_x,
-                blit_y,
-                w_x + w_w,
-                blit_y + w_h,
-                gl::COLOR_BUFFER_BIT,
-                if cfg!(target_os = "android") {
-                    crate::render::config::CONFIG.filter_gl_enum(self.next_render_state.interpolate_pixels.into())
-                } else if self.next_render_state.interpolate_pixels.into() {
-                    gl::LINEAR
-                } else {
-                    gl::NEAREST
-                },
-            );
-            debug_assert_eq!(self.gl.GetError(), 0);
+            self.gl.Viewport(w_x, blit_y, w_w, w_h);
+
+            self.gl.Disable(gl::SCISSOR_TEST);
+            self.gl.Disable(gl::DEPTH_TEST);
+            self.gl.Disable(gl::BLEND);
+
+            self.gl.UseProgram(self.sharp_program);
+            self.current_program = Some(self.sharp_program);
+
+            self.gl.Uniform2f(self.sharp_loc_size, fb_width as f32, fb_height as f32);
+
+            self.gl.ActiveTexture(gl::TEXTURE0);
+            self.gl.BindTexture(gl::TEXTURE_2D, self.framebuffer.texture);
+            self.gl.Uniform1i(self.sharp_loc_tex, 0);
+
+            self.gl.BindVertexArray(self.sharp_vao);
+            self.gl.DrawArrays(gl::TRIANGLES, 0, 6);
+
+            self.gl.BindVertexArray(self.vao);
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.commands_vbo);
+
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, fb_old as u32);
+            self.gl.Enable(gl::SCISSOR_TEST);
             debug_assert_eq!(self.gl.GetError(), 0);
 
             self.gl.Enable(gl::SCISSOR_TEST);

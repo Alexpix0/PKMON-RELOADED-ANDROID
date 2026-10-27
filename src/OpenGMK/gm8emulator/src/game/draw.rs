@@ -199,6 +199,85 @@ impl Game {
         }
     }
 
+    pub fn bake_battle_arena(&mut self) {
+        if !matches!(self.room.id, 47 | 191 | 709) {
+            return;
+        }
+        if let Some((old_id, old_surf)) = self.battle_arena_bake.take() {
+            if old_id == self.room.id {
+                self.battle_arena_bake = Some((old_id, old_surf));
+                return;
+            }
+            self.renderer.delete_sprite(old_surf);
+        }
+
+        let rw = self.room.width.max(640);
+        let rh = self.room.height.max(480);
+        let Ok(surf) = self.renderer.create_surface(rw, rh, false) else {
+            return;
+        };
+
+        self.renderer.set_target(surf);
+        self.renderer.set_view(0, 0, rw, rh, 0.0, 0, 0, rw, rh);
+        self.renderer.clear_view(self.room.colour, 1.0);
+
+        let tile_end_x = f64::from(rw);
+        let tile_end_y = f64::from(rh);
+
+        // Pre-render static backgrounds
+        self.renderer.set_depth(12000.0);
+        for background in self.room.backgrounds.iter().filter(|x| x.visible && !x.is_foreground) {
+            if let Some(bg_asset) = self.assets.backgrounds.get_asset(background.background_id) {
+                if let Some(atlas_ref) = bg_asset.atlas_ref {
+                    self.renderer.draw_sprite_tiled(
+                        atlas_ref,
+                        background.x_offset.into(),
+                        background.y_offset.into(),
+                        background.xscale.into(),
+                        background.yscale.into(),
+                        background.blend,
+                        background.alpha.into(),
+                        background.tile_horizontal.then_some(tile_end_x),
+                        background.tile_vertical.then_some(tile_end_y),
+                    );
+                }
+            }
+        }
+
+        // Pre-render static tiles (depth >= 10000.0)
+        let mut iter_tile = self.room.tile_list.iter_by_drawing();
+        while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
+            let tile = self.room.tile_list.get(idx_tile);
+            if !tile.visible.get() || tile.depth.get().into_inner() < 10000.0 {
+                continue;
+            }
+            if let Some(Some(background)) = self.assets.backgrounds.get(tile.background_index.get() as usize) {
+                if let Some(atlas) = background.atlas_ref {
+                    self.renderer.set_depth(tile.depth.get().into_inner() as f32);
+                    self.renderer.draw_sprite_partial(
+                        atlas,
+                        tile.tile_x.get().into(),
+                        tile.tile_y.get().into(),
+                        tile.width.get().into(),
+                        tile.height.get().into(),
+                        tile.x.get().into(),
+                        tile.y.get().into(),
+                        tile.xscale.get().into(),
+                        tile.yscale.get().into(),
+                        0.0,
+                        tile.blend.get(),
+                        tile.alpha.get().into(),
+                    );
+                }
+            }
+        }
+
+        self.renderer.flush_queue();
+        self.renderer.reset_target();
+        self.battle_arena_bake = Some((self.room.id, surf));
+        eprintln!("[arena_bake] escenario de combate {} horneado en FBO estatico", self.room.id);
+    }
+
     /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
     /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
     pub fn draw(&mut self) -> gml::Result<()> {
@@ -397,6 +476,10 @@ impl Game {
             if !tile.visible.get() {
                 return;
             }
+            let in_battle = matches!(game.room.id, 47 | 191 | 709);
+            if in_battle && tile.depth.get().into_inner() >= 10000.0 && game.battle_arena_bake.is_some() {
+                return; // pre-baked into arena FBO!
+            }
             let tx = tile.x.get().into_inner() as i32;
             let ty = tile.y.get().into_inner() as i32;
             let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
@@ -433,22 +516,36 @@ impl Game {
         let tile_end_x = f64::from(src_x + src_w + src_h / 2);
         let tile_end_y = f64::from(src_y + src_h + src_w / 2);
     
+        // Arena FBO Bake: Pre-render static backgrounds and depth >= 10000.0 tiles in battle rooms
+        let in_battle = matches!(self.room.id, 47 | 191 | 709);
+        if in_battle && self.battle_arena_bake.as_ref().map_or(true, |b| b.0 != self.room.id) {
+            self.bake_battle_arena();
+        }
+
         // draw backgrounds
-        self.renderer.set_depth(12000.0);
-        for background in self.room.backgrounds.iter().filter(|x| x.visible && !x.is_foreground) {
-            if let Some(bg_asset) = self.assets.backgrounds.get_asset(background.background_id) {
-                if let Some(atlas_ref) = bg_asset.atlas_ref {
-                    self.renderer.draw_sprite_tiled(
-                        atlas_ref,
-                        background.x_offset.into(),
-                        background.y_offset.into(),
-                        background.xscale.into(),
-                        background.yscale.into(),
-                        background.blend,
-                        background.alpha.into(),
-                        background.tile_horizontal.then_some(tile_end_x),
-                        background.tile_vertical.then_some(tile_end_y),
-                    );
+        let has_arena_bake = in_battle && self.battle_arena_bake.as_ref().map_or(false, |b| b.0 == self.room.id);
+        if has_arena_bake {
+            if let Some((_, surf)) = self.battle_arena_bake {
+                self.renderer.set_depth(12000.0);
+                self.renderer.draw_sprite_ext(surf, 0.0, 0.0, 1.0, 1.0, 0.0, 0xFFFFFF, 1.0);
+            }
+        } else {
+            self.renderer.set_depth(12000.0);
+            for background in self.room.backgrounds.iter().filter(|x| x.visible && !x.is_foreground) {
+                if let Some(bg_asset) = self.assets.backgrounds.get_asset(background.background_id) {
+                    if let Some(atlas_ref) = bg_asset.atlas_ref {
+                        self.renderer.draw_sprite_tiled(
+                            atlas_ref,
+                            background.x_offset.into(),
+                            background.y_offset.into(),
+                            background.xscale.into(),
+                            background.yscale.into(),
+                            background.blend,
+                            background.alpha.into(),
+                            background.tile_horizontal.then_some(tile_end_x),
+                            background.tile_vertical.then_some(tile_end_y),
+                        );
+                    }
                 }
             }
         }

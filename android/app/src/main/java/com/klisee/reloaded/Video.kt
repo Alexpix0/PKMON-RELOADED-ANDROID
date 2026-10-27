@@ -74,7 +74,7 @@ fun writeVideoFile(
         else -> "native"
     }
     val text = buildString {
-        appendLine("# Escrito por Ajustes (v1.2.0). El motor OpenGMK lo lee al arrancar.")
+        appendLine("# Escrito por Ajustes (v1.2.1). El motor OpenGMK lo lee al arrancar.")
         appendLine("scaling=$scaling")
         appendLine("render=$render")
         appendLine("detected_hz=$hz")

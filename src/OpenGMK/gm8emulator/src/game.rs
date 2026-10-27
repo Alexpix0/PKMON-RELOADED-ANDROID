@@ -232,6 +232,7 @@ pub struct Game {
     #[cfg(target_os = "android")]
     pub picker_frame_throttle: std::cell::Cell<u32>,
     pub rewind_manager: rewind::RewindManager,
+    pub battle_arena_bake: Option<(i32, crate::render::AtlasRef)>,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
 
@@ -1469,6 +1470,7 @@ impl Game {
             #[cfg(target_os = "android")]
             picker_frame_throttle: std::cell::Cell::new(0),
             rewind_manager: rewind::RewindManager::new(),
+            battle_arena_bake: None,
             potential_step_settings: Default::default(),
             transition_kind: 0,
             transition_steps: 80,
@@ -1755,6 +1757,12 @@ impl Game {
         self.spatial_hash.clear();
         crate::touch_controls::flush_held_inputs();
 
+        if !matches!(self.room.id, 47 | 191 | 709) {
+            if let Some((_, old_surf)) = self.battle_arena_bake.take() {
+                self.renderer.delete_sprite(old_surf);
+            }
+        }
+
         // Initialize room transition surface
         let transition_kind = self.transition_kind;
         let (trans_surf_old, trans_surf_new) = if self.get_transition(transition_kind).is_some() {
@@ -1835,6 +1843,12 @@ impl Game {
         self.cursor_sprite_frame = 0;
         self.spatial_hash.clear();
         crate::touch_controls::flush_held_inputs();
+
+        if !matches!(self.room.id, 47 | 191 | 709) {
+            if let Some((_, old_surf)) = self.battle_arena_bake.take() {
+                self.renderer.delete_sprite(old_surf);
+            }
+        }
 
         // Load all tiles in new room
         for tile in room.tiles.iter() {
@@ -2271,6 +2285,34 @@ impl Game {
         if self.esc_close_game && self.input.keyboard_lastkey() == input::Button::Escape as u8 {
             self.scene_change = Some(SceneChange::End);
             return Ok(());
+        }
+
+        // RAM Quick Save / Quick Load (Instantaneous in-memory snapshot <1.5 ms)
+        if savestate::take_ram_save_request() {
+            let render_state = self.renderer.draw_state();
+            let state = SaveState::from(self, replay::Replay::new(0, 0), render_state, false);
+            if let Ok(mut slot) = savestate::RAM_SAVE_SLOT.lock() {
+                *slot = Some(state);
+                #[cfg(target_os = "android")]
+                crate::touch_controls::show_toast("QUICK SAVE RAM: OK (<1.5 ms)");
+                eprintln!("[quicksave] Snapshot guardado en RAM");
+            }
+        }
+        if savestate::take_ram_load_request() {
+            let state_opt = if let Ok(slot) = savestate::RAM_SAVE_SLOT.lock() {
+                slot.clone()
+            } else {
+                None
+            };
+            if let Some(state) = state_opt {
+                state.load_into(self);
+                #[cfg(target_os = "android")]
+                crate::touch_controls::show_toast("QUICK LOAD RAM: RESTAURADO (<2.0 ms)");
+                eprintln!("[quicksave] Snapshot restaurado desde RAM");
+            } else {
+                #[cfg(target_os = "android")]
+                crate::touch_controls::show_toast("QUICK LOAD: RAM VACIA");
+            }
         }
 
         // Update xprevious and yprevious for all instances

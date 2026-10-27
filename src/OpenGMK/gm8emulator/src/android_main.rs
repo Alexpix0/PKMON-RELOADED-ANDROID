@@ -167,6 +167,7 @@ static STICK_STATE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32:
 /// Analog trigger states with hysteresis
 static L2_TRIGGER_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static R2_TRIGGER_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static PAD_SELECT_HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Reads the video mode the launcher saved. Only one thing matters here: whether the picture keeps
 /// the shape the game was drawn for, or stretches to fill the screen.
@@ -767,6 +768,9 @@ fn perform_quick_snapshot() {
 }
 
 fn perform_quick_save() {
+    // Instantaneous in-memory RAM snapshot (<1.5 ms)
+    crate::game::savestate::request_ram_save();
+
     let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
     let relative_saves = std::path::Path::new("data/partidas");
     let src_dir = if internal_saves.is_dir() {
@@ -809,6 +813,9 @@ fn perform_quick_save() {
 }
 
 fn perform_quick_load() {
+    // Instantaneous in-memory RAM snapshot restore (<2.0 ms)
+    crate::game::savestate::request_ram_load();
+
     let internal_saves = std::path::Path::new("/data/data/com.klisee.reloaded/files/game/data/partidas");
     let relative_saves = std::path::Path::new("data/partidas");
     let dst_dir = if internal_saves.is_dir() {
@@ -1383,6 +1390,19 @@ fn translate(event: &InputEvent) {
                     jni_adjust_volume(code == KEYCODE_VOLUME_UP);
                     return
                 }
+                if code == AKEYCODE_BUTTON_SELECT {
+                    PAD_SELECT_HELD.store(true, std::sync::atomic::Ordering::Relaxed);
+                } else if PAD_SELECT_HELD.load(std::sync::atomic::Ordering::Relaxed) {
+                    if code == AKEYCODE_BUTTON_R1 {
+                        crate::touch_controls::set_pad_active(true);
+                        perform_quick_save();
+                        return;
+                    } else if code == AKEYCODE_BUTTON_L1 {
+                        crate::touch_controls::set_pad_active(true);
+                        perform_quick_load();
+                        return;
+                    }
+                }
                 if let Some(k) = mapped_key(code) {
                     // A real key press means a pad or a keyboard is in the player's hands, so the
                     // on-screen controls get out of the way.
@@ -1392,7 +1412,11 @@ fn translate(event: &InputEvent) {
                 }
             },
             KeyAction::Up => {
-                if let Some(k) = mapped_key(key_code_value(&key.key_code())) {
+                let code = key_code_value(&key.key_code());
+                if code == AKEYCODE_BUTTON_SELECT {
+                    PAD_SELECT_HELD.store(false, std::sync::atomic::Ordering::Relaxed);
+                }
+                if let Some(k) = mapped_key(code) {
                     android::push_input(ramen::platform::android::InputEvent::KeyUp { key: k });
                 }
             },

@@ -23,7 +23,29 @@ use std::{
     io::{self, Read, Write},
     path::PathBuf,
     rc::Rc,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Mutex,
 };
+
+pub static RAM_SAVE_SLOT: Mutex<Option<SaveState>> = Mutex::new(None);
+static RAM_SAVE_REQUESTED: AtomicBool = AtomicBool::new(false);
+static RAM_LOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+pub fn request_ram_save() {
+    RAM_SAVE_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+pub fn request_ram_load() {
+    RAM_LOAD_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+pub fn take_ram_save_request() -> bool {
+    RAM_SAVE_REQUESTED.swap(false, Ordering::Relaxed)
+}
+
+pub fn take_ram_load_request() -> bool {
+    RAM_LOAD_REQUESTED.swap(false, Ordering::Relaxed)
+}
 
 /// Represents a savestate. Very similar to the Game struct, but without things which aren't serialized.
 #[derive(Clone, Serialize, Deserialize)]

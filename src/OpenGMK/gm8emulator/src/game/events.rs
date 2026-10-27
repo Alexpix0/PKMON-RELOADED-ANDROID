@@ -7,6 +7,18 @@ use crate::{
     types::ID,
 };
 
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug)]
+pub struct PhysicsCompact {
+    pub id: usize,
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub is_combatant: bool,
+    pub is_projectile: bool,
+}
+
 impl Game {
     #[inline]
     fn is_pokemon_fighter(&self, object_id: i32) -> bool {
@@ -642,9 +654,39 @@ impl Game {
         Ok(())
     }
 
+    #[inline(always)]
+    fn get_physics_compact(&mut self, cache: &mut Vec<Option<PhysicsCompact>>, handle: usize) -> Option<PhysicsCompact> {
+        if handle < cache.len() {
+            if let Some(cp) = cache[handle] {
+                return Some(cp);
+            }
+        } else {
+            cache.resize(handle + 1, None);
+        }
+        let inst = self.room.instance_list.get(handle);
+        if inst.bbox_is_stale.get() {
+            let mask = self.get_instance_mask_sprite(handle);
+            inst.update_bbox(mask);
+        }
+        let b = inst.bbox();
+        let obj = inst.object_index.get();
+        let cp = PhysicsCompact {
+            id: handle,
+            left: b.left as f32,
+            top: b.top as f32,
+            right: b.right as f32,
+            bottom: b.bottom as f32,
+            is_combatant: self.is_pokemon_fighter(obj),
+            is_projectile: self.is_combat_active_entity(obj),
+        };
+        cache[handle] = Some(cp);
+        Some(cp)
+    }
+
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
         let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
+        let mut compact_physics: Vec<Option<PhysicsCompact>> = Vec::with_capacity(128);
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =
@@ -662,6 +704,11 @@ impl Game {
                     self.is_combat_active_entity(obj1)
                 } else {
                     false
+                };
+
+                let cp1 = match self.get_physics_compact(&mut compact_physics, instance) {
+                    Some(c) => c,
+                    None => continue,
                 };
 
                 // Go through all its collision target objects
@@ -685,21 +732,13 @@ impl Game {
                             }
                         }
 
-                        let inst1 = self.room.instance_list.get(instance);
-                        let inst2 = self.room.instance_list.get(target);
+                        let cp2 = match self.get_physics_compact(&mut compact_physics, target) {
+                            Some(c) => c,
+                            None => continue,
+                        };
 
-                        if inst1.bbox_is_stale.get() {
-                            let mask = self.get_instance_mask_sprite(instance);
-                            inst1.update_bbox(mask);
-                        }
-                        if inst2.bbox_is_stale.get() {
-                            let mask = self.get_instance_mask_sprite(target);
-                            inst2.update_bbox(mask);
-                        }
-
-                        let b1 = inst1.bbox();
-                        let b2 = inst2.bbox();
-                        if b1.right < b2.left || b1.left > b2.right || b1.bottom < b2.top || b1.top > b2.bottom {
+                        // Fast AABB check in L1 cache on 16-byte aligned PhysicsCompact
+                        if cp1.right < cp2.left || cp1.left > cp2.right || cp1.bottom < cp2.top || cp1.top > cp2.bottom {
                             continue;
                         }
 
@@ -716,6 +755,10 @@ impl Game {
                                     inst.path_position.set(inst.path_positionprevious.get());
                                 }
                             }
+
+                            // Invalidate compact cache for instances that moved
+                            if instance < compact_physics.len() { compact_physics[instance] = None; }
+                            if target < compact_physics.len() { compact_physics[target] = None; }
 
                             // Run both collision events
                             self.run_instance_event(gml::ev::COLLISION, target_obj as u32, instance, target, None)?;
