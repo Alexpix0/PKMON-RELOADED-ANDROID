@@ -230,10 +230,6 @@ fn load_video() {
                 let vulkan = value.eq_ignore_ascii_case("vulkan");
                 crate::touch_controls::set_vulkan_backend(vulkan);
                 std::env::set_var("OPENGMK_BACKEND", value);
-            } else if name == "force_60fps" {
-                let force = value == "1" || value.eq_ignore_ascii_case("true");
-                eprintln!("[video] force_60fps: {}", force);
-                crate::touch_controls::set_force_60fps(force);
             } else if name == "bgm_volume" {
                 if let Ok(vol) = value.parse::<u32>() {
                     eprintln!("[video] bgm_volume: {}", vol);
@@ -1824,42 +1820,6 @@ pub unsafe extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeBacken
     let json = crate::render::get_backend_info_json();
     let s = env.new_string(json).unwrap_or_else(|_| env.new_string("").unwrap());
     s.into_raw()
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeSetVsyncEnabled<'local>(
-    _env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-    enabled: jni::sys::jboolean,
-) {
-    crate::render::opengl::egl::set_vsync_enabled(enabled != 0);
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_NativeBridge_setVsyncEnabled<'local>(
-    _env: jni::JNIEnv<'local>,
-    _class: jni::objects::JClass<'local>,
-    enabled: jni::sys::jboolean,
-) {
-    crate::render::opengl::egl::set_vsync_enabled(enabled != 0);
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeSetAdaptiveFrameskip<'local>(
-    _env: jni::JNIEnv<'local>,
-    _this: jni::objects::JObject<'local>,
-    enabled: jni::sys::jboolean,
-) {
-    crate::game::set_adaptive_frameskip(enabled != 0);
-}
-
-#[no_mangle]
-pub extern "system" fn Java_com_klisee_reloaded_NativeBridge_setAdaptiveFrameskip<'local>(
-    _env: jni::JNIEnv<'local>,
-    _class: jni::objects::JClass<'local>,
-    enabled: jni::sys::jboolean,
-) {
-    crate::game::set_adaptive_frameskip(enabled != 0);
 }
 
 /// Whether the system keyboard is up, so it is only raised or dropped on a change.

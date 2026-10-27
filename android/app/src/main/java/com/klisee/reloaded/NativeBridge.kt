@@ -10,7 +10,4 @@ object NativeBridge {
         } catch (_: UnsatisfiedLinkError) {
         }
     }
-
-    external fun setVsyncEnabled(enabled: Boolean)
-    external fun setAdaptiveFrameskip(enabled: Boolean)
 }

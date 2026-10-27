@@ -6001,11 +6001,17 @@ impl Game {
                 let duration = std::time::Duration::from_millis(millis);
                 match self.play_type {
                     PlayType::Normal => {
-                        datetime::sleep(duration);
+                        if !self.render_mode.interpolates() {
+                            datetime::sleep(duration);
+                        }
                         self.process_window_events();
                     },
                     PlayType::Record => (),
-                    PlayType::Replay => datetime::sleep(duration),
+                    PlayType::Replay => {
+                        if !self.render_mode.interpolates() {
+                            datetime::sleep(duration);
+                        }
+                    },
                 }
 
                 if let GameClock::SpoofedNanos(t) = &mut self.clock {

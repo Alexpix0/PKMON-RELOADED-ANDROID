@@ -18,10 +18,7 @@ pub struct VulkanSwapchain {
 
 impl VulkanSwapchain {
     pub fn new() -> Self {
-        #[cfg(target_os = "android")]
-        let vsync = crate::render::opengl::egl::is_vsync_enabled();
-        #[cfg(not(target_os = "android"))]
-        let vsync = true;
+        let vsync = !crate::render::pinned_render_mode().interpolates();
 
         let present_mode = if vsync {
             VK_PRESENT_MODE_FIFO_KHR // Zero-tear non-blocking presentation (VSync on)

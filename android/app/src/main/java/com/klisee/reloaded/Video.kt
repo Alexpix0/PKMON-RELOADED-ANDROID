@@ -17,7 +17,6 @@ fun writeVideoFile(
     filter: String = "sharp",
     weatherOpt: String = "normal",
     backend: String = "opengl",
-    force60Fps: Boolean = false,
     bgmVolume: Int = 100,
     sfxVolume: Int = 100,
     autofire: Boolean = true,
@@ -75,7 +74,7 @@ fun writeVideoFile(
         else -> "native"
     }
     val text = buildString {
-        appendLine("# Escrito por Ajustes (v1.1.7). El motor OpenGMK lo lee al arrancar.")
+        appendLine("# Escrito por Ajustes (v1.1.9). El motor OpenGMK lo lee al arrancar.")
         appendLine("scaling=$scaling")
         appendLine("render=$render")
         appendLine("detected_hz=$hz")
@@ -87,7 +86,6 @@ fun writeVideoFile(
         appendLine("filter=$filter")
         appendLine("weather_opt=$weatherOpt")
         appendLine("backend=$backend")
-        appendLine("force_60fps=${if (force60Fps) 1 else 0}")
         appendLine("bgm_volume=$bgmVolume")
         appendLine("sfx_volume=$sfxVolume")
         appendLine("autofire=${if (autofire) 1 else 0}")

@@ -1783,7 +1783,6 @@ pub fn set_sfx_volume(pct: u32) {
 }
 
 static GRAPHICS_BACKEND_VULKAN: AtomicBool = AtomicBool::new(false);
-static FORCE_60FPS: AtomicBool = AtomicBool::new(false);
 
 pub fn is_vulkan_backend() -> bool {
     GRAPHICS_BACKEND_VULKAN.load(Ordering::Relaxed)
@@ -1791,14 +1790,6 @@ pub fn is_vulkan_backend() -> bool {
 
 pub fn set_vulkan_backend(enabled: bool) {
     GRAPHICS_BACKEND_VULKAN.store(enabled, Ordering::Relaxed);
-}
-
-pub fn force_60fps_active() -> bool {
-    FORCE_60FPS.load(Ordering::Relaxed)
-}
-
-pub fn set_force_60fps(force: bool) {
-    FORCE_60FPS.store(force, Ordering::Relaxed);
 }
 
 static AUTOFIRE_ENABLED: AtomicBool = AtomicBool::new(true);

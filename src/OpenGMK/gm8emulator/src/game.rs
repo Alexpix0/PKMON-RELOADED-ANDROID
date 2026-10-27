@@ -88,11 +88,6 @@ static ENV_CACHED_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 static LAST_FRAME_MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(16_666);
 static LAST_COMBAT_FRAME_TIME_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-pub static ADAPTIVE_FRAMESKIP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
-
-pub fn set_adaptive_frameskip(enabled: bool) {
-    ADAPTIVE_FRAMESKIP.store(enabled, std::sync::atomic::Ordering::Relaxed);
-}
 
 pub fn update_cached_env_settings() {
     let mode = std::env::var("OPENGMK_FRAME_SKIP").unwrap_or_default();
@@ -2008,8 +2003,10 @@ impl Game {
                             self.renderer.present(width, height, self.scaling);
                             self.capture_recording_frame(&mut current_frame_time, TRANSITION_FRAMERATE);
                             let diff = current_time.elapsed();
-                            if let Some(dur) = FRAME_TIME.checked_sub(diff) {
-                                gml::datetime::sleep(dur);
+                            if !self.render_mode.interpolates() {
+                                if let Some(dur) = FRAME_TIME.checked_sub(diff) {
+                                    gml::datetime::sleep(dur);
+                                }
                             }
                         }
                         if let GameClock::SpoofedNanos(t) = &mut self.clock {
@@ -2265,7 +2262,9 @@ impl Game {
 
         #[cfg(target_os = "android")]
         if crate::touch_controls::is_puzzle_paused() {
-            std::thread::sleep(Duration::from_millis(30));
+            if !self.render_mode.interpolates() {
+                std::thread::sleep(Duration::from_millis(30));
+            }
             return Ok(());
         }
 
@@ -2442,12 +2441,10 @@ impl Game {
             return Ok(());
         }
 
-        let skip_visual_frame = if is_combat {
-            let allow_skip = ADAPTIVE_FRAMESKIP.load(std::sync::atomic::Ordering::Relaxed);
-            let last_dur_us = LAST_COMBAT_FRAME_TIME_US.load(std::sync::atomic::Ordering::Relaxed);
-            static COMBAT_FRAME_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            let frame_count = COMBAT_FRAME_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            allow_skip && (last_dur_us > 16_666) && (frame_count % 2 == 1)
+        let skip_visual_frame = if self.render_mode.interpolates() {
+            false
+        } else if is_combat {
+            false
         } else {
             #[cfg(target_os = "android")]
             {
@@ -2555,37 +2552,6 @@ impl Game {
             self.rewind_manager.record_frame(&self.room.instance_list);
         }
 
-        // Threaded Game Loop: publish immutable RenderStateSnapshot to Lock-Free SPSC queue for 90/120 Hz AMOLED interpolation
-        if crate::render::snapshot::is_interpolation_enabled() {
-            let mut entities = Vec::new();
-            let mut iter = self.room.instance_list.iter_by_drawing();
-            while let Some(handle) = iter.next(&self.room.instance_list) {
-                let inst = self.room.instance_list.get(handle);
-                entities.push(crate::render::snapshot::RenderEntitySnapshot {
-                    id: handle,
-                    x: inst.x.get().into_inner() as f32,
-                    y: inst.y.get().into_inner() as f32,
-                    sprite_index: inst.sprite_index.get(),
-                    image_index: inst.image_index.get().into_inner() as f32,
-                    xscale: inst.image_xscale.get().into_inner() as f32,
-                    yscale: inst.image_yscale.get().into_inner() as f32,
-                    angle: inst.image_angle.get().into_inner() as f32,
-                    alpha: inst.image_alpha.get().into_inner() as f32,
-                    blend_col: [1.0, 1.0, 1.0, 1.0],
-                });
-            }
-            let (view_x, view_y) = if self.room.views_enabled && !self.room.views.is_empty() {
-                (self.room.views[0].source_x as f32, self.room.views[0].source_y as f32)
-            } else {
-                (0.0, 0.0)
-            };
-            crate::render::snapshot::SNAPSHOT_QUEUE.publish(crate::render::snapshot::RenderStateSnapshot {
-                timestamp: std::time::Instant::now(),
-                view_x,
-                view_y,
-                entities,
-            });
-        }
 
         // Performance telemetry every 120 frames
         static PERF_FRAME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -3036,13 +3002,6 @@ impl Game {
                 #[cfg(not(target_os = "android"))]
                 let speed_mult = 1.0f32;
 
-                #[cfg(target_os = "android")]
-                let effective_speed = if crate::touch_controls::force_60fps_active() && self.room.speed <= 30 {
-                    60
-                } else {
-                    self.room.speed.max(1)
-                };
-                #[cfg(not(target_os = "android"))]
                 let effective_speed = self.room.speed.max(1);
 
                 let base_nanos = 1_000_000_000 / effective_speed as u64;

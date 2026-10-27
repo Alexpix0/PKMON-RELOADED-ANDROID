@@ -133,9 +133,6 @@ fun SettingsScreen(
     var currentTheme by remember { mutableStateOf(prefs.themeMode) }
     var persistentShield by remember { mutableStateOf(prefs.persistentShield) }
     var graphicsBackend by remember { mutableStateOf(prefs.graphicsBackend) }
-    var force60Fps by remember { mutableStateOf(prefs.force60Fps) }
-    var vsyncEnabled by remember { mutableStateOf(prefs.vsyncEnabled) }
-    var adaptiveFrameskip by remember { mutableStateOf(prefs.adaptiveFrameskip) }
     var bgmVolume by remember { mutableStateOf(prefs.bgmVolume) }
     var sfxVolume by remember { mutableStateOf(prefs.sfxVolume) }
     var autofireEnabled by remember { mutableStateOf(prefs.autofireEnabled) }
@@ -860,7 +857,6 @@ fun SettingsScreen(
                                                 prefs.fsrMode = 0
                                                 drsEnabled = false
                                                 prefs.drsEnabled = false
-                                                force60Fps = prefs.force60Fps
                                             }
                                             prefs.writeVideo(context.filesDir)
                                         },
@@ -1735,80 +1731,9 @@ fun SettingsScreen(
                             icon = Icons.Filled.Speed,
                             title = "Configurar Tasa de Refresco (30 / 60 / 120 / Max)",
                             subtitle = "Pantalla dedicada para elegir 30 canónico, 60 interpolado, 120 Hz o Uncapped y contador de FPS",
-                            items = 6,
+                            items = 1,
                             index = 0,
                             onClick = onFpsSettings,
-                        )
-                        ChoiceRow(
-                            icon = Icons.Filled.Speed,
-                            title = "Nativo (30/60 FPS Original)",
-                            subtitle = "Mantiene los límites nativos del juego (30 FPS en menús/salas fijas, 60 FPS en combates)",
-                            selected = !force60Fps && !asyncRenderThread,
-                            items = 6,
-                            index = 1,
-                            onSelect = {
-                                force60Fps = false
-                                prefs.force60Fps = false
-                                asyncRenderThread = false
-                                prefs.asyncRenderThread = false
-                                prefs.writeVideo(context.filesDir)
-                            },
-                        )
-                        ChoiceRow(
-                            icon = Icons.Filled.Speed,
-                            title = "60 FPS Forzados (Desbloquear zonas a 30 FPS)",
-                            subtitle = "Elimina el límite de 30 FPS en menús y salas fijas para una experiencia fluida a 60 FPS",
-                            selected = force60Fps && !asyncRenderThread,
-                            items = 5,
-                            index = 1,
-                            onSelect = {
-                                force60Fps = true
-                                prefs.force60Fps = true
-                                asyncRenderThread = false
-                                prefs.asyncRenderThread = false
-                                prefs.writeVideo(context.filesDir)
-                            },
-                        )
-                        ChoiceRow(
-                            icon = Icons.Filled.Speed,
-                            title = "120 FPS (Interpolación Ultra Suave)",
-                            subtitle = "Activa renderizado desacoplado e interpolación de cuadros para pantallas de 90/120 Hz",
-                            selected = asyncRenderThread,
-                            items = 5,
-                            index = 2,
-                            onSelect = {
-                                force60Fps = true
-                                prefs.force60Fps = true
-                                asyncRenderThread = true
-                                prefs.asyncRenderThread = true
-                                prefs.writeVideo(context.filesDir)
-                            },
-                        )
-                        SwitchRow(
-                            icon = Icons.Filled.Refresh,
-                            title = "Sincronización Vertical (VSync)",
-                            subtitle = "Sincroniza los fotogramas con el refresco de pantalla (60 Hz). Desactívalo para ganar fluidez inmediata en combates a costa de posible tearing.",
-                            checked = vsyncEnabled,
-                            items = 5,
-                            index = 3,
-                            onCheckedChange = {
-                                vsyncEnabled = it
-                                prefs.vsyncEnabled = it
-                                GameActivity.setVsyncEnabled(it)
-                            },
-                        )
-                        SwitchRow(
-                            icon = Icons.Filled.Speed,
-                            title = "Salto de Cuadros Adaptativo (Frameskip)",
-                            subtitle = "Si el combate supera los 16.6 ms, omite el renderizado de fotogramas alternos para mantener la física y la velocidad del juego a 60 FPS estables.",
-                            checked = adaptiveFrameskip,
-                            items = 5,
-                            index = 4,
-                            onCheckedChange = {
-                                adaptiveFrameskip = it
-                                prefs.adaptiveFrameskip = it
-                                GameActivity.setAdaptiveFrameskip(it)
-                            },
                         )
                     }
 

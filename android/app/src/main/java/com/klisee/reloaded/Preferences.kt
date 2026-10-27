@@ -237,27 +237,6 @@ class Preferences(private val context: Context) {
             prefs.edit().putString("graphicsBackend", value).apply()
         }
 
-    /** Force unlock 60 FPS in 30 FPS capped rooms and menus */
-    var force60Fps: Boolean
-        get() = prefs.getBoolean("force60Fps", false)
-        set(value) {
-            prefs.edit().putBoolean("force60Fps", value).apply()
-        }
-
-    /** VSync vertical synchronization: true locks to 60Hz, false unlocks free framerate in battle */
-    var vsyncEnabled: Boolean
-        get() = prefs.getBoolean("pref_vsync_enabled", true)
-        set(value) {
-            prefs.edit().putBoolean("pref_vsync_enabled", value).apply()
-        }
-
-    /** Salto de cuadros adaptativo en combate cuando frametime > 16.6ms */
-    var adaptiveFrameskip: Boolean
-        get() = prefs.getBoolean("pref_adaptive_frameskip", true)
-        set(value) {
-            prefs.edit().putBoolean("pref_adaptive_frameskip", value).apply()
-        }
-
     /** Background music (BGM) volume percentage: 0 to 100 */
     var bgmVolume: Int
         get() = prefs.getInt("bgmVolume", 100)
@@ -694,7 +673,6 @@ class Preferences(private val context: Context) {
         filter = videoFilter,
         weatherOpt = weatherOpt,
         backend = graphicsBackend,
-        force60Fps = force60Fps,
         bgmVolume = bgmVolume,
         sfxVolume = sfxVolume,
         autofire = autofireEnabled,
@@ -755,7 +733,7 @@ class Preferences(private val context: Context) {
                 frameSkip = "1"
                 renderScale = "0.75"
                 weatherOpt = "minimal"
-                force60Fps = false
+                renderMode = "native"
                 turboMultiplier = 1.5f
                 batterySaver = true
             }
@@ -764,7 +742,7 @@ class Preferences(private val context: Context) {
                 renderScale = "1.0"
                 weatherOpt = "optimized"
                 videoFilter = "sharp"
-                force60Fps = false
+                renderMode = "60"
                 turboMultiplier = 2.0f
                 batterySaver = false
             }
@@ -774,7 +752,7 @@ class Preferences(private val context: Context) {
                 weatherOpt = "normal"
                 videoFilter = "sharp"
                 graphicsBackend = "vulkan"
-                force60Fps = true
+                renderMode = "60"
                 turboMultiplier = 3.0f
                 batterySaver = false
             }
@@ -783,7 +761,7 @@ class Preferences(private val context: Context) {
                 renderScale = "0.85"
                 weatherOpt = "minimal"
                 videoFilter = "sharp"
-                force60Fps = true
+                renderMode = "60"
                 extremeCombat = true
                 maliEarlyZ = true
                 gpuWakeup = true
