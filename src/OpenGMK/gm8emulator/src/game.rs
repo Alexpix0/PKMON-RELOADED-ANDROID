@@ -2291,30 +2291,30 @@ impl Game {
 
         // RAM Quick Save / Quick Load (Instantaneous in-memory snapshot <1.5 ms)
         if savestate::take_ram_save_request() {
-            let render_state = self.renderer.draw_state();
+            let render_state = self.renderer.state();
             let state = SaveState::from(self, replay::Replay::new(0, 0), render_state, false);
-            if let Ok(mut slot) = savestate::RAM_SAVE_SLOT.lock() {
-                *slot = Some(state);
+            if let Ok(()) = savestate::save_to_ram(&state) {
                 #[cfg(target_os = "android")]
                 crate::touch_controls::show_toast("QUICK SAVE RAM: OK (<1.5 ms)");
                 eprintln!("[quicksave] Snapshot guardado en RAM");
             }
         }
         if savestate::take_ram_load_request() {
-            let state_opt = if let Ok(slot) = savestate::RAM_SAVE_SLOT.lock() {
-                slot.clone()
-            } else {
-                None
-            };
-            if let Some(state) = state_opt {
-                state.load_into(self);
-                self.reset_accumulator = true;
-                #[cfg(target_os = "android")]
-                crate::touch_controls::show_toast("QUICK LOAD RAM: RESTAURADO (<2.0 ms)");
-                eprintln!("[quicksave] Snapshot restaurado desde RAM");
-            } else {
-                #[cfg(target_os = "android")]
-                crate::touch_controls::show_toast("QUICK LOAD: RAM VACIA");
+            match savestate::load_from_ram() {
+                Ok(Some(state)) => {
+                    state.load_into(self);
+                    self.reset_accumulator = true;
+                    #[cfg(target_os = "android")]
+                    crate::touch_controls::show_toast("QUICK LOAD RAM: RESTAURADO (<2.0 ms)");
+                    eprintln!("[quicksave] Snapshot restaurado desde RAM");
+                }
+                Ok(None) => {
+                    #[cfg(target_os = "android")]
+                    crate::touch_controls::show_toast("QUICK LOAD: RAM VACIA");
+                }
+                Err(e) => {
+                    eprintln!("[quicksave] Error restaurando snapshot: {:?}", e);
+                }
             }
         }
 

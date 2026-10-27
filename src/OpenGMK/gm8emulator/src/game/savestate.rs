@@ -27,7 +27,7 @@ use std::{
     sync::Mutex,
 };
 
-pub static RAM_SAVE_SLOT: Mutex<Option<SaveState>> = Mutex::new(None);
+pub static RAM_SAVE_SLOT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
 static RAM_SAVE_REQUESTED: AtomicBool = AtomicBool::new(false);
 static RAM_LOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
 
@@ -45,6 +45,29 @@ pub fn take_ram_save_request() -> bool {
 
 pub fn take_ram_load_request() -> bool {
     RAM_LOAD_REQUESTED.swap(false, Ordering::Relaxed)
+}
+
+pub fn save_to_ram(state: &SaveState) -> Result<(), WriteError> {
+    let mut buf = Vec::new();
+    bincode::serialize_into(&mut buf, state).map_err(WriteError::SerializeErr)?;
+    if let Ok(mut slot) = RAM_SAVE_SLOT.lock() {
+        *slot = Some(buf);
+    }
+    Ok(())
+}
+
+pub fn load_from_ram() -> Result<Option<SaveState>, ReadError> {
+    let bytes_opt = if let Ok(slot) = RAM_SAVE_SLOT.lock() {
+        slot.clone()
+    } else {
+        None
+    };
+    if let Some(bytes) = bytes_opt {
+        let state: SaveState = bincode::deserialize(&bytes).map_err(ReadError::DeserializeErr)?;
+        Ok(Some(state))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Represents a savestate. Very similar to the Game struct, but without things which aren't serialized.

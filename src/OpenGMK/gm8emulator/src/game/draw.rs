@@ -527,7 +527,7 @@ impl Game {
         if has_arena_bake {
             if let Some((_, surf)) = self.battle_arena_bake {
                 self.renderer.set_depth(12000.0);
-                self.renderer.draw_sprite_ext(surf, 0.0, 0.0, 1.0, 1.0, 0.0, 0xFFFFFF, 1.0);
+                self.renderer.draw_sprite(surf, 0.0, 0.0, 1.0, 1.0, 0.0, 0xFFFFFF, 1.0);
             }
         } else {
             self.renderer.set_depth(12000.0);

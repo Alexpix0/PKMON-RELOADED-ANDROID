@@ -11,7 +11,7 @@ pub mod config;
 pub mod frame_channel;
 
 use crate::types::Colour;
-use atlas::{AtlasRect, AtlasRef};
+pub use atlas::{AtlasRect, AtlasRef};
 use ramen::{connection::Connection, window::Window};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
