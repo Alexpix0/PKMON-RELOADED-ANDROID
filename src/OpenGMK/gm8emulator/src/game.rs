@@ -2954,7 +2954,7 @@ impl Game {
                     next_present += frame;
                     let now = Instant::now();
                     if next_present > now {
-                        std::thread::sleep(next_present - now);
+                        crate::gml::datetime::sleep(next_present - now);
                     } else {
                         next_present = now;
                     }

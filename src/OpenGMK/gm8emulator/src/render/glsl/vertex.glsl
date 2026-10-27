@@ -87,7 +87,7 @@ void main() {
             frag_blend_flat.rgb += ambient_colour.rgb;
         }
     }
-    world_pos.xy += interp * interp_amount;
+    world_pos.xy += floor(interp * interp_amount + 0.5);
     gl_Position = viewproj * world_pos;
     fog_z = gl_Position.z;
 }

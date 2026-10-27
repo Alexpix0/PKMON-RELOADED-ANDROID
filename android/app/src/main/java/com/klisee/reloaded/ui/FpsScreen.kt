@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.klisee.reloaded.Preferences
 
 /**
- * Pantalla de configuración de tasa de refresco e interpolación (v1.1.9).
+ * Pantalla de configuración de tasa de refresco e interpolación (v1.2.0).
  *
  * 30 FPS es la simulación canónica de GM8. Las tasas superiores interpolan
  * el movimiento de instancias y cámara desacoplados en el renderizador a 60/120 Hz.

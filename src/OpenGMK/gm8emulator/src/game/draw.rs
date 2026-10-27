@@ -282,10 +282,6 @@ impl Game {
             self.unscaled_height as _,
         );
 
-        if self.show_fps {
-            self.draw_fps_overlay();
-        }
-
         // Apply room caption. The extra interpolation frames are not new game frames, so they must
         // not keep poking the window manager.
         if !self.interp_draw {
@@ -299,91 +295,6 @@ impl Game {
         self.renderer.reset_target();
 
         Ok(())
-    }
-
-    /// Draws the optional "FPS: N" label in the game's own font, at the top centre of the game
-    /// framebuffer. Uses the dialogue font when the game has one so it matches the rest of the UI.
-    fn draw_fps_overlay(&mut self) {
-        let font_id = if self.assets.fonts.get_asset(2).is_some() {
-            2
-        } else if self.assets.fonts.get_asset(self.draw_font_id).is_some() {
-            self.draw_font_id
-        } else {
-            -1
-        };
-
-        let old_font = self.draw_font_id;
-        let old_colour = self.draw_colour;
-        let old_alpha = self.draw_alpha;
-        let old_halign = self.draw_halign;
-        let old_valign = self.draw_valign;
-        let old_depth = self.renderer.get_depth();
-        let old_depth_test = self.renderer.get_depth_test();
-        let old_write_depth = self.renderer.get_write_depth();
-        let old_alpha_blending = self.renderer.get_alpha_blending();
-        let old_blend_mode = self.renderer.get_blend_mode();
-
-        self.draw_font_id = font_id;
-        self.draw_halign = Halign::Middle;
-        self.draw_valign = Valign::Top;
-        self.draw_alpha = Real::from(1.0);
-        self.renderer.set_draw_offset(0.0, 0.0);
-        self.renderer.set_depth(-32000.0);
-        self.renderer.set_depth_test(false);
-        self.renderer.set_write_depth(false);
-        self.renderer.set_alpha_blending(true);
-        self.renderer.set_blend_mode(BlendType::SrcAlpha, BlendType::InvSrcAlpha);
-
-        let text = gml::String::from(format!("FPS: {}", self.render_fps));
-        let (text_w, text_h) = self.get_string_size(text.clone(), None, None);
-        let center = self.unscaled_width as f64 / 2.0;
-        let pad_x = 3.0;
-        let pad_y = 2.0;
-        let x1 = center - f64::from(text_w) / 2.0 - pad_x;
-        let x2 = center + f64::from(text_w) / 2.0 + pad_x;
-        let y1 = 1.0;
-        let y2 = 2.0 + f64::from(text_h) + pad_y;
-        self.renderer.draw_roundrect(x1, y1, x2, y2, 0, 0, 0.65, false);
-
-        let x = Real::from(self.unscaled_width as i32 / 2);
-        let y = Real::from(2);
-        self.draw_colour = Colour::new(0.0, 0.0, 0.0);
-        self.draw_string(
-            x + Real::from(1.0),
-            y + Real::from(1.0),
-            text.clone(),
-            None,
-            None,
-            Real::from(1.0),
-            Real::from(1.0),
-            Real::from(0.0),
-            None,
-            Real::from(1.0),
-        );
-        self.draw_colour = Colour::new(1.0, 1.0, 1.0);
-        self.draw_string(
-            x,
-            y,
-            text,
-            None,
-            None,
-            Real::from(1.0),
-            Real::from(1.0),
-            Real::from(0.0),
-            None,
-            Real::from(1.0),
-        );
-
-        self.renderer.set_depth(old_depth);
-        self.renderer.set_depth_test(old_depth_test);
-        self.renderer.set_write_depth(old_write_depth);
-        self.renderer.set_alpha_blending(old_alpha_blending);
-        self.renderer.set_blend_mode(old_blend_mode.0, old_blend_mode.1);
-        self.draw_font_id = old_font;
-        self.draw_colour = old_colour;
-        self.draw_alpha = old_alpha;
-        self.draw_halign = old_halign;
-        self.draw_valign = old_valign;
     }
 
     pub fn draw_instance_default(&mut self, idx: usize) -> gml::Result<()> {
