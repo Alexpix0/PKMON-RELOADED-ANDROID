@@ -232,7 +232,6 @@ pub struct Game {
     #[cfg(target_os = "android")]
     pub picker_frame_throttle: std::cell::Cell<u32>,
     pub rewind_manager: rewind::RewindManager,
-    pub battle_arena_bake: Option<(i32, crate::render::AtlasRef)>,
     pub reset_accumulator: bool,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
@@ -1471,7 +1470,6 @@ impl Game {
             #[cfg(target_os = "android")]
             picker_frame_throttle: std::cell::Cell::new(0),
             rewind_manager: rewind::RewindManager::new(),
-            battle_arena_bake: None,
             reset_accumulator: false,
             potential_step_settings: Default::default(),
             transition_kind: 0,
@@ -1759,12 +1757,6 @@ impl Game {
         self.spatial_hash.clear();
         crate::touch_controls::flush_held_inputs();
 
-        if !matches!(self.room.id, 47 | 191 | 709) {
-            if let Some((_, old_surf)) = self.battle_arena_bake.take() {
-                self.renderer.delete_sprite(old_surf);
-            }
-        }
-
         // Initialize room transition surface
         let transition_kind = self.transition_kind;
         let (trans_surf_old, trans_surf_new) = if self.get_transition(transition_kind).is_some() {
@@ -1845,12 +1837,6 @@ impl Game {
         self.cursor_sprite_frame = 0;
         self.spatial_hash.clear();
         crate::touch_controls::flush_held_inputs();
-
-        if !matches!(self.room.id, 47 | 191 | 709) {
-            if let Some((_, old_surf)) = self.battle_arena_bake.take() {
-                self.renderer.delete_sprite(old_surf);
-            }
-        }
 
         // Load all tiles in new room
         for tile in room.tiles.iter() {
@@ -2323,7 +2309,7 @@ impl Game {
         let mut iter = self.room.instance_list.iter_by_drawing();
         while let Some(instance) = iter.next(&self.room.instance_list).map(|x| self.room.instance_list.get(x)) {
             if crate::touch_controls::active_static_partition_enabled() {
-                if instance.speed.get() == 0.into() && instance.hspeed.get() == 0.into() && instance.vspeed.get() == 0.into() && instance.path_index.get() < 0 {
+                if instance.x.get() == instance.xprevious.get() && instance.y.get() == instance.yprevious.get() && instance.path_index.get() < 0 {
                     continue;
                 }
             }
