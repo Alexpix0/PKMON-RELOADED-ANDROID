@@ -40,8 +40,8 @@ android {
         applicationId = "com.klisee.reloaded"
         minSdk = 29
         targetSdk = 36
-        versionCode = 64
-        versionName = "1.2.4"
+        versionCode = 65
+        versionName = "1.2.5"
 
         ndk { abiFilters += "arm64-v8a" }
     }

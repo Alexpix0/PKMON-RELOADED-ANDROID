@@ -499,28 +499,9 @@ impl Game {
         self.room.instance_list.draw_sort();
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
-        let (cam_left, cam_right, cam_top, cam_bottom) = (src_x - 32, src_x + src_w + 32, src_y - 32, src_y + src_h + 32);
-        // Fast advance to next visible tile within viewport bounds
-        let next_visible_tile = |iter: &mut crate::instancelist::TLIterDrawOrder, tile_list: &crate::instancelist::TileList| -> Option<usize> {
-            while let Some(idx) = iter.next(tile_list) {
-                let tile = tile_list.get(idx);
-                if !tile.visible.get() {
-                    continue;
-                }
-                let tx = tile.x.get().into_inner() as i32;
-                let ty = tile.y.get().into_inner() as i32;
-                let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
-                let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
-                if tx + tw < cam_left || tx > cam_right || ty + th < cam_top || ty > cam_bottom {
-                    continue;
-                }
-                return Some(idx);
-            }
-            None
-        };
-
+        // Tiles are pre-sorted at room load / modification. Iterate non-borrowing TLIterDrawOrder directly with zero per-frame allocations.
         let mut iter_tile = self.room.tile_list.iter_by_drawing();
-        let mut iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
+        let mut iter_tile_v = iter_tile.next(&self.room.tile_list);
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
         let mut iter_part_v = iter_part.next(&self.particles);
@@ -537,7 +518,7 @@ impl Game {
                 },
                 (None, Some(idx_tile), None) => {
                     draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
-                    while let Some(idx_tile) = next_visible_tile(&mut iter_tile, &self.room.tile_list) {
+                    while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
                         draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
                     }
                     break
@@ -556,7 +537,7 @@ impl Game {
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
                             draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
-                            iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
+                            iter_tile_v = iter_tile.next(&self.room.tile_list);
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h, player_delta)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
