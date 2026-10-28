@@ -4664,6 +4664,8 @@ impl RendererTrait for RendererImpl {
 
             // Draw framebuffer to screen via Fullscreen Quad with hardware texture sampling (Zero ALU, 0.6 ms)
             self.current_texture = None;
+            self.gl.Disable(gl::SCISSOR_TEST);
+            self.gl.ColorMask(gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
             self.gl.BindFramebuffer(gl::FRAMEBUFFER, 0);
             debug_assert_eq!(self.gl.GetError(), 0);
             self.gl.Viewport(0, 0, window_width, window_height);
