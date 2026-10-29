@@ -202,48 +202,19 @@ impl Game {
     /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
     /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
     pub fn draw(&mut self) -> gml::Result<()> {
-        self.renderer.set_interp_amount(if self.render_mode.interpolates() {
-            (1.0 - self.interp_alpha).clamp(0.0, 1.0) as f32
-        } else {
-            0.0
-        });
+        // Build 71 Isolation Experiment: Strict 0.0 interp_amount and 1.0 interp_alpha bypass
+        self.interp_alpha = 1.0;
+        self.renderer.set_interp_amount(0.0);
 
         // Update views that should be following objects
         if self.interp_update_views {
-            if self.render_mode.interpolates() && self.prev_views.is_none() {
-                self.prev_views = Some(self.room.views.clone());
-            }
             self.update_views();
         }
         if self.room.views_enabled {
             self.renderer.clear_view(self.background_colour, 1.0);
         }
 
-        let (saved_views, interp_coords) = if self.room.views_enabled && self.render_mode.interpolates() && self.interp_alpha < 1.0 {
-            if let Some(prev) = &self.prev_views {
-                let alpha = self.interp_alpha;
-                let current = self.room.views.clone();
-                let mut coords = Vec::with_capacity(self.room.views.len());
-                for (view, prev_view) in self.room.views.iter_mut().zip(prev.iter()) {
-                    if !view.visible || !prev_view.visible {
-                        coords.push((view.source_x as f64, view.source_y as f64));
-                        continue;
-                    }
-                    let lerp_f64 = |a: i32, b: i32| a as f64 + (b as f64 - a as f64) * alpha;
-                    let fx = lerp_f64(prev_view.source_x, view.source_x);
-                    let fy = lerp_f64(prev_view.source_y, view.source_y);
-                    // Maintain integer view.source_x/y on GameMaker instance state for GML view_xview queries
-                    view.source_x = fx.round() as i32;
-                    view.source_y = fy.round() as i32;
-                    coords.push((fx, fy));
-                }
-                (Some(current), Some(coords))
-            } else {
-                (None, None)
-            }
-        } else {
-            (None, None)
-        };
+        let (saved_views, interp_coords): (Option<Vec<crate::game::view::View>>, Option<Vec<(f64, f64)>>) = (None, None);
 
         // Draw all views
         if self.room.views_enabled {
@@ -252,10 +223,7 @@ impl Game {
             while let Some(&view) = self.room.views.get(count) {
                 if view.visible {
                     self.view_current = count;
-                    let (src_x, src_y) = interp_coords
-                        .as_ref()
-                        .and_then(|c| c.get(count).copied())
-                        .unwrap_or((view.source_x as f64, view.source_y as f64));
+                    let (src_x, src_y) = (view.source_x as f64, view.source_y as f64);
                     self.draw_view(
                         src_x,
                         src_y,

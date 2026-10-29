@@ -129,7 +129,8 @@ pub enum RenderMode {
 
 impl RenderMode {
     pub fn interpolates(self) -> bool {
-        !matches!(self, RenderMode::Native)
+        // Build 71 Isolation Experiment: Bypass synthetic frame interpolation completely
+        false
     }
 }
 
