@@ -526,6 +526,7 @@ impl Game {
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
         let mut tile_cursor = 0usize;
         let visible_tiles_len = self.draw_scratchpad.visible_tiles.len();
+        assert!(self.draw_scratchpad.visible_tiles.len() >= visible_tiles_len);
         let mut iter_tile_v = if visible_tiles_len > 0 { Some(self.draw_scratchpad.visible_tiles[0]) } else { None };
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();

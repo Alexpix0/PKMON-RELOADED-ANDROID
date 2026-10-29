@@ -220,6 +220,7 @@ enum PrimitiveShape {
     Point,
     Line,
     Triangle,
+    Quad,
 }
 
 impl From<PrimitiveType> for PrimitiveShape {
@@ -243,9 +244,8 @@ struct Vertex {
     #[serde(skip)]
     pub interp: [f32; 2],
     pub tex_coord: [f32; 2],
-    pub blend: [f32; 4],
     pub atlas_xywh: [f32; 4],
-    pub normal: [f32; 3],
+    pub blend: u32,
 }
 
 /// A builder to be used for building primitives.
@@ -302,16 +302,16 @@ impl PrimitiveBuilder {
         self
     }
 
-    fn push_vertex(&mut self, pos: [f32; 3], tex_coord: [f32; 2], blend: [f32; 4], normal: [f32; 3]) -> &mut Self {
+    #[inline(always)]
+    fn push_vertex(&mut self, pos: [f32; 3], tex_coord: [f32; 2], blend: u32) -> &mut Self {
         let tex_coord = if self.textured { tex_coord } else { [-1000.0, -1000.0] };
         let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
         self.push_vertex_raw(Vertex {
             pos,
             interp,
             tex_coord,
-            blend,
-            normal,
             atlas_xywh: self.atlas_ref.into(),
+            blend,
         });
         self
     }

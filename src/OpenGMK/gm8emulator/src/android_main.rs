@@ -2044,6 +2044,20 @@ pub fn android_entry(app: AndroidApp) {
     SHUTDOWN.store(false, std::sync::atomic::Ordering::SeqCst);
     let handle = std::thread::spawn(move || {
         crate::game::big_little::get_cpu_topology().pin_current_thread_to_big();
+        #[cfg(target_os = "android")]
+        unsafe {
+            let mut set: libc::cpu_set_t = std::mem::zeroed();
+            let num_cpus = libc::sysconf(libc::_SC_NPROCESSORS_ONLN);
+            if num_cpus >= 8 {
+                for cpu in 4..8 {
+                    let idx = cpu as usize / (8 * std::mem::size_of::<libc::c_ulong>());
+                    let bit = cpu as usize % (8 * std::mem::size_of::<libc::c_ulong>());
+                    let ptr = &mut set as *mut _ as *mut libc::c_ulong;
+                    *ptr.add(idx) |= 1 << bit;
+                }
+                libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+            }
+        }
 
         // The activity asks for landscape in the manifest, so the window is normally already the right
         // way round; the rotate still takes a moment on some phones. The engine lays its screens out
@@ -2159,6 +2173,20 @@ pub fn android_entry(app: AndroidApp) {
                             ramen::platform::android::set_paused(false);
                             crate::game::audio::set_output_paused(false);
                             crate::game::big_little::get_cpu_topology().pin_current_thread_to_big();
+        #[cfg(target_os = "android")]
+        unsafe {
+            let mut set: libc::cpu_set_t = std::mem::zeroed();
+            let num_cpus = libc::sysconf(libc::_SC_NPROCESSORS_ONLN);
+            if num_cpus >= 8 {
+                for cpu in 4..8 {
+                    let idx = cpu as usize / (8 * std::mem::size_of::<libc::c_ulong>());
+                    let bit = cpu as usize % (8 * std::mem::size_of::<libc::c_ulong>());
+                    let ptr = &mut set as *mut _ as *mut libc::c_ulong;
+                    *ptr.add(idx) |= 1 << bit;
+                }
+                libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+            }
+        }
                         }
                     }
                 },

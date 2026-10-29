@@ -32,9 +32,8 @@ uniform float interp_amount;
 layout (location = 0) in vec3 pos;
 layout (location = 1) in vec4 blend;
 layout (location = 2) in vec2 tex_coord;
-layout (location = 3) in vec3 normal;
-layout (location = 4) in vec4 atlas_xywh;
-layout (location = 5) in vec2 interp;
+layout (location = 3) in vec4 atlas_xywh;
+layout (location = 4) in vec2 interp;
 
 out vec2 frag_tex_coord;
 out vec4 frag_atlas_xywh;
@@ -59,7 +58,7 @@ void main() {
 
     if (lighting_enabled) {
         vec3 light_col = vec3(0.0);
-        vec3 new_normal = -(model * vec4(normal, 0.0)).xyz;
+        vec3 new_normal = -(model * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
         if (gm81_normalize) {
             new_normal = normalize(new_normal);
         }
