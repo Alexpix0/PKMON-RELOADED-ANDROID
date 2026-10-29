@@ -506,13 +506,16 @@ struct ShapeBuilder {
 }
 
 impl ShapeBuilder {
-    fn new(outline: bool, atlas_ref: AtlasRect, alpha: f64, depth: f32) -> Self {
+    fn new(outline: bool, atlas_ref: AtlasRect, alpha: f64, depth: f32, draw_offset: [f32; 2], interp_amount: f32) -> Self {
+        let mut primitive = PrimitiveBuilder::new(
+            atlas_ref,
+            if outline { PrimitiveType::LineStrip } else { PrimitiveType::TriFan },
+            false,
+        );
+        primitive.draw_offset = draw_offset;
+        primitive.interp_amount = interp_amount;
         Self {
-            primitive: PrimitiveBuilder::new(
-                atlas_ref,
-                if outline { PrimitiveType::LineStrip } else { PrimitiveType::TriFan },
-                false,
-            ),
+            primitive,
             outline,
             depth,
             alpha,
@@ -3163,10 +3166,14 @@ impl RendererTrait for RendererImpl {
             if v.is_finite() { v } else { 0.0 }
         };
         self.draw_offset = [finite(x), finite(y)];
+        self.primitive_2d.draw_offset = self.draw_offset;
+        self.primitive_3d.draw_offset = self.draw_offset;
     }
 
     fn set_interp_amount(&mut self, amount: f32) {
         self.interp_amount = amount.clamp(0.0, 1.0);
+        self.primitive_2d.interp_amount = self.interp_amount;
+        self.primitive_3d.interp_amount = self.interp_amount;
     }
 
     fn create_sprite_colour(&mut self, width: i32, height: i32, col: Colour) -> Result<AtlasRef, String> {
@@ -3947,6 +3954,7 @@ impl RendererTrait for RendererImpl {
         // push the vertices
         self.push_primitive(
             PrimitiveBuilder::new(atlas_ref, PrimitiveType::TriFan, true)
+                .with_interp(self.draw_offset, self.interp_amount)
                 .push_vertex(correct(x1, y1), [tex_left, tex_top], split_colour(0xffffff, alpha), normal)
                 .push_vertex(correct(x2, y2), [tex_right, tex_top], split_colour(0xffffff, alpha), normal)
                 .push_vertex(correct(x3, y3), [tex_right, tex_bottom], split_colour(0xffffff, alpha), normal)
@@ -3974,7 +3982,7 @@ impl RendererTrait for RendererImpl {
         let x2 = if x2 == x2.floor() { x2 + 0.01 } else { x2 };
         let y2 = if y2 == y2.floor() { y2 + 0.01 } else { y2 };
         self.push_primitive(
-            ShapeBuilder::new(true, self.white_pixel, alpha, self.depth)
+            ShapeBuilder::new(true, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount)
                 .push_point(x1, y1, colour)
                 .push_point(x2, y1, colour)
                 .push_point(x2, y2, colour)
@@ -4014,7 +4022,7 @@ impl RendererTrait for RendererImpl {
             return;
         }
         self.push_primitive(
-            ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth)
+            ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount)
                 .push_point(x1, y1, c1)
                 .push_point(x2, y1, c2)
                 .push_point(x2, y2, c3)
@@ -4046,7 +4054,7 @@ impl RendererTrait for RendererImpl {
                 let width_y = (x2 - x1) * (width / 2.0) / length;
                 // actually push the rectangle
                 self.push_primitive(
-                    ShapeBuilder::new(false, self.white_pixel, alpha, self.depth)
+                    ShapeBuilder::new(false, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount)
                         .push_point(x1 - width_x, y1 + width_y, c1)
                         .push_point(x1 + width_x, y1 - width_y, c1)
                         .push_point(x2 + width_x, y2 - width_y, c2)
@@ -4056,7 +4064,7 @@ impl RendererTrait for RendererImpl {
             }
         } else {
             self.push_primitive(
-                ShapeBuilder::new(true, self.white_pixel, alpha, self.depth)
+                ShapeBuilder::new(true, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount)
                     .push_point(x1, y1, c1)
                     .push_point(x2, y2, c2)
                     .build(),
@@ -4079,7 +4087,7 @@ impl RendererTrait for RendererImpl {
         outline: bool,
     ) {
         self.push_primitive(
-            ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth)
+            ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount)
                 .push_point(x1, y1, c1)
                 .push_point(x2, y2, c2)
                 .push_point(x3, y3, c3)
@@ -4088,7 +4096,7 @@ impl RendererTrait for RendererImpl {
     }
 
     fn draw_ellipse(&mut self, x: f64, y: f64, rad_x: f64, rad_y: f64, c1: i32, c2: i32, alpha: f64, outline: bool) {
-        let mut builder = ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth);
+        let mut builder = ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount);
         if !outline {
             builder.push_point(x, y, c1);
         }
@@ -4110,7 +4118,7 @@ impl RendererTrait for RendererImpl {
         let rad_y = height.min(10.0) / 2.0;
         let rect_half_w = (width / 2.0 - rad_x).max(0.0);
         let rect_half_h = (height / 2.0 - rad_y).max(0.0);
-        let mut builder = ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth);
+        let mut builder = ShapeBuilder::new(outline, self.white_pixel, alpha, self.depth, self.draw_offset, self.interp_amount);
         if !outline {
             builder.push_point(xcenter, ycenter, c1);
         }
@@ -4140,7 +4148,7 @@ impl RendererTrait for RendererImpl {
             ar.unwrap_or(self.white_pixel),
             ptype,
             ar.is_some(),
-        );
+        ).with_interp(self.draw_offset, self.interp_amount);
     }
 
     fn vertex_2d(&mut self, x: f64, y: f64, xtex: f64, ytex: f64, col: i32, alpha: f64) {
@@ -4172,7 +4180,7 @@ impl RendererTrait for RendererImpl {
             ar.unwrap_or(self.white_pixel),
             ptype,
             ar.is_some(),
-        );
+        ).with_interp(self.draw_offset, self.interp_amount);
     }
 
     fn vertex_3d(

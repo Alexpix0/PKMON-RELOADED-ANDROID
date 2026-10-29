@@ -2316,6 +2316,11 @@ impl Game {
             instance.path_positionprevious.set(instance.path_position.get().clamp(0.into(), 1.into()));
         }
 
+        // Pre-step camera snapshot: Capture view state before GML Step/End Step events mutate view_xview/view_yview
+        if self.render_mode.interpolates() && self.room.views_enabled {
+            self.prev_views = Some(self.room.views.clone());
+        }
+
         // Begin step trigger events
         self.run_triggers(trigger::TriggerTime::BeginStep)?;
         if self.scene_change.is_some() {

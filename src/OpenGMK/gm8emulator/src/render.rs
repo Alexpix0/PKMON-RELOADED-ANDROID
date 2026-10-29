@@ -255,11 +255,21 @@ pub struct PrimitiveBuilder {
     ptype: PrimitiveType,
     atlas_ref: AtlasRect,
     textured: bool,
+    #[serde(skip)]
+    pub draw_offset: [f32; 2],
+    #[serde(skip)]
+    pub interp_amount: f32,
 }
 
 impl PrimitiveBuilder {
-    fn new(atlas_ref: AtlasRect, ptype: PrimitiveType, textured: bool) -> Self {
-        Self { vertices: Vec::new(), ptype, atlas_ref, textured }
+    pub fn new(atlas_ref: AtlasRect, ptype: PrimitiveType, textured: bool) -> Self {
+        Self { vertices: Vec::new(), ptype, atlas_ref, textured, draw_offset: [0.0, 0.0], interp_amount: 0.0 }
+    }
+
+    pub fn with_interp(mut self, draw_offset: [f32; 2], interp_amount: f32) -> Self {
+        self.draw_offset = draw_offset;
+        self.interp_amount = interp_amount;
+        self
     }
 
     fn push_vertex_raw(&mut self, v: Vertex) -> &mut Self {
@@ -293,9 +303,10 @@ impl PrimitiveBuilder {
 
     fn push_vertex(&mut self, pos: [f32; 3], tex_coord: [f32; 2], blend: [f32; 4], normal: [f32; 3]) -> &mut Self {
         let tex_coord = if self.textured { tex_coord } else { [-1000.0, -1000.0] };
+        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
         self.push_vertex_raw(Vertex {
             pos,
-            interp: [0.0, 0.0],
+            interp,
             tex_coord,
             blend,
             normal,
