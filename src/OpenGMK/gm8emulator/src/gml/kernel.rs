@@ -5788,6 +5788,7 @@ impl Game {
         let max_cy = (pad_bottom / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
 
         if inside {
+            let mut to_deactivate = Vec::new();
             for cy in min_cy..=max_cy {
                 for cx in min_cx..=max_cx {
                     if let Some(handles) = self.room.instance_list.spatial_grid.get(&(cx, cy)) {
@@ -5807,12 +5808,15 @@ impl Game {
                                 inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
                             };
                             if !outside {
-                                changed = true;
-                                self.room.instance_list.deactivate(handle);
+                                to_deactivate.push(handle);
                             }
                         }
                     }
                 }
+            }
+            for handle in to_deactivate {
+                changed = true;
+                self.room.instance_list.deactivate(handle);
             }
         } else {
             let mut iter = self.room.instance_list.iter_by_drawing();
@@ -5929,6 +5933,7 @@ impl Game {
         let max_cy = (pad_bottom / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
 
         if inside {
+            let mut to_activate = Vec::new();
             for cy in min_cy..=max_cy {
                 for cx in min_cx..=max_cx {
                     if let Some(handles) = self.room.instance_list.spatial_grid.get(&(cx, cy)) {
@@ -5951,12 +5956,15 @@ impl Game {
                                 inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
                             };
                             if !outside {
-                                changed = true;
-                                self.room.instance_list.activate(handle);
+                                to_activate.push(handle);
                             }
                         }
                     }
                 }
+            }
+            for handle in to_activate {
+                changed = true;
+                self.room.instance_list.activate(handle);
             }
         } else {
             let mut iter = self.room.instance_list.iter_inactive();
