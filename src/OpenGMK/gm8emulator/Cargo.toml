@@ -39,6 +39,7 @@ phf = { version = "0.13", features = ["macros"] }
 ramen = { path = "../../../vendor/ramen", features = ["input", "parking-lot"] }
 rect_packer = "0.2"
 rmp3 = { version = "0.3", features = ["float"] }
+rustc-hash = "2.0"
 rust-ini = "0.21"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_with = { version = "3.16.1", features = ["alloc", "macros"], default-features = false }
@@ -64,4 +65,3 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 ndk-context = "0.1"
 jni = "0.21"
 mimalloc = { version = "0.1", default-features = false }
-

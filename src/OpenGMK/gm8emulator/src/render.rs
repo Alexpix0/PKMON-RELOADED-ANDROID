@@ -272,6 +272,7 @@ impl PrimitiveBuilder {
         self
     }
 
+    #[inline(always)]
     fn push_vertex_raw(&mut self, v: Vertex) -> &mut Self {
         // if we need to fill out a shape get the other two points
         let (v1, v2) = match self.ptype {
@@ -840,6 +841,7 @@ impl Renderer {
         self.0.wait_vsync()
     }
 
+    #[inline(always)]
     pub fn set_draw_offset(&mut self, x: f64, y: f64) {
         self.0.set_draw_offset(x, y)
     }

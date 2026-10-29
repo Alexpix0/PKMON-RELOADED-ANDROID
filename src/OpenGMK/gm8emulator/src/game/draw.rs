@@ -360,24 +360,23 @@ impl Game {
             self.renderer.clear_zbuf();
         }
 
-        // Identify player instance follow target (if any view follows an object) to synchronize shadow offset
-        let player_delta: Option<(f64, f64)> = if self.room.views_enabled {
-            self.room.views.iter().find(|x| x.visible).and_then(|v| {
-                let handle = match v.follow_target {
-                    obj_id if obj_id < 100000 => {
-                        self.room.instance_list.iter_by_identity(v.follow_target).next(&self.room.instance_list)
-                    },
-                    inst_id => self.room.instance_list.get_by_instid(inst_id),
-                };
-                handle.map(|h| {
-                    let inst = self.room.instance_list.get(h);
-                    let dx: f64 = (inst.xprevious.get() - inst.x.get()).into();
-                    let dy: f64 = (inst.yprevious.get() - inst.y.get()).into();
-                    (dx, dy)
-                })
-            })
-        } else {
-            None
+        // Universal Player Delta Detection: bypasses v.follow_target (-1 in Pokemon Reloaded)
+        let active_player_delta: Option<(f64, f64)> = {
+            let mut delta = None;
+            let mut iter = self.room.instance_list.iter();
+            while let Some(h) = iter.next(&self.room.instance_list) {
+                let inst = self.room.instance_list.get(h);
+                if let Some(obj) = self.assets.objects.get_asset(inst.object_index.get()) {
+                    let name = obj.name.0.as_bytes();
+                    if name.windows(7).any(|w| w.eq_ignore_ascii_case(b"jugador") || w.eq_ignore_ascii_case(b"trainer")) {
+                        let dx: f64 = (inst.xprevious.get() - inst.x.get()).into();
+                        let dy: f64 = (inst.yprevious.get() - inst.y.get()).into();
+                        delta = Some((dx, dy));
+                        break;
+                    }
+                }
+            }
+            delta
         };
 
         fn draw_instance(
@@ -387,7 +386,7 @@ impl Game {
             src_y: i32,
             src_w: i32,
             src_h: i32,
-            player_delta: Option<(f64, f64)>,
+            active_player_delta: Option<(f64, f64)>,
         ) -> gml::Result<()> {
             let instance = game.room.instance_list.get(idx);
             if instance.visible.get() {
@@ -397,10 +396,10 @@ impl Game {
                     (dx, dy)
                 };
 
-                // Shadow Rigid Synchronization: if drawing a shadow object or sprite, inherit the player's exact offset
-                if let Some((pdx, pdy)) = player_delta {
+                // Propagación Exclusiva a la Sombra (Protección contra objetos estáticos):
+                if let Some((pdx, pdy)) = active_player_delta {
                     if let Some(obj) = game.assets.objects.get_asset(instance.object_index.get()) {
-                        let bytes = obj.name.0.as_ref();
+                        let bytes = obj.name.0.as_bytes();
                         let is_shadow = bytes.windows(6).any(|w| w.eq_ignore_ascii_case(b"sombra") || w.eq_ignore_ascii_case(b"shadow"));
                         if is_shadow {
                             dx = pdx;
@@ -536,9 +535,9 @@ impl Game {
             match (iter_inst_v, iter_tile_v, iter_part_v) {
                 (None, None, None) => break,
                 (Some(idx_inst), None, None) => {
-                    draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, player_delta)?;
+                    draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, active_player_delta)?;
                     while let Some(idx_inst) = iter_inst.next(&self.room.instance_list) {
-                        draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, player_delta)?;
+                        draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, active_player_delta)?;
                     }
                     break
                 },
@@ -567,7 +566,7 @@ impl Game {
                             tile_cursor += 1;
                             iter_tile_v = if tile_cursor < visible_tiles_len { Some(self.draw_scratchpad.visible_tiles[tile_cursor]) } else { None };
                         } else {
-                            draw_instance(self, idx_opt_inst.unwrap(), cam_x, cam_y, cam_w, cam_h, player_delta)?;
+                            draw_instance(self, idx_opt_inst.unwrap(), cam_x, cam_y, cam_w, cam_h, active_player_delta)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
                         }
                     } else {

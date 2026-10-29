@@ -414,6 +414,7 @@ fn make_view_matrix(x: f64, y: f64, z: f64, w: f64, h: f64, angle: f64) -> [f32;
     view_matrix
 }
 
+#[inline(always)]
 fn split_colour(rgb: i32, alpha: f64) -> [f32; 4] {
     [
         ((rgb & 0xFF) as f32) / 255.0,
@@ -524,6 +525,7 @@ impl ShapeBuilder {
     }
 
     /// Shortcut for basic shapes.
+    #[inline(always)]
     fn push_point(&mut self, x: f64, y: f64, colour: i32) -> &mut Self {
         self.primitive.push_vertex([x as f32, y as f32, self.depth], [0.0, 0.0], split_colour(colour, self.alpha), [
             0.0, 0.0, 0.0,
@@ -1129,9 +1131,7 @@ impl RendererImpl {
             let start = self.vertex_queue.len();
             self.vertex_queue.extend_from_slice(builder.get_vertices());
             for v in &mut self.vertex_queue[start..] {
-                if v.interp == [0.0, 0.0] {
-                    v.interp = interp;
-                }
+                v.interp = interp;
             }
         } else {
             self.vertex_queue.extend_from_slice(builder.get_vertices());
@@ -3162,6 +3162,7 @@ impl RendererTrait for RendererImpl {
         unsafe { self.imp.wait_vsync() }
     }
 
+    #[inline(always)]
     fn set_draw_offset(&mut self, x: f64, y: f64) {
         let finite = |v: f64| {
             let v = v as f32;

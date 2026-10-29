@@ -1,2 +1,2 @@
 [target.aarch64-linux-android]
-rustflags = ["-C", "target-feature=+neon,+fp16,+dotprod"]
+rustflags = ["-C", "target-feature=+neon,+fp16,+dotprod", "-C", "link-arg=-Wl,-Bsymbolic"]

@@ -680,10 +680,23 @@ impl Game {
         }
 
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
-        let mut i = 0;
-        while let Some((object, target_list)) =
-            self.event_holders[gml::ev::COLLISION].get_index(i).map(|(x, y)| (*x, y.clone()))
-        {
+        let num_holders = self.event_holders[gml::ev::COLLISION].len();
+        for i in 0..num_holders {
+            let (object, target_list) = match self.event_holders[gml::ev::COLLISION].get_index(i) {
+                Some((&k, v)) => (k, std::rc::Rc::clone(v)),
+                None => break,
+            };
+
+            // Zero-allocation flat slice copy: drops RefCell borrow early and eradicates repeated borrows in loops
+            let mut stack_targets = [0i32; 32];
+            let target_count = {
+                let borrowed = target_list.borrow();
+                let len = borrowed.len().min(32);
+                stack_targets[..len].copy_from_slice(&borrowed[..len]);
+                len
+            };
+            let targets = &stack_targets[..target_count];
+
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
             'iter1: while let Some(instance) = iter1.next(&self.room.instance_list) {
@@ -706,8 +719,8 @@ impl Game {
                 let b1 = inst1.bbox();
                 let b1_outside = has_active_view && (b1.right < min_vx || b1.left > max_vx || b1.bottom < min_vy || b1.top > max_vy);
 
-                // Go through all its collision target objects
-                for target_obj in target_list.borrow().iter().copied() {
+                // Go through all its collision target objects via flat slice
+                for &target_obj in targets {
                     // And iter every instance of the target object
                     let mut iter2 = self.room.instance_list.iter_by_object(target_obj);
                     while let Some(target) = iter2.next(&self.room.instance_list) {
@@ -792,7 +805,6 @@ impl Game {
                     }
                 }
             }
-            i += 1;
         }
 
         Ok(())
