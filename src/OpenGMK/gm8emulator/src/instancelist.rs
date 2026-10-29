@@ -318,7 +318,7 @@ impl InstanceList {
         self.spatial_grid.clear();
         for &handle in self.draw_order.iter() {
             if let Some(inst) = self.chunks.get(handle) {
-                let coords = Self::spatial_chunk_coords(inst.x.get(), inst.y.get());
+                let coords = Self::spatial_chunk_coords(inst.x.get().0, inst.y.get().0);
                 self.spatial_grid.entry(coords).or_default().push(handle);
             }
         }

@@ -5771,11 +5771,16 @@ impl Game {
 
         self.room.instance_list.refresh_spatial_grid();
 
+        let left_f = left.0;
+        let top_f = top.0;
+        let width_f = width.0;
+        let height_f = height.0;
+
         let pad = 128.0;
-        let pad_left = left - pad;
-        let pad_top = top - pad;
-        let pad_right = left + width + pad;
-        let pad_bottom = top + height + pad;
+        let pad_left = left_f - pad;
+        let pad_top = top_f - pad;
+        let pad_right = left_f + width_f + pad;
+        let pad_bottom = top_f + height_f + pad;
 
         let min_cx = (pad_left / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
         let max_cx = (pad_right / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
@@ -5813,7 +5818,7 @@ impl Game {
             let mut iter = self.room.instance_list.iter_by_drawing();
             while let Some(handle) = iter.next(&self.room.instance_list) {
                 let inst = self.room.instance_list.get(handle);
-                let (cx, cy) = instancelist::InstanceList::spatial_chunk_coords(inst.x.get(), inst.y.get());
+                let (cx, cy) = instancelist::InstanceList::spatial_chunk_coords(inst.x.get().0, inst.y.get().0);
                 let strictly_outside = cx < min_cx || cx > max_cx || cy < min_cy || cy > max_cy;
                 if strictly_outside {
                     changed = true;
@@ -5907,11 +5912,16 @@ impl Game {
 
         self.room.instance_list.refresh_spatial_grid();
 
+        let left_f = left.0;
+        let top_f = top.0;
+        let width_f = width.0;
+        let height_f = height.0;
+
         let pad = 128.0;
-        let pad_left = left - pad;
-        let pad_top = top - pad;
-        let pad_right = left + width + pad;
-        let pad_bottom = top + height + pad;
+        let pad_left = left_f - pad;
+        let pad_top = top_f - pad;
+        let pad_right = left_f + width_f + pad;
+        let pad_bottom = top_f + height_f + pad;
 
         let min_cx = (pad_left / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
         let max_cx = (pad_right / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;

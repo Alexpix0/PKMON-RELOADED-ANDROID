@@ -1766,7 +1766,7 @@ pub extern "C" fn Java_com_klisee_reloaded_NativeBridge_nativeSetInputMask(mask:
 /// Called from the activity's `InputConnection` for every committed string.
 #[no_mangle]
 pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'local>(
-    mut env: jni::JNIEnv<'local>,
+    env: jni::JNIEnv<'local>,
     _this: jni::objects::JObject<'local>,
     text: jni::objects::JString<'local>,
 ) {
