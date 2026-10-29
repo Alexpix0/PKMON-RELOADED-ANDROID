@@ -176,6 +176,13 @@ fn detach_guard() -> Option<std::sync::RwLockWriteGuard<'static, ()>> {
     FRAME.write().ok()
 }
 
+/// Never make the Activity pump wait for a frame: if the render thread is inside a
+/// driver call (or wedged in one), skipping the surface change is safer than blocking
+/// the lifecycle forever. The pump retries later.
+fn try_detach_guard() -> Option<std::sync::RwLockWriteGuard<'static, ()>> {
+    FRAME.try_write().ok()
+}
+
 /// Creates the surface for a window the activity has just handed over, while it is still valid.
 /// Deliberately does not touch the context: that belongs to the render thread, and binding it from
 /// another thread takes it away from the one that actually draws.
@@ -219,8 +226,10 @@ pub unsafe fn attach_surface(native_window: *mut c_void) {
 /// Destroys the surface, while the window it was built on still exists: the only moment EGL can be
 /// told about it cleanly.
 pub unsafe fn detach_surface() {
-    // Waits for any frame in flight to finish before pulling the surface out from under it.
-    let _no_frame = detach_guard();
+    // Do not block the Activity thread on a render frame that may itself be waiting on EGL.
+    let Some(_no_frame) = try_detach_guard() else {
+        return;
+    };
     let Ok(mut slot) = GL.lock() else { return };
     let Some(gl) = slot.as_mut() else { return };
     if gl.surface == EGL_NO_SURFACE {
