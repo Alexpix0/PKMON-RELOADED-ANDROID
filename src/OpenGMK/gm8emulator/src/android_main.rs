@@ -1750,6 +1750,19 @@ fn ime_char_to_key(c: char) -> Key {
     }
 }
 
+/// Low-latency atomic input bus for @CriticalNative JNI bridge.
+pub static INPUT_BUS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[inline(always)]
+pub fn get_input_bus_mask() -> u32 {
+    INPUT_BUS.load(std::sync::atomic::Ordering::Acquire)
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_klisee_reloaded_NativeBridge_nativeSetInputMask(mask: i32) {
+    INPUT_BUS.store(mask as u32, std::sync::atomic::Ordering::Release);
+}
+
 /// Called from the activity's `InputConnection` for every committed string.
 #[no_mangle]
 pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'local>(
@@ -1757,7 +1770,11 @@ pub extern "system" fn Java_com_klisee_reloaded_GameActivity_nativeCommitText<'l
     _this: jni::objects::JObject<'local>,
     text: jni::objects::JString<'local>,
 ) {
+    if env.push_local_frame(16).is_err() {
+        return;
+    }
     let value: String = env.get_string(&text).map(Into::into).unwrap_or_default();
+    let _ = unsafe { env.pop_local_frame(&jni::objects::JObject::null()) };
     if value.is_empty() {
         return
     }

@@ -19,6 +19,7 @@ mod render;
 mod tile;
 mod types;
 mod util;
+pub mod profile;
 
 #[cfg(target_os = "android")]
 mod android_main;

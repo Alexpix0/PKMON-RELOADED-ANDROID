@@ -350,6 +350,7 @@ impl Game {
         port_h: i32,
         angle: f64,
     ) -> gml::Result<()> {
+        let _trace = crate::profile::ProfileScope::new(b"DrawViews\0");
         self.renderer.set_view_f64(src_x, src_y, src_w, src_h, angle, port_x, port_y, port_w, port_h);
 
         let (cam_x, cam_y, cam_w, cam_h) = (src_x as i32, src_y as i32, src_w as i32, src_h as i32);
@@ -499,6 +500,7 @@ impl Game {
         }
 
         // Zero-allocation persistent scratchpad: early spatial AABB pruning of tiles
+        let _trace_tiles = crate::profile::ProfileScope::new(b"TileCullingAABB\0");
         self.draw_scratchpad.visible_tiles.clear();
         let cam_left = src_x - 32.0;
         let cam_right = src_x + src_w + 32.0;

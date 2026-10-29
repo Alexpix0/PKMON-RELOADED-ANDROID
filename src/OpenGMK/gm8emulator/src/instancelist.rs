@@ -156,6 +156,64 @@ fn nb_coll_iter_advance<T: Copy>(coll: &[T], idx: &mut usize) -> Option<T> {
     })
 }
 
+pub const SPATIAL_CHUNK_SIZE: f64 = 256.0;
+
+#[derive(Clone, Default)]
+pub struct BitSet {
+    words: Vec<u64>,
+}
+
+impl BitSet {
+    pub fn new() -> Self {
+        Self { words: Vec::new() }
+    }
+
+    pub fn with_capacity(nbits: usize) -> Self {
+        let nwords = (nbits + 63) / 64;
+        Self { words: vec![0; nwords] }
+    }
+
+    #[inline(always)]
+    pub fn ensure_capacity(&mut self, nbits: usize) {
+        let nwords = (nbits + 63) / 64;
+        if self.words.len() < nwords {
+            self.words.resize(nwords, 0);
+        }
+    }
+
+    #[inline(always)]
+    pub fn set(&mut self, bit: usize) {
+        let idx = bit / 64;
+        if idx >= self.words.len() {
+            self.words.resize(idx + 1, 0);
+        }
+        self.words[idx] |= 1u64 << (bit % 64);
+    }
+
+    #[inline(always)]
+    pub fn clear(&mut self, bit: usize) {
+        let idx = bit / 64;
+        if idx < self.words.len() {
+            self.words[idx] &= !(1u64 << (bit % 64));
+        }
+    }
+
+    #[inline(always)]
+    pub fn test(&self, bit: usize) -> bool {
+        let idx = bit / 64;
+        if idx < self.words.len() {
+            (self.words[idx] & (1u64 << (bit % 64))) != 0
+        } else {
+            false
+        }
+    }
+
+    #[inline(always)]
+    pub fn words(&self) -> &[u64] {
+        &self.words
+    }
+}
+
 #[derive(Clone, Deserialize)]
 pub struct InstanceList {
     chunks: ChunkList<Instance>,
@@ -164,6 +222,10 @@ pub struct InstanceList {
     object_id_map_inherit: HashMap<ID, Vec<usize>>,
     #[serde(skip)]
     dirty: bool,
+    #[serde(skip)]
+    pub spatial_grid: HashMap<(i32, i32), Vec<usize>>,
+    #[serde(skip)]
+    pub active_mask: BitSet,
 }
 
 // generic purpose non-borrowing iterators
@@ -228,6 +290,37 @@ impl InstanceList {
             object_id_map: HashMap::new(),
             object_id_map_inherit: HashMap::new(),
             dirty: true,
+            spatial_grid: HashMap::new(),
+            active_mask: BitSet::new(),
+        }
+    }
+
+    #[inline(always)]
+    pub fn spatial_chunk_coords(x: f64, y: f64) -> (i32, i32) {
+        (
+            (x / SPATIAL_CHUNK_SIZE).floor() as i32,
+            (y / SPATIAL_CHUNK_SIZE).floor() as i32,
+        )
+    }
+
+    pub fn sync_active_mask(&mut self) {
+        self.active_mask = BitSet::with_capacity(self.draw_order.len() * 2);
+        for &handle in self.draw_order.iter() {
+            if let Some(inst) = self.chunks.get(handle) {
+                if inst.is_active() {
+                    self.active_mask.set(handle);
+                }
+            }
+        }
+    }
+
+    pub fn refresh_spatial_grid(&mut self) {
+        self.spatial_grid.clear();
+        for &handle in self.draw_order.iter() {
+            if let Some(inst) = self.chunks.get(handle) {
+                let coords = Self::spatial_chunk_coords(inst.x.get(), inst.y.get());
+                self.spatial_grid.entry(coords).or_default().push(handle);
+            }
         }
     }
 
@@ -331,6 +424,7 @@ impl InstanceList {
         let object_id = el.object_index.get();
         let value = self.chunks.insert(el);
         self.draw_order.push(value);
+        self.active_mask.set(value);
         self.object_id_map.entry(object_id).or_insert(Vec::new()).push(value);
         for &parent in self.get(value).parents.clone().borrow().iter() {
             self.object_id_map_inherit.entry(parent).or_insert(Vec::new()).push(value);
@@ -355,6 +449,8 @@ impl InstanceList {
         for handles in self.object_id_map_inherit.values_mut() {
             handles.retain(|&h| self.chunks.get(h).is_some());
         }
+        self.sync_active_mask();
+        self.refresh_spatial_grid();
     }
 
     // Don't forget to call finish_activation_changes(false) later!
@@ -362,6 +458,7 @@ impl InstanceList {
         let instance = self.get(handle);
         if instance.state.get() == InstanceState::Active {
             instance.state.set(InstanceState::Inactive);
+            self.active_mask.clear(handle);
         }
     }
 
@@ -370,6 +467,7 @@ impl InstanceList {
         let instance = self.get(handle);
         if instance.state.get() == InstanceState::Inactive {
             instance.state.set(InstanceState::Active);
+            self.active_mask.set(handle);
         }
     }
 
@@ -377,6 +475,7 @@ impl InstanceList {
         let instance = self.get(handle);
         if instance.state.get() != InstanceState::Deleted {
             instance.state.set(InstanceState::Deleted);
+            self.active_mask.clear(handle);
         }
     }
 

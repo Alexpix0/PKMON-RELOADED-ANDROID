@@ -659,6 +659,7 @@ impl Game {
 
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
+        let _trace = crate::profile::ProfileScope::new(b"CollisionPass\0");
         let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
 
         // Precompute camera bounding box with 128px guard margin for safe collision culling

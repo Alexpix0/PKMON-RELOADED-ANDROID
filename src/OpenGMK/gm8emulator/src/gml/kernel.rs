@@ -20,6 +20,7 @@ use crate::{
     handleman::HandleManager,
     input::MouseButton,
     instance::{Field, Instance, InstanceState},
+    instancelist,
     math::Real,
     render::{BlendType, Fog, Light, Renderer, Scaling},
     tile::Tile,
@@ -5767,24 +5768,75 @@ impl Game {
     pub fn instance_deactivate_region(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
         let (left, top, width, height, inside, notme) = expect_args!(args, [real, real, real, real, bool, bool])?;
         let mut changed = false;
-        let mut iter = self.room.instance_list.iter_by_drawing();
-        while let Some(handle) = iter.next(&self.room.instance_list) {
-            let inst = self.room.instance_list.get(handle);
-            let mask = self.get_instance_mask_sprite(handle);
-            let outside = if mask.is_some() {
-                inst.update_bbox(mask);
-                left > inst.bbox_right.get().into()
-                    || top > inst.bbox_bottom.get().into()
-                    || left + width < inst.bbox_left.get().into()
-                    || top + height < inst.bbox_top.get().into()
-            } else {
-                inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
-            };
-            if outside != inside {
-                changed = true;
-                self.room.instance_list.deactivate(handle);
+
+        self.room.instance_list.refresh_spatial_grid();
+
+        let pad = 128.0;
+        let pad_left = left - pad;
+        let pad_top = top - pad;
+        let pad_right = left + width + pad;
+        let pad_bottom = top + height + pad;
+
+        let min_cx = (pad_left / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let max_cx = (pad_right / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let min_cy = (pad_top / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let max_cy = (pad_bottom / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+
+        if inside {
+            for cy in min_cy..=max_cy {
+                for cx in min_cx..=max_cx {
+                    if let Some(handles) = self.room.instance_list.spatial_grid.get(&(cx, cy)) {
+                        for &handle in handles {
+                            if !self.room.instance_list.active_mask.test(handle) {
+                                continue;
+                            }
+                            let inst = self.room.instance_list.get(handle);
+                            let mask = self.get_instance_mask_sprite(handle);
+                            let outside = if mask.is_some() {
+                                inst.update_bbox(mask);
+                                left > inst.bbox_right.get().into()
+                                    || top > inst.bbox_bottom.get().into()
+                                    || left + width < inst.bbox_left.get().into()
+                                    || top + height < inst.bbox_top.get().into()
+                            } else {
+                                inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
+                            };
+                            if !outside {
+                                changed = true;
+                                self.room.instance_list.deactivate(handle);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            let mut iter = self.room.instance_list.iter_by_drawing();
+            while let Some(handle) = iter.next(&self.room.instance_list) {
+                let inst = self.room.instance_list.get(handle);
+                let (cx, cy) = instancelist::InstanceList::spatial_chunk_coords(inst.x.get(), inst.y.get());
+                let strictly_outside = cx < min_cx || cx > max_cx || cy < min_cy || cy > max_cy;
+                if strictly_outside {
+                    changed = true;
+                    self.room.instance_list.deactivate(handle);
+                } else {
+                    let mask = self.get_instance_mask_sprite(handle);
+                    let outside = if mask.is_some() {
+                        inst.update_bbox(mask);
+                        left > inst.bbox_right.get().into()
+                            || top > inst.bbox_bottom.get().into()
+                            || left + width < inst.bbox_left.get().into()
+                            || top + height < inst.bbox_top.get().into()
+                    } else {
+                        inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
+                    };
+                    if outside {
+                        changed = true;
+                        self.room.instance_list.deactivate(handle);
+                    }
+                }
             }
         }
+
         if notme {
             if self.room.instance_list.get(context.this).state.get() == InstanceState::Inactive {
                 changed = true;
@@ -5852,24 +5904,71 @@ impl Game {
     pub fn instance_activate_region(&mut self, args: &[Value]) -> gml::Result<Value> {
         let (left, top, width, height, inside) = expect_args!(args, [real, real, real, real, bool])?;
         let mut changed = false;
-        let mut iter = self.room.instance_list.iter_inactive();
-        while let Some(handle) = iter.next(&self.room.instance_list) {
-            let inst = self.room.instance_list.get(handle);
-            let mask = self.get_instance_mask_sprite(handle);
-            let outside = if mask.is_some() {
-                inst.update_bbox(mask);
-                left > inst.bbox_right.get().into()
-                    || top > inst.bbox_bottom.get().into()
-                    || left + width < inst.bbox_left.get().into()
-                    || top + height < inst.bbox_top.get().into()
-            } else {
-                inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
-            };
-            if outside != inside {
-                changed = true;
-                self.room.instance_list.activate(handle);
+
+        self.room.instance_list.refresh_spatial_grid();
+
+        let pad = 128.0;
+        let pad_left = left - pad;
+        let pad_top = top - pad;
+        let pad_right = left + width + pad;
+        let pad_bottom = top + height + pad;
+
+        let min_cx = (pad_left / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let max_cx = (pad_right / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let min_cy = (pad_top / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+        let max_cy = (pad_bottom / instancelist::SPATIAL_CHUNK_SIZE).floor() as i32;
+
+        if inside {
+            for cy in min_cy..=max_cy {
+                for cx in min_cx..=max_cx {
+                    if let Some(handles) = self.room.instance_list.spatial_grid.get(&(cx, cy)) {
+                        for &handle in handles {
+                            if self.room.instance_list.active_mask.test(handle) {
+                                continue;
+                            }
+                            let inst = self.room.instance_list.get(handle);
+                            if inst.state.get() != InstanceState::Inactive {
+                                continue;
+                            }
+                            let mask = self.get_instance_mask_sprite(handle);
+                            let outside = if mask.is_some() {
+                                inst.update_bbox(mask);
+                                left > inst.bbox_right.get().into()
+                                    || top > inst.bbox_bottom.get().into()
+                                    || left + width < inst.bbox_left.get().into()
+                                    || top + height < inst.bbox_top.get().into()
+                            } else {
+                                inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
+                            };
+                            if !outside {
+                                changed = true;
+                                self.room.instance_list.activate(handle);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            let mut iter = self.room.instance_list.iter_inactive();
+            while let Some(handle) = iter.next(&self.room.instance_list) {
+                let inst = self.room.instance_list.get(handle);
+                let mask = self.get_instance_mask_sprite(handle);
+                let outside = if mask.is_some() {
+                    inst.update_bbox(mask);
+                    left > inst.bbox_right.get().into()
+                        || top > inst.bbox_bottom.get().into()
+                        || left + width < inst.bbox_left.get().into()
+                        || top + height < inst.bbox_top.get().into()
+                } else {
+                    inst.x.get() < left || inst.x.get() > left + width || inst.y.get() < top || inst.y.get() > top + height
+                };
+                if outside != inside {
+                    changed = true;
+                    self.room.instance_list.activate(handle);
+                }
             }
         }
+
         if changed {
             self.room.instance_list.refresh_maps();
         }
