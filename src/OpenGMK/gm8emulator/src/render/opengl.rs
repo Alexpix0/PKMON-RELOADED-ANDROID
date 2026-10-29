@@ -437,8 +437,8 @@ fn split_colour(rgb: i32, alpha: f64) -> [f32; 4] {
 // TODO: probably put this in render.rs instead
 impl VertexBuffer {
     pub fn swap_colour(&mut self, old: (i32, f64), new: (i32, f64)) {
-        let old = split_colour(old.0, old.1);
-        let new = split_colour(new.0, new.1);
+        let old = pack_colour(old.0, old.1);
+        let new = pack_colour(new.0, new.1);
         for vert in self.points.iter_mut().chain(&mut self.lines).chain(&mut self.tris) {
             if vert.blend == old {
                 vert.blend = new;
@@ -3925,7 +3925,6 @@ impl RendererTrait for RendererImpl {
         let (tex_left, tex_top, tex_right, tex_bottom) =
             (tex_left as f32, tex_top as f32, tex_right as f32, tex_bottom as f32);
 
-        let normal = [0.0, 0.0, 0.0];
         let depth = self.depth;
 
         // rotate around draw origin
@@ -4249,7 +4248,7 @@ impl RendererTrait for RendererImpl {
         match self.primitive_3d.get_shape() {
             PrimitiveShape::Point => buf.points.extend_from_slice(verts),
             PrimitiveShape::Line => buf.lines.extend_from_slice(&verts[..verts.len() / 2 * 2]),
-            PrimitiveShape::Triangle => buf.tris.extend_from_slice(&verts[..verts.len() / 3 * 3]),
+            PrimitiveShape::Triangle | PrimitiveShape::Quad => buf.tris.extend_from_slice(&verts[..verts.len() / 3 * 3]),
         }
     }
 
