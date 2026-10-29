@@ -1119,7 +1119,18 @@ impl RendererImpl {
             }
         }
         self.setup_queue(builder.get_atlas_id(), builder.get_shape());
-        self.vertex_queue.extend_from_slice(builder.get_vertices());
+        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
+        if interp != [0.0, 0.0] {
+            let start = self.vertex_queue.len();
+            self.vertex_queue.extend_from_slice(builder.get_vertices());
+            for v in &mut self.vertex_queue[start..] {
+                if v.interp == [0.0, 0.0] {
+                    v.interp = interp;
+                }
+            }
+        } else {
+            self.vertex_queue.extend_from_slice(builder.get_vertices());
+        }
     }
 
     fn draw_buffer(&mut self, atlas_id: u32, shape: PrimitiveShape, buffer: &[Vertex]) {
@@ -4014,10 +4025,11 @@ impl RendererTrait for RendererImpl {
 
     fn draw_point(&mut self, x: f64, y: f64, colour: i32, alpha: f64) {
         self.setup_queue(self.white_pixel.atlas_id, PrimitiveShape::Point);
+        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
         self.vertex_queue.push(Vertex {
             pos: [x as f32, y as f32, self.depth],
-            interp: [0.0, 0.0],
-            tex_coord: [f32::NAN; 2],
+            interp,
+            tex_coord: [-1000.0, -1000.0],
             blend: split_colour(colour, alpha),
             atlas_xywh: self.white_pixel.into(),
             normal: [0.0, 0.0, 0.0],

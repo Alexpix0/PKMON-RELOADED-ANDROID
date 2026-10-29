@@ -383,9 +383,9 @@ impl Game {
                 // Shadow Rigid Synchronization: if drawing a shadow object or sprite, inherit the player's exact offset
                 if let Some((pdx, pdy)) = player_delta {
                     if let Some(obj) = game.assets.objects.get_asset(instance.object_index.get()) {
-                        let name = obj.name.decode_utf8();
-                        let lower = name.to_ascii_lowercase();
-                        if lower.contains("sombra") || lower.contains("shadow") {
+                        let bytes = obj.name.0.as_ref();
+                        let is_shadow = bytes.windows(6).any(|w| w.eq_ignore_ascii_case(b"sombra") || w.eq_ignore_ascii_case(b"shadow"));
+                        if is_shadow {
                             dx = pdx;
                             dy = pdy;
                         }
@@ -407,26 +407,12 @@ impl Game {
                         }
                     }
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
-                    if in_battle {
-                        let t0 = std::time::Instant::now();
-                        let _ = game.draw_instance_default(idx);
-                        BATTLE_DRAW_ENTITIES_US.fetch_add(t0.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-                        Ok(())
-                    } else {
-                        let _ = game.draw_instance_default(idx);
-                        Ok(())
-                    }
+                    let _ = game.draw_instance_default(idx);
+                    Ok(())
                 } else {
                     // Custom draw event: always execute as GML might draw HUD/GUI or global effects
                     game.renderer.set_depth(instance.depth.get().into_inner() as f32);
-                    if in_battle {
-                        let t0 = std::time::Instant::now();
-                        let res = game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None);
-                        BATTLE_DRAW_HUD_US.fetch_add(t0.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-                        res
-                    } else {
-                        game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
-                    }
+                    game.run_instance_event(gml::ev::DRAW, 0, idx, idx, None)
                 };
                 game.renderer.set_draw_offset(0.0, 0.0);
                 result

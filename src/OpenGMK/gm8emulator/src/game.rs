@@ -2225,7 +2225,6 @@ impl Game {
     /// Runs a frame loop and draws the screen. Exits immediately, without waiting for any FPS limitation.
     pub fn frame(&mut self) -> gml::Result<()> {
         let is_combat = matches!(self.room.id, 47 | 191 | 709);
-        let t_frame_start = if is_combat { Some(std::time::Instant::now()) } else { None };
         // Nothing to draw to while the activity has the window, which is exactly when the app is in
         // the background, and in the moment between it resuming and handing the window back.
         //
@@ -2305,7 +2304,6 @@ impl Game {
         }
 
         // Update xprevious and yprevious for all instances
-        let t_step_start = if is_combat { Some(std::time::Instant::now()) } else { None };
         let mut iter = self.room.instance_list.iter_by_drawing();
         while let Some(instance) = iter.next(&self.room.instance_list).map(|x| self.room.instance_list.get(x)) {
             if crate::touch_controls::active_static_partition_enabled() {
@@ -2325,9 +2323,7 @@ impl Game {
         }
 
         // Begin step event
-        let t_scripts_1 = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.run_object_event(ev::STEP, 1, None)?;
-        let dur_scripts_1 = t_scripts_1.map(|t| t.elapsed()).unwrap_or_default();
         if self.scene_change.is_some() {
             return Ok(());
         }
@@ -2384,9 +2380,7 @@ impl Game {
         }
 
         // Alarm events
-        let t_alarms = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.run_alarms()?;
-        let dur_alarms = t_alarms.map(|t| t.elapsed()).unwrap_or_default();
         if self.scene_change.is_some() {
             return Ok(());
         }
@@ -2422,15 +2416,12 @@ impl Game {
         }
 
         // Step event
-        let t_scripts_0 = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.run_object_event(ev::STEP, 0, None)?;
-        let dur_scripts_0 = t_scripts_0.map(|t| t.elapsed()).unwrap_or_default();
         if self.scene_change.is_some() {
             return Ok(());
         }
 
         // Movement: apply friction, gravity, and hspeed/vspeed
-        let t_speeds = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.process_speeds();
         let mut iter = self.room.instance_list.iter_by_drawing();
         while let Some(handle) = iter.next(&self.room.instance_list) {
@@ -2439,8 +2430,6 @@ impl Game {
                 self.run_instance_event(ev::OTHER, 8, handle, handle, None)?;
             }
         }
-        let dur_speeds = t_speeds.map(|t| t.elapsed()).unwrap_or_default();
-        let _ = dur_speeds;
 
         // Outside room, intersect boundary, outside/intersect view
         self.run_bound_events()?;
@@ -2449,9 +2438,7 @@ impl Game {
         }
 
         // Run collision events
-        let t_col_start = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.run_collisions()?;
-        let dur_col = t_col_start.map(|t| t.elapsed());
         if self.scene_change.is_some() {
             return Ok(());
         }
@@ -2463,11 +2450,7 @@ impl Game {
         }
 
         // End step event
-        let t_scripts_2 = if is_combat { Some(std::time::Instant::now()) } else { None };
         self.run_object_event(ev::STEP, 2, None)?;
-        let dur_scripts_2 = t_scripts_2.map(|t| t.elapsed()).unwrap_or_default();
-        let dur_scripts = dur_scripts_1 + dur_scripts_0 + dur_scripts_2;
-        let dur_step = t_step_start.map(|t| t.elapsed());
         if self.scene_change.is_some() {
             return Ok(());
         }
@@ -2535,7 +2518,6 @@ impl Game {
         self.room.instance_list.remove_with(|instance| instance.state.get() == InstanceState::Deleted);
 
         // Draw everything, including running draw events
-        let t_draw_start = if is_combat { Some(std::time::Instant::now()) } else { None };
         if self.auto_draw {
             if !skip_visual_frame {
                 self.draw()?;
@@ -2543,7 +2525,6 @@ impl Game {
                 self.update_views();
             }
         }
-        let dur_draw = t_draw_start.map(|t| t.elapsed());
 
         // Move backgrounds
         for bg in self.room.backgrounds.iter_mut() {
@@ -2595,57 +2576,6 @@ impl Game {
                 self.room.instance_list.len(),
                 self.room.views.len()
             );
-        }
-
-        if is_combat {
-            static COMBAT_FRAME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_TOTAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_STEP: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_SCRIPTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_COL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_ALARMS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_DRAW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_ENTITIES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-            static ACCUM_HUD: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-            let dur_total = t_frame_start.map(|t| t.elapsed()).unwrap_or_default();
-            LAST_COMBAT_FRAME_TIME_US.store(dur_total.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            let d_step = dur_step.unwrap_or_default();
-            let d_scripts = dur_scripts;
-            let d_col = dur_col.unwrap_or_default();
-            let d_alarms = dur_alarms;
-            let d_draw = dur_draw.unwrap_or_default();
-            let d_entities = crate::game::draw::BATTLE_DRAW_ENTITIES_US.swap(0, std::sync::atomic::Ordering::Relaxed);
-            let d_hud = crate::game::draw::BATTLE_DRAW_HUD_US.swap(0, std::sync::atomic::Ordering::Relaxed);
-
-            ACCUM_TOTAL.fetch_add(dur_total.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_STEP.fetch_add(d_step.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_SCRIPTS.fetch_add(d_scripts.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_COL.fetch_add(d_col.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_ALARMS.fetch_add(d_alarms.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_DRAW.fetch_add(d_draw.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_ENTITIES.fetch_add(d_entities, std::sync::atomic::Ordering::Relaxed);
-            ACCUM_HUD.fetch_add(d_hud, std::sync::atomic::Ordering::Relaxed);
-
-            let count = COMBAT_FRAME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            if count % 60 == 0 {
-                let avg_total = (ACCUM_TOTAL.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_step = (ACCUM_STEP.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_scripts = (ACCUM_SCRIPTS.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_col = (ACCUM_COL.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_alarms = (ACCUM_ALARMS.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_draw = (ACCUM_DRAW.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_entities = (ACCUM_ENTITIES.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                let avg_hud = (ACCUM_HUD.swap(0, std::sync::atomic::Ordering::Relaxed) as f64) / 60000.0;
-                eprintln!(
-                    "[PERF_COMBAT] Total: {:.1} ms | Step: {:.1} ms (Collisions: {:.1} ms) | Draw: {:.1} ms",
-                    avg_total, avg_step, avg_col, avg_draw
-                );
-                eprintln!(
-                    "[BATTLE_PROFILE] Step: {:.1} ms (Scripts: {:.1} ms | Coll: {:.1} ms | Alarms: {:.1} ms) | Draw: {:.1} ms (Entities: {:.1} ms | HUD_Text: {:.1} ms)",
-                    avg_step, avg_scripts, avg_col, avg_alarms, avg_draw, avg_entities, avg_hud
-                );
-            }
         }
 
         // Clear inputs for this frame

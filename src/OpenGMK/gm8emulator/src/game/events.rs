@@ -7,12 +7,28 @@ use crate::{
     types::ID,
 };
 
+#[inline]
+fn bytes_contains_ignore_ascii_case(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if haystack.len() < needle.len() {
+        return false;
+    }
+    haystack.windows(needle.len()).any(|w| {
+        w.iter().zip(needle.iter()).all(|(&a, &b)| a.to_ascii_lowercase() == b.to_ascii_lowercase())
+    })
+}
+
 impl Game {
     #[inline]
     fn is_pokemon_fighter(&self, object_id: i32) -> bool {
         if let Some(obj) = self.assets.objects.get_asset(object_id) {
-            let name = obj.name.decode_utf8();
-            name.contains("pokemon") || name.contains("pkmn") || name.contains("luchador") || name.contains("fighter")
+            let bytes = obj.name.0.as_ref();
+            bytes_contains_ignore_ascii_case(bytes, b"pokemon")
+                || bytes_contains_ignore_ascii_case(bytes, b"pkmn")
+                || bytes_contains_ignore_ascii_case(bytes, b"luchador")
+                || bytes_contains_ignore_ascii_case(bytes, b"fighter")
         } else {
             false
         }
@@ -21,19 +37,18 @@ impl Game {
     #[inline]
     fn is_combat_active_entity(&self, object_id: i32) -> bool {
         if let Some(obj) = self.assets.objects.get_asset(object_id) {
-            let name = obj.name.decode_utf8();
-            let lower = name.to_ascii_lowercase();
-            lower.contains("pokemon")
-                || lower.contains("pkmn")
-                || lower.contains("luchador")
-                || lower.contains("fighter")
-                || lower.contains("ataque")
-                || lower.contains("attack")
-                || lower.contains("hitbox")
-                || lower.contains("proyectil")
-                || lower.contains("bala")
-                || lower.contains("golpe")
-                || lower.contains("disparo")
+            let bytes = obj.name.0.as_ref();
+            bytes_contains_ignore_ascii_case(bytes, b"pokemon")
+                || bytes_contains_ignore_ascii_case(bytes, b"pkmn")
+                || bytes_contains_ignore_ascii_case(bytes, b"luchador")
+                || bytes_contains_ignore_ascii_case(bytes, b"fighter")
+                || bytes_contains_ignore_ascii_case(bytes, b"ataque")
+                || bytes_contains_ignore_ascii_case(bytes, b"attack")
+                || bytes_contains_ignore_ascii_case(bytes, b"hitbox")
+                || bytes_contains_ignore_ascii_case(bytes, b"proyectil")
+                || bytes_contains_ignore_ascii_case(bytes, b"bala")
+                || bytes_contains_ignore_ascii_case(bytes, b"golpe")
+                || bytes_contains_ignore_ascii_case(bytes, b"disparo")
         } else {
             false
         }
