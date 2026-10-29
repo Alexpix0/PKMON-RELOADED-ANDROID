@@ -8,7 +8,7 @@ use std::{
 /// A transparent wrapper for f64 which intended to emulate Double type from Delphi.
 #[derive(Copy, Clone, Default, Serialize, Deserialize)]
 #[repr(transparent)]
-pub struct Real(f64);
+pub struct Real(pub f64);
 
 /// The default way to round as defined by IEEE 754 - nearest, ties to even.
 pub fn ieee_round(real: f64) -> f64 {
