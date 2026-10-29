@@ -246,9 +246,7 @@ impl std::hash::Hasher for FxHasher {
     }
 }
 
-pub type FxBuildHasher = std::hash::BuildHasherDefault<FxHasher>;
-pub type FxHashMap<K, V> = std::collections::HashMap<K, V, FxBuildHasher>;
-pub type FxHashSet<V> = std::collections::HashSet<V, FxBuildHasher>;
+pub use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
 
 #[cfg(test)]
 mod tests {

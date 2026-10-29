@@ -1196,7 +1196,7 @@ impl Game {
                         None => None,
                     });
                     o.map(|b| {
-                        let mut events: [HashMap<u32, Rc<RefCell<Tree>>>; 12] = std::default::Default::default();
+                        let mut events: [rustc_hash::FxHashMap<u32, Rc<RefCell<Tree>>>; 12] = std::default::Default::default();
                         for ((i, map), input) in events.iter_mut().enumerate().zip(b.events.iter()) {
                             map.reserve(input.len());
                             for (sub, actions) in input {
