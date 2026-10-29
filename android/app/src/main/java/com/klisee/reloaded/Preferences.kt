@@ -582,22 +582,23 @@ class Preferences(private val context: Context) {
 
     /**
      * How drawing is paced: "native" keeps the original one frame per game step (the safe default),
-     * "60" and "120" interpolate at those fixed rates, and "uncapped" never waits.
+     * "60", "90" and "120" interpolate at those fixed rates, and "uncapped" never waits.
      */
     var renderMode: String
         get() {
             val stored = prefs.getString("renderMode", "native") ?: "native"
             val hz = detectedRefreshRate()
             return when (stored) {
-                "auto", "experimental" -> if (hz >= 119.5f) "120" else "60"
+                "auto", "experimental" -> if (hz >= 119.5f) "120" else if (hz >= 89.5f) "90" else "60"
                 "120" -> if (hz >= 119.5f) "120" else "native"
+                "90" -> if (hz >= 89.5f) "90" else "native"
                 "uncapped" -> if (hz >= 119.5f) "uncapped" else "native"
                 "60" -> if (hz >= 59.5f) "60" else "native"
                 else -> "native"
             }
         }
         set(value) {
-            val safe = if (value in setOf("60", "120", "uncapped")) value else "native"
+            val safe = if (value in setOf("60", "90", "120", "uncapped")) value else "native"
             prefs.edit().putString("renderMode", safe).apply()
         }
 

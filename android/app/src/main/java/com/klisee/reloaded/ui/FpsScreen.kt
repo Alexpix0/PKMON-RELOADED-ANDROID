@@ -43,6 +43,7 @@ fun FpsScreen(prefs: Preferences, onBack: () -> Unit) {
     var showFps by remember { mutableStateOf(prefs.showFps) }
     val detectedHz = remember { prefs.detectedRefreshRate() }
     val supports60 = detectedHz >= 59.5f
+    val supports90 = detectedHz >= 89.5f
     val supports120 = detectedHz >= 119.5f
 
     Scaffold(
@@ -93,7 +94,7 @@ fun FpsScreen(prefs: Preferences, onBack: () -> Unit) {
                     title = "30 FPS (Canónico GM8)",
                     subtitle = "Comportamiento clásico de GameMaker 8: 1 dibujo por paso de simulación. Tasa original histórica de Pokémon Reloaded.",
                     selected = renderMode == "native",
-                    items = 4,
+                    items = 5,
                     index = 0,
                     onSelect = {
                         renderMode = "native"
@@ -106,7 +107,7 @@ fun FpsScreen(prefs: Preferences, onBack: () -> Unit) {
                     title = "60 FPS (Interpolado Suave)",
                     subtitle = "Interpola movimiento de cámara y Pokémon a 60 FPS mediante cálculo subframe en el shader, manteniendo la simulación a 30 Hz.",
                     selected = renderMode == "60",
-                    items = 4,
+                    items = 5,
                     index = 1,
                     enabled = supports60,
                     onSelect = {
@@ -117,11 +118,25 @@ fun FpsScreen(prefs: Preferences, onBack: () -> Unit) {
                 )
                 ChoiceRow(
                     icon = Icons.Filled.Speed,
+                    title = "90 FPS (Paneles de 90 Hz)",
+                    subtitle = "Interpolación fluida a 90 FPS para pantallas de alta tasa de refresco (90 Hz).",
+                    selected = renderMode == "90",
+                    items = 5,
+                    index = 2,
+                    enabled = supports90,
+                    onSelect = {
+                        renderMode = "90"
+                        prefs.renderMode = "90"
+                        prefs.writeVideo(context.filesDir)
+                    },
+                )
+                ChoiceRow(
+                    icon = Icons.Filled.Speed,
                     title = "120 FPS (Paneles de Alta Tasa)",
                     subtitle = "Fluidez cinematográfica ultra suave para pantallas de 120 Hz. Requiere panel compatible con tasa de refresco de 120 Hz o superior.",
                     selected = renderMode == "120",
-                    items = 4,
-                    index = 2,
+                    items = 5,
+                    index = 3,
                     enabled = supports120,
                     onSelect = {
                         renderMode = "120"
@@ -134,8 +149,8 @@ fun FpsScreen(prefs: Preferences, onBack: () -> Unit) {
                     title = "Sin Límite (Uncapped)",
                     subtitle = "Dibuja a la máxima tasa que la GPU pueda producir sin bloqueo artificial de tiempo. Ideal para benchmarking y pantallas extremas.",
                     selected = renderMode == "uncapped",
-                    items = 4,
-                    index = 3,
+                    items = 5,
+                    index = 4,
                     enabled = supports120,
                     onSelect = {
                         renderMode = "uncapped"

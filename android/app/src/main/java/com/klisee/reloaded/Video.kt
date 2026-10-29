@@ -65,6 +65,7 @@ fun writeVideoFile(
     val hz = detectedHz.takeIf { it.isFinite() && it > 0f }?.let { kotlin.math.round(it).toInt() }?.coerceAtLeast(1) ?: 60
     val render = when {
         renderMode == "60" && hz >= 60 -> "60"
+        renderMode == "90" && hz >= 90 -> "90"
         renderMode == "120" && hz >= 120 -> "120"
         renderMode == "uncapped" && hz >= 120 -> "uncapped"
         else -> "native"

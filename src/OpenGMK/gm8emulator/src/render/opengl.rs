@@ -246,6 +246,7 @@ pub struct RendererImpl {
     buf_state: GLuint,         // uniform RenderState state
     draw_offset: [f32; 2],
     interp_amount: f32,
+    subpixel_delta: [f32; 2],
 
     hud_batch_active: bool,
     hud_quads: Vec<Vertex>,
@@ -912,6 +913,7 @@ impl RendererImpl {
                 buf_state,
                 draw_offset: [0.0, 0.0],
                 interp_amount: 0.0,
+                subpixel_delta: [0.0, 0.0],
 
                 hud_batch_active: false,
                 hud_quads: Vec::new(),
@@ -4427,6 +4429,9 @@ impl RendererTrait for RendererImpl {
         port_h: i32,
     ) {
         self.flush_queue();
+        // Record subpixel camera deviation for high-density screen-space projection
+        self.subpixel_delta = [(src_x - src_x.round()) as f32, (src_y - src_y.round()) as f32];
+
         // DX8's viewport function doesn't do anything if a surface is set as the draw target, so emulate that
         let mut fb_current = 0;
         unsafe {
@@ -4443,10 +4448,13 @@ impl RendererTrait for RendererImpl {
                 }
             }
         }
+        // Integer-snap camera projection within the 640x480 buffer to prevent texel edge jitter
+        let snap_x = src_x.round();
+        let snap_y = src_y.round();
         if self.using_3d && self.perspective {
-            self.set_projection_perspective(src_x, src_y, src_w, src_h, src_angle);
+            self.set_projection_perspective(snap_x, snap_y, src_w, src_h, src_angle);
         } else {
-            self.set_projection_ortho(src_x, src_y, src_w, src_h, src_angle);
+            self.set_projection_ortho(snap_x, snap_y, src_w, src_h, src_angle);
         }
     }
 
@@ -4708,7 +4716,15 @@ impl RendererTrait for RendererImpl {
             debug_assert_eq!(self.gl.GetError(), 0);
 
             let blit_y = window_height - w_y - w_h;
-            self.gl.Viewport(w_x, blit_y, w_w, w_h);
+
+            // Screen-space subpixel projection: shift the physical viewport smoothly on high-DPI panels
+            let scale = (window_width as f32 / fb_width as f32).min(window_height as f32 / fb_height as f32);
+            let subpixel_screen_x = (-self.subpixel_delta[0] * scale).round() as i32;
+            let subpixel_screen_y = (self.subpixel_delta[1] * scale).round() as i32;
+            let final_x = w_x + subpixel_screen_x;
+            let final_y = blit_y + subpixel_screen_y;
+
+            self.gl.Viewport(final_x, final_y, w_w, w_h);
 
             self.gl.Disable(gl::SCISSOR_TEST);
             self.gl.Disable(gl::DEPTH_TEST);

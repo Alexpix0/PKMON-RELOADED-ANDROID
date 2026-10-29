@@ -11,6 +11,11 @@ use serde::{Deserialize, Serialize};
 pub static BATTLE_DRAW_ENTITIES_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 pub static BATTLE_DRAW_HUD_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[derive(Clone, Debug, Default)]
+pub struct DrawScratchpad {
+    pub visible_tiles: Vec<usize>,
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum Halign {
     Left,
@@ -202,19 +207,48 @@ impl Game {
     /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
     /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
     pub fn draw(&mut self) -> gml::Result<()> {
-        // Build 71 Isolation Experiment: Strict 0.0 interp_amount and 1.0 interp_alpha bypass
-        self.interp_alpha = 1.0;
-        self.renderer.set_interp_amount(0.0);
+        self.renderer.set_interp_amount(if self.render_mode.interpolates() {
+            (1.0 - self.interp_alpha).clamp(0.0, 1.0) as f32
+        } else {
+            0.0
+        });
 
         // Update views that should be following objects
         if self.interp_update_views {
+            if self.render_mode.interpolates() && self.prev_views.is_none() {
+                self.prev_views = Some(self.room.views.clone());
+            }
             self.update_views();
         }
         if self.room.views_enabled {
             self.renderer.clear_view(self.background_colour, 1.0);
         }
 
-        let (saved_views, interp_coords): (Option<Vec<crate::game::view::View>>, Option<Vec<(f64, f64)>>) = (None, None);
+        let (saved_views, interp_coords) = if self.room.views_enabled && self.render_mode.interpolates() && self.interp_alpha < 1.0 {
+            if let Some(prev) = &self.prev_views {
+                let alpha = self.interp_alpha;
+                let current = self.room.views.clone();
+                let mut coords = Vec::with_capacity(self.room.views.len());
+                for (view, prev_view) in self.room.views.iter_mut().zip(prev.iter()) {
+                    if !view.visible || !prev_view.visible {
+                        coords.push((view.source_x as f64, view.source_y as f64));
+                        continue;
+                    }
+                    let lerp_f64 = |a: i32, b: i32| a as f64 + (b as f64 - a as f64) * alpha;
+                    let fx = lerp_f64(prev_view.source_x, view.source_x);
+                    let fy = lerp_f64(prev_view.source_y, view.source_y);
+                    // Maintain integer view.source_x/y on GameMaker instance state for GML view_xview queries
+                    view.source_x = fx.round() as i32;
+                    view.source_y = fy.round() as i32;
+                    coords.push((fx, fy));
+                }
+                (Some(current), Some(coords))
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        };
 
         // Draw all views
         if self.room.views_enabled {
@@ -223,7 +257,10 @@ impl Game {
             while let Some(&view) = self.room.views.get(count) {
                 if view.visible {
                     self.view_current = count;
-                    let (src_x, src_y) = (view.source_x as f64, view.source_y as f64);
+                    let (src_x, src_y) = interp_coords
+                        .as_ref()
+                        .and_then(|c| c.get(count).copied())
+                        .unwrap_or((view.source_x as f64, view.source_y as f64));
                     self.draw_view(
                         src_x,
                         src_y,
@@ -462,36 +499,35 @@ impl Game {
                 }
         }
 
+        // Zero-allocation persistent scratchpad: early spatial AABB pruning of tiles
+        self.draw_scratchpad.visible_tiles.clear();
+        let cam_left = src_x - 32.0;
+        let cam_right = src_x + src_w + 32.0;
+        let cam_top = src_y - 32.0;
+        let cam_bottom = src_y + src_h + 32.0;
+
+        let mut iter = self.room.tile_list.iter_by_drawing();
+        while let Some(idx) = iter.next(&self.room.tile_list) {
+            let tile = self.room.tile_list.get(idx);
+            if !tile.visible.get() {
+                continue;
+            }
+            let tx = tile.x.get().into_inner();
+            let ty = tile.y.get().into_inner();
+            let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs();
+            let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs();
+            if tx + tw < cam_left || tx > cam_right || ty + th < cam_top || ty > cam_bottom {
+                continue; // Salto inmediato: 0 accesos a texturas, matrices o profundidad
+            }
+            self.draw_scratchpad.visible_tiles.push(idx);
+        }
+
         self.room.instance_list.draw_sort();
         let mut iter_inst = self.room.instance_list.iter_by_drawing();
         let mut iter_inst_v = iter_inst.next(&self.room.instance_list);
-        // Tiles are pre-sorted at room load / modification. Iterate non-borrowing TLIterDrawOrder directly with zero per-frame allocations.
-        // Early frustum pre-skip: Cull off-screen tiles before deep depth interleaving
-        let f_cam_x1 = (src_x - 64.0) as i32;
-        let f_cam_x2 = (src_x + src_w + 64.0) as i32;
-        let f_cam_y1 = (src_y - 64.0) as i32;
-        let f_cam_y2 = (src_y + src_h + 64.0) as i32;
-
-        let next_visible_tile = |iter: &mut crate::instancelist::TLIterDrawOrder, tile_list: &crate::instancelist::TileList| -> Option<usize> {
-            while let Some(idx) = iter.next(tile_list) {
-                let tile = tile_list.get(idx);
-                if !tile.visible.get() {
-                    continue;
-                }
-                let tx = tile.x.get().into_inner() as i32;
-                let ty = tile.y.get().into_inner() as i32;
-                let tw = (tile.width.get() as f64 * tile.xscale.get().into_inner()).abs() as i32;
-                let th = (tile.height.get() as f64 * tile.yscale.get().into_inner()).abs() as i32;
-                if tx + tw < f_cam_x1 || tx > f_cam_x2 || ty + th < f_cam_y1 || ty > f_cam_y2 {
-                    continue;
-                }
-                return Some(idx);
-            }
-            None
-        };
-
-        let mut iter_tile = self.room.tile_list.iter_by_drawing();
-        let mut iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
+        let mut tile_cursor = 0usize;
+        let visible_tiles_len = self.draw_scratchpad.visible_tiles.len();
+        let mut iter_tile_v = if visible_tiles_len > 0 { Some(self.draw_scratchpad.visible_tiles[0]) } else { None };
         self.particles.draw_sort();
         let mut iter_part = self.particles.iter_by_drawing();
         let mut iter_part_v = iter_part.next(&self.particles);
@@ -508,8 +544,9 @@ impl Game {
                 },
                 (None, Some(idx_tile), None) => {
                     draw_tile(self, idx_tile, cam_x, cam_y, cam_w, cam_h);
-                    while let Some(idx_tile) = next_visible_tile(&mut iter_tile, &self.room.tile_list) {
-                        draw_tile(self, idx_tile, cam_x, cam_y, cam_w, cam_h);
+                    while tile_cursor + 1 < visible_tiles_len {
+                        tile_cursor += 1;
+                        draw_tile(self, self.draw_scratchpad.visible_tiles[tile_cursor], cam_x, cam_y, cam_w, cam_h);
                     }
                     break
                 },
@@ -527,7 +564,8 @@ impl Game {
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
                             draw_tile(self, idx_opt_tile.unwrap(), cam_x, cam_y, cam_w, cam_h);
-                            iter_tile_v = next_visible_tile(&mut iter_tile, &self.room.tile_list);
+                            tile_cursor += 1;
+                            iter_tile_v = if tile_cursor < visible_tiles_len { Some(self.draw_scratchpad.visible_tiles[tile_cursor]) } else { None };
                         } else {
                             draw_instance(self, idx_opt_inst.unwrap(), cam_x, cam_y, cam_w, cam_h, player_delta)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);

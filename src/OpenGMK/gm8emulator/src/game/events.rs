@@ -660,6 +660,25 @@ impl Game {
     /// Runs all collision events for the current active instances
     pub fn run_collisions(&mut self) -> gml::Result<()> {
         let is_battle_room = matches!(self.room.id, 47 | 191 | 709);
+
+        // Precompute camera bounding box with 128px guard margin for safe collision culling
+        let mut min_vx = i32::MAX;
+        let mut min_vy = i32::MAX;
+        let mut max_vx = i32::MIN;
+        let mut max_vy = i32::MIN;
+        let mut has_active_view = false;
+        if self.room.views_enabled {
+            for v in &self.room.views {
+                if v.visible {
+                    has_active_view = true;
+                    min_vx = min_vx.min(v.source_x - 128);
+                    min_vy = min_vy.min(v.source_y - 128);
+                    max_vx = max_vx.max(v.source_x + v.source_w + 128);
+                    max_vy = max_vy.max(v.source_y + v.source_h + 128);
+                }
+            }
+        }
+
         // Iter through every object that has a collision event registered (non-borrowing iter because Rust)
         let mut i = 0;
         while let Some((object, target_list)) =
@@ -685,6 +704,7 @@ impl Game {
                     inst1.update_bbox(mask);
                 }
                 let b1 = inst1.bbox();
+                let b1_outside = has_active_view && (b1.right < min_vx || b1.left > max_vx || b1.bottom < min_vy || b1.top > max_vy);
 
                 // Go through all its collision target objects
                 for target_obj in target_list.borrow().iter().copied() {
@@ -713,6 +733,11 @@ impl Game {
                             inst2.update_bbox(mask);
                         }
                         let b2 = inst2.bbox();
+
+                        // Safe collision culling: skip test only if both instances are > 128px outside visible views
+                        if b1_outside && (b2.right < min_vx || b2.left > max_vx || b2.bottom < min_vy || b2.top > max_vy) {
+                            continue;
+                        }
 
                         // Fast zero-allocation AABB check directly on bounding boxes
                         if b1.right < b2.left || b1.left > b2.right || b1.bottom < b2.top || b1.top > b2.bottom {

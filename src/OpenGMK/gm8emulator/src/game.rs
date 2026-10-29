@@ -233,6 +233,7 @@ pub struct Game {
     pub picker_frame_throttle: std::cell::Cell<u32>,
     pub rewind_manager: rewind::RewindManager,
     pub reset_accumulator: bool,
+    pub draw_scratchpad: draw::DrawScratchpad,
 
     pub potential_step_settings: pathfinding::PotentialStepSettings,
 
@@ -1471,6 +1472,9 @@ impl Game {
             picker_frame_throttle: std::cell::Cell::new(0),
             rewind_manager: rewind::RewindManager::new(),
             reset_accumulator: false,
+            draw_scratchpad: draw::DrawScratchpad {
+                visible_tiles: Vec::with_capacity(4096),
+            },
             potential_step_settings: Default::default(),
             transition_kind: 0,
             transition_steps: 80,
