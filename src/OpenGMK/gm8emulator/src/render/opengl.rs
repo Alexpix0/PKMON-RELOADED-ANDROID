@@ -4403,6 +4403,21 @@ impl RendererTrait for RendererImpl {
         port_w: i32,
         port_h: i32,
     ) {
+        self.set_view_f64(src_x as f64, src_y as f64, src_w as f64, src_h as f64, src_angle, port_x, port_y, port_w, port_h);
+    }
+
+    fn set_view_f64(
+        &mut self,
+        src_x: f64,
+        src_y: f64,
+        src_w: f64,
+        src_h: f64,
+        src_angle: f64,
+        port_x: i32,
+        port_y: i32,
+        port_w: i32,
+        port_h: i32,
+    ) {
         self.flush_queue();
         // DX8's viewport function doesn't do anything if a surface is set as the draw target, so emulate that
         let mut fb_current = 0;
@@ -4421,9 +4436,9 @@ impl RendererTrait for RendererImpl {
             }
         }
         if self.using_3d && self.perspective {
-            self.set_projection_perspective(src_x.into(), src_y.into(), src_w.into(), src_h.into(), src_angle);
+            self.set_projection_perspective(src_x, src_y, src_w, src_h, src_angle);
         } else {
-            self.set_projection_ortho(src_x.into(), src_y.into(), src_w.into(), src_h.into(), src_angle);
+            self.set_projection_ortho(src_x, src_y, src_w, src_h, src_angle);
         }
     }
 

@@ -219,24 +219,30 @@ impl Game {
             self.renderer.clear_view(self.background_colour, 1.0);
         }
 
-        let saved_views = if self.room.views_enabled && self.render_mode.interpolates() && self.interp_alpha < 1.0 {
+        let (saved_views, interp_coords) = if self.room.views_enabled && self.render_mode.interpolates() && self.interp_alpha < 1.0 {
             if let Some(prev) = &self.prev_views {
                 let alpha = self.interp_alpha;
                 let current = self.room.views.clone();
+                let mut coords = Vec::with_capacity(self.room.views.len());
                 for (view, prev_view) in self.room.views.iter_mut().zip(prev.iter()) {
                     if !view.visible || !prev_view.visible {
+                        coords.push((view.source_x as f64, view.source_y as f64));
                         continue;
                     }
-                    let lerp_i32 = |a: i32, b: i32| (a as f64 + (b as f64 - a as f64) * alpha).round() as i32;
-                    view.source_x = lerp_i32(prev_view.source_x, view.source_x);
-                    view.source_y = lerp_i32(prev_view.source_y, view.source_y);
+                    let lerp_f64 = |a: i32, b: i32| a as f64 + (b as f64 - a as f64) * alpha;
+                    let fx = lerp_f64(prev_view.source_x, view.source_x);
+                    let fy = lerp_f64(prev_view.source_y, view.source_y);
+                    // Maintain integer view.source_x/y on GameMaker instance state for GML view_xview queries
+                    view.source_x = fx.round() as i32;
+                    view.source_y = fy.round() as i32;
+                    coords.push((fx, fy));
                 }
-                Some(current)
+                (Some(current), Some(coords))
             } else {
-                None
+                (None, None)
             }
         } else {
-            None
+            (None, None)
         };
 
         // Draw all views
@@ -246,9 +252,13 @@ impl Game {
             while let Some(&view) = self.room.views.get(count) {
                 if view.visible {
                     self.view_current = count;
+                    let (src_x, src_y) = interp_coords
+                        .as_ref()
+                        .and_then(|c| c.get(count).copied())
+                        .unwrap_or((view.source_x as f64, view.source_y as f64));
                     self.draw_view(
-                        view.source_x,
-                        view.source_y,
+                        src_x,
+                        src_y,
                         view.source_w as _,
                         view.source_h as _,
                         view.port_x,
@@ -262,7 +272,7 @@ impl Game {
             }
             self.view_current = 0;
         } else {
-            self.draw_view(0, 0, self.room.width, self.room.height, 0, 0, self.room.width, self.room.height, 0.0)?;
+            self.draw_view(0.0, 0.0, self.room.width as f64, self.room.height as f64, 0, 0, self.room.width, self.room.height, 0.0)?;
         }
 
         if let Some(views) = saved_views {
@@ -325,17 +335,19 @@ impl Game {
     /// Draws everything in the scene using a given view rectangle
     fn draw_view(
         &mut self,
-        src_x: i32,
-        src_y: i32,
-        src_w: i32,
-        src_h: i32,
+        src_x: f64,
+        src_y: f64,
+        src_w: f64,
+        src_h: f64,
         port_x: i32,
         port_y: i32,
         port_w: i32,
         port_h: i32,
         angle: f64,
     ) -> gml::Result<()> {
-        self.renderer.set_view(src_x, src_y, src_w, src_h, angle, port_x, port_y, port_w, port_h);
+        self.renderer.set_view_f64(src_x, src_y, src_w, src_h, angle, port_x, port_y, port_w, port_h);
+
+        let (cam_x, cam_y, cam_w, cam_h) = (src_x as i32, src_y as i32, src_w as i32, src_h as i32);
 
         if self.room.show_colour {
             self.renderer.clear_view(self.room.colour, 1.0);
@@ -459,8 +471,8 @@ impl Game {
         }
 
         // Extent for drawing tiles in case view is rotated
-        let tile_end_x = f64::from(src_x + src_w + src_h / 2);
-        let tile_end_y = f64::from(src_y + src_h + src_w / 2);
+        let tile_end_x = src_x + src_w + src_h / 2.0;
+        let tile_end_y = src_y + src_h + src_w / 2.0;
     
         // draw backgrounds
         self.renderer.set_depth(12000.0);
@@ -496,16 +508,16 @@ impl Game {
             match (iter_inst_v, iter_tile_v, iter_part_v) {
                 (None, None, None) => break,
                 (Some(idx_inst), None, None) => {
-                    draw_instance(self, idx_inst, src_x, src_y, src_w, src_h, player_delta)?;
+                    draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, player_delta)?;
                     while let Some(idx_inst) = iter_inst.next(&self.room.instance_list) {
-                        draw_instance(self, idx_inst, src_x, src_y, src_w, src_h, player_delta)?;
+                        draw_instance(self, idx_inst, cam_x, cam_y, cam_w, cam_h, player_delta)?;
                     }
                     break
                 },
                 (None, Some(idx_tile), None) => {
-                    draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
+                    draw_tile(self, idx_tile, cam_x, cam_y, cam_w, cam_h);
                     while let Some(idx_tile) = iter_tile.next(&self.room.tile_list) {
-                        draw_tile(self, idx_tile, src_x, src_y, src_w, src_h);
+                        draw_tile(self, idx_tile, cam_x, cam_y, cam_w, cam_h);
                     }
                     break
                 },
@@ -522,10 +534,10 @@ impl Game {
                     let part_depth = idx_opt_part.map(|h| self.particles.get_system(h).unwrap().depth);
                     if part_depth < inst_depth && part_depth < tile_depth {
                         if inst_depth < tile_depth {
-                            draw_tile(self, idx_opt_tile.unwrap(), src_x, src_y, src_w, src_h);
+                            draw_tile(self, idx_opt_tile.unwrap(), cam_x, cam_y, cam_w, cam_h);
                             iter_tile_v = iter_tile.next(&self.room.tile_list);
                         } else {
-                            draw_instance(self, idx_opt_inst.unwrap(), src_x, src_y, src_w, src_h, player_delta)?;
+                            draw_instance(self, idx_opt_inst.unwrap(), cam_x, cam_y, cam_w, cam_h, player_delta)?;
                             iter_inst_v = iter_inst.next(&self.room.instance_list);
                         }
                     } else {

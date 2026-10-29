@@ -198,6 +198,20 @@ impl RendererTrait for VulkanRenderer {
     ) {
         self.inner.set_view(src_x, src_y, src_w, src_h, src_angle, port_x, port_y, port_w, port_h);
     }
+    fn set_view_f64(
+        &mut self,
+        src_x: f64,
+        src_y: f64,
+        src_w: f64,
+        src_h: f64,
+        src_angle: f64,
+        port_x: i32,
+        port_y: i32,
+        port_w: i32,
+        port_h: i32,
+    ) {
+        self.inner.set_view_f64(src_x, src_y, src_w, src_h, src_angle, port_x, port_y, port_w, port_h);
+    }
     fn flush_queue(&mut self) {
         self.inner.flush_queue();
     }

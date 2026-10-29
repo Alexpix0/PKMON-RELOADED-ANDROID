@@ -2848,7 +2848,7 @@ impl Game {
                 };
                 let duration = Duration::from_nanos(target_nanos);
 
-                let max_debt = duration + (duration / 4); // duration * 1.25 (~41.6 ms)
+                let max_debt = duration * 3;
                 if accumulator > max_debt {
                     if log_render {
                         eprintln!("[render] pausa de {:?}; se descarta el atraso", accumulator);
