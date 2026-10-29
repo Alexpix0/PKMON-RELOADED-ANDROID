@@ -363,11 +363,11 @@ impl Game {
         // Universal Player Delta Detection: bypasses v.follow_target (-1 in Pokemon Reloaded)
         let active_player_delta: Option<(f64, f64)> = {
             let mut delta = None;
-            let mut iter = self.room.instance_list.iter();
+            let mut iter = self.room.instance_list.iter_by_drawing();
             while let Some(h) = iter.next(&self.room.instance_list) {
                 let inst = self.room.instance_list.get(h);
                 if let Some(obj) = self.assets.objects.get_asset(inst.object_index.get()) {
-                    let name = obj.name.0.as_bytes();
+                    let name: &[u8] = obj.name.0.as_ref();
                     if name.windows(7).any(|w| w.eq_ignore_ascii_case(b"jugador") || w.eq_ignore_ascii_case(b"trainer")) {
                         let dx: f64 = (inst.xprevious.get() - inst.x.get()).into();
                         let dy: f64 = (inst.yprevious.get() - inst.y.get()).into();
@@ -399,7 +399,7 @@ impl Game {
                 // Propagación Exclusiva a la Sombra (Protección contra objetos estáticos):
                 if let Some((pdx, pdy)) = active_player_delta {
                     if let Some(obj) = game.assets.objects.get_asset(instance.object_index.get()) {
-                        let bytes = obj.name.0.as_bytes();
+                        let bytes: &[u8] = obj.name.0.as_ref();
                         let is_shadow = bytes.windows(6).any(|w| w.eq_ignore_ascii_case(b"sombra") || w.eq_ignore_ascii_case(b"shadow"));
                         if is_shadow {
                             dx = pdx;

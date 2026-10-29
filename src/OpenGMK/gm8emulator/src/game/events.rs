@@ -688,14 +688,22 @@ impl Game {
             };
 
             // Zero-allocation flat slice copy: drops RefCell borrow early and eradicates repeated borrows in loops
-            let mut stack_targets = [0i32; 32];
-            let target_count = {
+            let stack_targets: [i32; 32];
+            let heap_targets: Vec<i32>;
+            let targets: &[i32] = {
                 let borrowed = target_list.borrow();
-                let len = borrowed.len().min(32);
-                stack_targets[..len].copy_from_slice(&borrowed[..len]);
-                len
+                if borrowed.len() <= 32 {
+                    let mut buf = [0i32; 32];
+                    buf[..borrowed.len()].copy_from_slice(&borrowed);
+                    stack_targets = buf;
+                    heap_targets = Vec::new();
+                    &stack_targets[..borrowed.len()]
+                } else {
+                    heap_targets = borrowed.clone();
+                    stack_targets = [0i32; 32];
+                    &heap_targets
+                }
             };
-            let targets = &stack_targets[..target_count];
 
             // Iter every instance of this object
             let mut iter1 = self.room.instance_list.iter_by_object(object as i32);
