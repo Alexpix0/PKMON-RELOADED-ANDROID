@@ -16,77 +16,35 @@
 | REF-006 | 2026-10-30 | Realtime Audio | *Real-time audio programming 101: time waits for nothing* (Ross Bencina) | http://www.rossbencina.com/code/real-time-audio-programming-101-time-waits-for-nothing | Incorporado | Regla cero-alloc / cero-mutex en audio callback AAudio |
 | REF-007 | 2026-10-30 | Concurrency | *rtrb: Real-Time Ring Buffer (Lock-free SPSC)* | https://docs.rs/rtrb | Incorporado | SPSC wait-free ring buffer para streaming de audio y JNI events |
 | REF-008 | 2026-10-30 | SIMD & Cache | *Flavors of SIMD & Efficient Jagged Arrays* (Arseny Kapoulkine / zeux) | https://zeux.io | Incorporado | SoA vs AoS para vectorización NEON y aplanamiento de grafos/arrays |
-| **REF-009** | 2026-10-30 | Mobile GPU | *PowerVR TBDR Architecture & Hidden Surface Removal (HSR)* | https://docs.imgtec.com/starter-guides/powervr-architecture/html/topics/tile-based-deferred-rendering-index.html | **ORO** | **Rompe-stalls en TBDR:** `discard` fragmentario bloquea ISP y HSR de hardware |
-| **REF-010** | 2026-10-30 | DSP / SIMD | *64-bit ARM Optimization for Audio Signal Processing* (Superpowered) | https://superpowered.com/64-bit-arm-optimization-audio-signal-processing | **ORO** | Duplicación de registros ARM64 (32 GPRs + 32 VFP/NEON 128-bit) para hot-paths |
-| **REF-011** | 2026-10-30 | DSP / NDK | *ARM NEON SIMD for Real-Time Audio in Android NDK* | https://dev.to/software_mvp-factory/arm-neon-simd-intrinsics-for-real-time-audio-processing-in-android-ndk-fpb | **ORO** | Ocultamiento de latencia *load-to-use* (3-4 ciclos) mediante unroll x2/x4 en NEON |
-| REF-012 | 2026-10-30 | Mobile GPU | *Vulkan Mobile Development: Rendering Approaches* | https://docs.vulkan.org/tutorial/latest/Building_a_Simple_Engine/Mobile_Development/04_rendering_approaches.html | Incorporado | Subpasses y `STORE_OP_DONT_CARE` para retener datos en on-chip Tile Memory |
-| REF-013 | 2026-10-30 | SIMD / ARM | *Arm Coding Best Practice: Optimizing with Neon SIMD* | https://support.arm.com/documentation/101458/2010/Coding-best-practice/Optimizing-C-C---code-with-Arm-SIMD--Neon | Incorporado | Reglas de alineación y dual-issue en microarquitecturas Cortex-A |
-| REF-014 | 2026-10-30 | Engine / 2D | *Unity Mobile Optimisation Guide* | https://docs.unity3d.com/2019.4/Documentation/Manual/MobileOptimisation.html | Referencia | Batching de draw calls y reducción de fillrate/overdraw en 2D |
+| REF-009 | 2026-10-30 | Mobile GPU | *PowerVR TBDR Architecture & Hidden Surface Removal (HSR)* | https://docs.imgtec.com/starter-guides/powervr-architecture/html/topics/tile-based-deferred-rendering-index.html | Incorporado | Rompe-stalls en TBDR: `discard` fragmentario bloquea ISP y HSR de hardware |
+| REF-010 | 2026-10-30 | DSP / SIMD | *64-bit ARM Optimization for Audio Signal Processing* (Superpowered) | https://superpowered.com/64-bit-arm-optimization-audio-signal-processing | Incorporado | Duplicación de registros ARM64 (32 GPRs + 32 VFP/NEON 128-bit) para hot-paths |
+| REF-011 | 2026-10-30 | DSP / NDK | *ARM NEON SIMD for Real-Time Audio in Android NDK* | https://dev.to/software_mvp-factory/arm-neon-simd-intrinsics-for-real-time-audio-processing-in-android-ndk-fpb | Incorporado | Ocultamiento de latencia *load-to-use* (3-4 ciclos) mediante unroll x2/x4 en NEON |
+| **REF-015** | 2026-10-30 | Rust Perf | *Oxc Performance Guide (The JavaScript Oxidation Compiler)* | https://oxc.rs/docs/learn/performance | **ORO PURO** | **Técnicas de compilador:** Arena allocation total, structs compactos con `u32` vs `usize`, string interning |
+| **REF-016** | 2026-10-30 | Mobile GPU | *Tailor Your Apps for Apple GPUs & TBDR* (Apple Developer) | https://developer.apple.com/documentation/metal/tailor-your-apps-for-apple-gpus-and-tile-based-deferred-rendering | **ORO** | **Memoryless attachments:** render targets transitorios que jamás tocan la DRAM física |
+| REF-017 | 2026-10-30 | Mobile GPU | *PowerVR Performance Recommendations* (Imagination) | https://powervr-graphics.github.io/WebGL_SDK/WebGL_SDK/Documentation/Architecture%20Guides/PowerVR.Performance%20Recommendations.pdf | Incorporado | Prevención de saturación del *Parameter Buffer* (PB) reduciendo varyings en vertex shaders |
 
 ---
 
 ## 2. HALLAZGOS CRÍTICOS: "EL ORO" NO DOCUMENTADO PREVIAMENTE
 
-### 🌟 ORO 1: El cuello de botella de `discard` / Alpha-Test en GPUs TBDR (PowerVR / Apple / Mali)
-* **Descubrimiento:** Las GPUs TBDR cuentan con un procesador de síntesis de imagen por hardware (ISP) que realiza **Hidden Surface Removal (HSR)** *antes* de ejecutar el fragment shader, eliminando el 100% del overdraw de fragmentos ocultos.
-* **El Fallo Crítico en 2D:** Si un fragment shader contiene la instrucción `discard` (típico para transparencia de sprites: `if (tex.a < 0.1) discard;`), el hardware **no puede saber si el fragmento será visible hasta que el shader termine**.
-* **Impacto:** Provoca *deferred depth writes*, **desactiva completamente el HSR acelerado por hardware** y congela el pipeline de rasterización de la GPU (pipeline stall) para todos los triángulos posteriores del tile.
-* **Regla de Oro para OpenGMK:**
-  1. **Evitar `discard` en shaders de sprites 2D siempre que sea posible.** Usar Alpha Blending estándar (`glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)`).
-  2. Si el corte alfa es obligatorio, ordenar la cola de renderizado en 3 pases estrictos:
-     $$\text{1. Opacos (100\% HSR)} \longrightarrow \text{2. Alpha-Tested} \longrightarrow \text{3. Blended (Transparentes)}$$
-  3. Nunca intercalar quads con `discard` en medio del lote de renderizado de opacos.
+### 🌟 ORO 4: Lecciones del Compilador Oxc para el Intérprete OpenGMK (Rust Puro)
+* **Fuente:** *Oxc Performance Guide* (el parser de Rust más rápido del mundo).
+* **1. Reemplazo de Punteros/`usize` de 64 bits por `u32`:**
+  - En arquitecturas de 64 bits (ARM64 / x86_64), cada puntero o `usize` ocupa 8 bytes.
+  - Almacenar offsets de scripts, IDs de instancias y referencias a variables en `u32` (4 bytes) reduce el tamaño de las estructuras del VM a la mitad.
+  - **Ganancia directa:** Duplica la cantidad de opcodes e instancias que caben en una línea de caché L1 (64 bytes).
+* **2. Arena Allocation con Reset Global de Tick (`bumpalo`):**
+  - En lugar de alocar y liberar memoria dinámica para evaluar expresiones intermedias de GML, utilizar un *Frame Arena Allocator*.
+  - Al final del tick (`step_event`), se resetea el puntero de la arena a cero en $O(1)$ sin llamar a `free()` ni desfragmentar la memoria.
 
----
+### 🌟 ORO 5: Memoryless Attachments en TBDR (Apple / Mali / PowerVR)
+* **Fuente:** *Tailor Your Apps for Apple GPUs and Tile-Based Deferred Rendering*.
+* **Descubrimiento:** En GPUs TBDR, los buffers intermedios (como buffers de stencil para máscaras de sprites o buffers de profundidad para ordenamiento Z) pueden declararse como **Memoryless / Transient**.
+* **Impacto:** Viven 100% dentro de la memoria on-chip (Tile Memory / GMEM). Nunca se les asigna memoria RAM física del teléfono, reduciendo el consumo de ancho de banda y batería a cero durante esos pases intermedios.
 
-### 🌟 ORO 2: Explotación del Banco de 32 Registros ARM64 (Superpowered Pattern)
-* **Descubrimiento:** La transición de ARMv7 (32-bit) a ARM64 (AArch64) no solo amplía punteros a 64 bits; **duplica los registros físicos**:
-  - 31 registros de propósito general de 64 bits (`x0`-`x30`) frente a 14 en ARM32.
-  - 32 registros SIMD/punto flotante de 128 bits (`v0`-`v31`) frente a 16 o 32 de 64-bit (`d0`-`d31`).
-  - Convención ABI AArch64: 8 registros para argumentos de función y 8 para floats/vectores.
+### 🌟 ORO 6: Saturación del Parameter Buffer (PB) en TBDR por Exceso de Varyings
+* **Fuente:** *PowerVR Performance Recommendations*.
+* **Descubrimiento:** Cada atributo que un vertex shader pasa al fragment shader (`varying` en GLSL ES) se almacena en el *Parameter Buffer* (PB) de la GPU móvil antes de rasterizar los tiles.
 * **Impacto en OpenGMK:**
-  - En hot-paths de audio DSP y en el intérprete de bytecode, el compilador LLVM de Rust suele derramar variables locales a la pila (`stack spilling`) cuando faltan registros en x86 o ARM32.
-  - Forzar funciones pequeñas (inlining agresivo en hot-paths del VM loop) permite que **todo el contexto de ejecución viva en registros CPU**, eliminando accesos al stack frame (`spill/reload`).
-
----
-
-### 🌟 ORO 3: Ocultamiento de Latencia *Load-to-Use* en ARM NEON con Rust
-* **Descubrimiento:** En los núcleos ARM Cortex-A (A55, A76, A78, etc.), una carga vectorial de memoria (`vld1q_f32` o `vld1q_u32`) tiene una latencia de **3 a 4 ciclos de reloj** antes de que el valor esté disponible para una operación aritmética (`vmulq_f32`, `vaddq_f32`).
-* **El Error Común:**
-  ```rust
-  // Lento: la CPU se detiene esperando que cargue 'a' antes de multiplicar
-  let a = vld1q_f32(ptr_a);
-  let r = vmulq_f32(a, b); // STALL de 3 ciclos
-  ```
-* **Patrón de Alto Rendimiento (Interleaving & 4x Unroll):**
-  Desenrollar 4 bloques vectoriales (16 floats / 16 instancias a la vez) e intercalar todas las cargas juntas:
-  ```rust
-  // Carga paralela: oculta la latencia de memoria
-  let a0 = vld1q_f32(ptr.add(0));
-  let a1 = vld1q_f32(ptr.add(4));
-  let a2 = vld1q_f32(ptr.add(8));
-  let a3 = vld1q_f32(ptr.add(12));
-  // Las unidades de cómputo ejecutan sin stalls
-  let r0 = vmulq_f32(a0, factor);
-  let r1 = vmulq_f32(a1, factor);
-  let r2 = vmulq_f32(a2, factor);
-  let r3 = vmulq_f32(a3, factor);
-  ```
-
----
-
-## 3. Auditoría de Enlaces Proporcionados: Oro vs Ruido
-
-| Enlace / Documento | Veredicto | Motivo Técnico |
-|---|---|---|
-| `docs.imgtec.com/.../powervr-architecture` | **ORO PURO** | Detalla el funcionamiento del ISP y el colapso del HSR ante `discard`. |
-| `superpowered.com/64-bit-arm-optimization` | **ORO PURO** | Estrategia de registros ARM64 sin derrame a la pila para audio y DSP. |
-| `dev.to/.../arm-neon-simd-intrinsics` | **ORO PURO** | Patrón completo NDK: AAudio + SPSC ringbuffer + NEON 128-bit unroll. |
-| `docs.vulkan.org/.../rendering_approaches` | **ALTO VALOR** | Manejo de Tile Memory y attachments transitorios sin pisar la DRAM. |
-| `support.arm.com/.../Arm-SIMD--Neon` | **ALTO VALOR** | Guía de microarquitectura de ejecución dual en ARM. |
-| `docs.unity3d.com/.../MobileOptimisation` | **MEDIO VALOR** | Buenas prácticas generales de overdraw y batching 2D. |
-| `scribd.com/.../Conceptos-Basicos-de-Videojuegos` | *RUIDO* | Contenido introductorio para principiantes (sin valor de bajo nivel). |
-| `unipamplona.edu.co/.../guia03arduino.pdf` | *RUIDO* | Guía básica de Arduino/microcontroladores de 8 bits. |
-| `slideshare.net/.../guia-estructuras-cclicas` | *RUIDO* | Nivel escolar sobre qué es un bucle `while`/`for`. |
-| `apuntesdam.com/algoritmos` | *RUIDO* | Temario de FP general de algoritmos básicos de ordenamiento. |
-| `meshy.ai/es/blog/game-loop` | *RUIDO* | Artículo divulgativo generalista sobre el game loop. |
+  - En sprites 2D, pasar datos innecesarios por vértice satura el PB y fuerza a la GPU a volcar tiles incompletos a la memoria principal (*mid-frame render pass flush*), congelando el renderizador.
+  - Mantener la estructura del vértice compacta: solo `vec2 a_Position`, `vec2 a_TexCoord` y `vec4 a_Color` empaquetado en 4 bytes (`GL_UNSIGNED_BYTE`).

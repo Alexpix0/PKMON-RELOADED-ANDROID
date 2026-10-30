@@ -148,10 +148,17 @@ impl Window for ConsoleWindow {
                         let mut new_args: [Value; 16] = Default::default();
                         new_args[0] = self.input_string.clone().into();
                         match game.execute_string(&mut self.gml_context, &new_args) {
-                            Ok(value) => {
-                                if !self.run_code {
-                                    self.output.push(format!("{}\n", value));
-                                }
+                            Ok(value) => match value {
+                                Value::Str(string) => {
+                                    if !self.run_code {
+                                        self.output.push(format!("\"{}\"\n", string));
+                                    }
+                                },
+                                Value::Real(real) => {
+                                    if !self.run_code {
+                                        self.output.push(format!("{}\n", real));
+                                    }
+                                },
                             },
                             Err(error) => {
                                 self.run_code = false;

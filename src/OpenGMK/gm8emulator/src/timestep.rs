@@ -37,7 +37,12 @@ impl TimeStepController {
             self.accumulator -= self.fixed_dt;
         }
 
-        let alpha = ((self.accumulator / self.fixed_dt) as f32).clamp(0.0, 1.0);
+        let alpha = if self.fixed_dt > 0.0001 {
+            let a = (self.accumulator / self.fixed_dt) as f32;
+            if a.is_finite() { a.clamp(0.0, 1.0) } else { 1.0 }
+        } else {
+            1.0
+        };
         render_lerp(alpha); // Interpolación LERP continua para 90/120/144 Hz
     }
 }

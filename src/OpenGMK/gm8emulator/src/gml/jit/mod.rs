@@ -100,7 +100,7 @@ pub fn jit_engine() -> &'static GmlJitEngine {
 
 fn val_to_f64(val: &Value) -> f64 {
     match val {
-        v => v.as_real_raw(),
+        Value::Real(r) => r.into_inner(),
         _ => 0.0,
     }
 }

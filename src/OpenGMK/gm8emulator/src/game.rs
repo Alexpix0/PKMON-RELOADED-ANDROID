@@ -2690,11 +2690,11 @@ impl Game {
                 args.iter()
                     .zip(&external.signature.type_args)
                     .map(|(a, t)| match (a, t) {
-                        (a, dll::ValueType::Real) => dll::Value::Real(a.as_real_raw()),
-                        (gml::Value(0), dll::ValueType::Real) => dll::Value::Real(0.0),
-                        (a, dll::ValueType::Str) if a.is_string() => {
-                            dll::Value::Str(dll::PascalString::new(a.as_bytes_slice()))
+                        (gml::Value::Real(a), dll::ValueType::Real) => dll::Value::Real(a.into_inner()),
+                        (gml::Value::Str(a), dll::ValueType::Str) => {
+                            dll::Value::Str(dll::PascalString::new(a.as_ref()))
                         },
+                        (_, dll::ValueType::Real) => dll::Value::Real(0.0),
                         (_, dll::ValueType::Str) => dll::Value::Str(dll::PascalString::empty()),
                     })
                     .collect::<Vec<_>>()
@@ -2920,7 +2920,12 @@ impl Game {
                     step_frames += 1;
                 }
 
-                let alpha = (self.timestep.accumulator / self.timestep.fixed_dt).clamp(0.0, 1.0);
+                let alpha = if self.timestep.fixed_dt > 0.0001 {
+                    let a = self.timestep.accumulator / self.timestep.fixed_dt;
+                    if a.is_finite() { a.clamp(0.0, 1.0) } else { 1.0 }
+                } else {
+                    1.0
+                };
                 self.interp_alpha = alpha;
                 self.interp_draw = true;
                 self.interp_update_views = false;

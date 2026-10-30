@@ -1,166 +1,46 @@
 use crate::{game::external::dll, gml, math::Real};
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    fmt::{self, Display},
-    sync::{OnceLock, RwLock},
-};
+use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display};
 
-// =========================================================================
-// Global Interned String Pool for NaN-Boxing
-// =========================================================================
-
-struct StringPool {
-    strings: Vec<&'static [u8]>,
-    map: HashMap<&'static [u8], u32>,
-}
-
-fn get_pool() -> &'static RwLock<StringPool> {
-    static POOL: OnceLock<RwLock<StringPool>> = OnceLock::new();
-    POOL.get_or_init(|| {
-        RwLock::new(StringPool {
-            strings: Vec::new(),
-            map: HashMap::new(),
-        })
-    })
-}
-
-fn intern_string(bytes: &[u8]) -> u32 {
-    {
-        let pool = get_pool().read().unwrap();
-        if let Some(&id) = pool.map.get(bytes) {
-            return id;
-        }
-    }
-    let mut pool = get_pool().write().unwrap();
-    if let Some(&id) = pool.map.get(bytes) {
-        return id;
-    }
-    let leaked: &'static [u8] = Box::leak(bytes.to_vec().into_boxed_slice());
-    let id = pool.strings.len() as u32;
-    pool.strings.push(leaked);
-    pool.map.insert(leaked, id);
-    id
-}
-
-fn get_interned_string(id: usize) -> &'static [u8] {
-    let pool = get_pool().read().unwrap();
-    if id < pool.strings.len() {
-        pool.strings[id]
-    } else {
-        b""
-    }
-}
-
-// =========================================================================
-// 64-bit NaN-Boxing Value
-// =========================================================================
-
-pub const STR_TAG: u64 = 0x7FF8_0001_0000_0000;
-pub const STR_TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
-pub const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
-pub const CMP_EPSILON: f64 = 0.00001;
-
-#[derive(Copy, Clone)]
-#[repr(transparent)]
-pub struct Value(pub u64);
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ValueView {
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize, PartialOrd)]
+pub enum Value {
     Real(Real),
     Str(gml::String),
-}
-
-#[derive(Serialize, Deserialize)]
-enum SerdeValue {
-    Real(Real),
-    Str(gml::String),
-}
-
-impl Serialize for Value {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        if self.is_real() {
-            SerdeValue::Real(Real::from(f64::from_bits(self.0))).serialize(serializer)
-        } else {
-            SerdeValue::Str(self.as_string()).serialize(serializer)
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for Value {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let sv = SerdeValue::deserialize(deserializer)?;
-        Ok(match sv {
-            SerdeValue::Real(r) => Value::from_real(r),
-            SerdeValue::Str(s) => Value::from_string(s.as_ref()),
-        })
-    }
-}
-
-impl PartialEq for Value {
-    #[inline(always)]
-    fn eq(&self, other: &Self) -> bool {
-        if self.0 == other.0 {
-            return true;
-        }
-        if self.is_real() && other.is_real() {
-            f64::from_bits(self.0) == f64::from_bits(other.0)
-        } else if self.is_string() && other.is_string() {
-            self.as_bytes_slice() == other.as_bytes_slice()
-        } else {
-            false
-        }
-    }
-}
-
-impl Eq for Value {}
-
-impl PartialOrd for Value {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self.is_real() && other.is_real() {
-            f64::from_bits(self.0).partial_cmp(&f64::from_bits(other.0))
-        } else if self.is_string() && other.is_string() {
-            self.as_bytes_slice().partial_cmp(other.as_bytes_slice())
-        } else if self.is_real() {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            Some(std::cmp::Ordering::Greater)
-        }
-    }
-}
-
-impl Ord for Value {
-    #[inline]
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
-    }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_real() {
-            write!(f, "{}", Real::from(self.as_real_raw()))
-        } else {
-            write!(f, "\"{}\"", self.as_string())
+        match self {
+            Self::Real(r) => write!(f, "{}", r),
+            Self::Str(s) => write!(f, "\"{}\"", s),
         }
     }
 }
 
-impl fmt::Debug for Value {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_real() {
-            write!(f, "Real({:?})", Real::from(self.as_real_raw()))
-        } else {
-            write!(f, "Str({:?})", self.as_string())
-        }
-    }
+macro_rules! gml_cmp_impl {
+    ($($v: vis $fname: ident aka $op_variant: ident: real: $r_cond: expr, string: $s_cond: expr)*) => {
+        $(
+            $v fn $fname(self, rhs: Self) -> gml::Result<Self> {
+                let freal: fn(Real) -> bool = $r_cond;
+                let fstr: fn(&[u8], &[u8]) -> bool = $s_cond;
+                Ok(if match (self, rhs) {
+                    (Self::Real(a), Self::Real(b)) => freal((a - b)),
+                    (Self::Str(a), Self::Str(b)) => {
+                        if std::rc::Rc::ptr_eq(&a.0, &b.0) {
+                            fstr(b"", b"")
+                        } else {
+                            fstr(a.as_ref(), b.as_ref())
+                        }
+                    },
+                    (a, b) => return invalid_op!($op_variant, a, b),
+                } {
+                    super::TRUE
+                } else {
+                    super::FALSE
+                }.into())
+            }
+        )*
+    };
 }
 
 macro_rules! invalid_op {
@@ -173,113 +53,128 @@ macro_rules! invalid_op {
 }
 
 impl Value {
-    #[inline(always)]
-    pub fn is_real(&self) -> bool {
-        (self.0 & STR_TAG_MASK) != STR_TAG
+    // All the GML comparison operators (which return Value not bool).
+    #[rustfmt::skip]
+    gml_cmp_impl! {
+        pub gml_eq aka Equal:
+            real: |diff| diff.abs() < Real::CMP_EPSILON,
+            string: |s1, s2| s1 == s2
+
+        pub gml_ne aka NotEqual:
+            real: |diff| diff.abs() >= Real::CMP_EPSILON,
+            string: |s1, s2| s1 != s2
+
+        pub gml_lt aka LessThan:
+            real: |diff| diff <= -Real::CMP_EPSILON,
+            string: |s1, s2| s1 < s2
+
+        pub gml_lte aka LessThanOrEqual:
+            real: |diff| diff < Real::CMP_EPSILON,
+            string: |s1, s2| s1 <= s2
+
+        pub gml_gt aka GreaterThan:
+            real: |diff| diff >= Real::CMP_EPSILON,
+            string: |s1, s2| s1 > s2
+
+        pub gml_gte aka GreaterThanOrEqual:
+            real: |diff| diff > -Real::CMP_EPSILON,
+            string: |s1, s2| s1 >= s2
     }
 
-    #[inline(always)]
-    pub fn is_string(&self) -> bool {
-        (self.0 & STR_TAG_MASK) == STR_TAG
-    }
-
-    #[inline(always)]
-    pub fn from_real(val: impl Into<f64>) -> Self {
-        let f: f64 = val.into();
-        if f.is_nan() {
-            Value(0x7FF8_0000_0000_0000)
-        } else {
-            Value(f.to_bits())
+    pub fn max<'a>(&'a self, other: &'a Self) -> &'a Self {
+        // Real never beats String on type mismatch, and String only beats Real if the Real is below 0.
+        match (self, other) {
+            (Value::Real(a), Value::Real(b)) => {
+                if a > b {
+                    self
+                } else {
+                    other
+                }
+            },
+            (Value::Real(a), Value::Str(_)) => {
+                if *a.as_ref() < 0.0 {
+                    other
+                } else {
+                    self
+                }
+            },
+            (Value::Str(_), Value::Real(_)) => self,
+            (Value::Str(a), Value::Str(b)) => {
+                if a > b {
+                    self
+                } else {
+                    other
+                }
+            },
         }
     }
 
-    #[inline(always)]
-    pub fn from_string(bytes: impl AsRef<[u8]>) -> Self {
-        let id = intern_string(bytes.as_ref());
-        Value(STR_TAG | (id as u64 & PAYLOAD_MASK))
-    }
-
-    #[inline(always)]
-    pub fn Real(r: Real) -> Self {
-        Self::from_real(r)
-    }
-
-    #[inline(always)]
-    pub fn Str(s: gml::String) -> Self {
-        Self::from_string(s.as_ref())
-    }
-
-    #[inline(always)]
-    pub fn view(&self) -> ValueView {
-        if self.is_real() {
-            ValueView::Real(Real::from(f64::from_bits(self.0)))
-        } else {
-            ValueView::Str(self.as_string())
+    pub fn min<'a>(&'a self, other: &'a Self) -> &'a Self {
+        // Real always beats String on type mismatch, and String only beats Real if the Real is above 0.
+        match (self, other) {
+            (Value::Real(a), Value::Real(b)) => {
+                if a > b {
+                    other
+                } else {
+                    self
+                }
+            },
+            (Value::Real(a), Value::Str(_)) => {
+                if *a.as_ref() > 0.0 {
+                    other
+                } else {
+                    self
+                }
+            },
+            (Value::Str(_), Value::Real(_)) => other,
+            (Value::Str(a), Value::Str(b)) => {
+                if a > b {
+                    other
+                } else {
+                    self
+                }
+            },
         }
-    }
-
-    #[inline(always)]
-    pub fn as_real_raw(&self) -> f64 {
-        if self.is_real() {
-            f64::from_bits(self.0)
-        } else {
-            0.0
-        }
-    }
-
-    #[inline(always)]
-    pub fn as_real(&self) -> Option<Real> {
-        if self.is_real() {
-            Some(Real::from(f64::from_bits(self.0)))
-        } else {
-            None
-        }
-    }
-
-    #[inline(always)]
-    pub fn as_bytes_slice(&self) -> &'static [u8] {
-        if self.is_string() {
-            get_interned_string((self.0 & PAYLOAD_MASK) as usize)
-        } else {
-            b""
-        }
-    }
-
-    #[inline(always)]
-    pub fn as_string(&self) -> gml::String {
-        gml::String::from(self.as_bytes_slice())
     }
 
     pub fn ty_str(&self) -> &'static str {
-        if self.is_real() {
-            "real"
-        } else {
-            "string"
+        match self {
+            Self::Real(_) => "real",
+            Self::Str(_) => "string",
         }
     }
 
+    /// GML-like comparison, fails if self and other are different types.
     pub fn almost_equals(&self, other: &Self) -> bool {
-        if self.is_real() && other.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(other.0);
-            diff.abs() < CMP_EPSILON
-        } else if self.is_string() && other.is_string() {
-            self.0 == other.0 || self.as_bytes_slice() == other.as_bytes_slice()
-        } else {
-            false
+        match (self, other) {
+            (Self::Real(a), Self::Real(b)) => *a == *b,
+            (Self::Str(a), Self::Str(b)) => std::rc::Rc::ptr_eq(&a.0, &b.0) || a.as_ref() == b.as_ref(),
+            _ => false,
         }
     }
 
-    #[inline(always)]
+    /// Rounds the value to an i32. This is done very commonly by the GM8 runner.
     pub fn round(&self) -> i32 {
-        if self.is_real() {
-            f64::from_bits(self.0).round() as i32
-        } else {
-            0
+        match &self {
+            Self::Real(f) => f.round().to_i32(),
+            Self::Str(_) => 0,
+        }
+    }
+
+    /// Formats the value as a number or a string with quotes around it so you can see that it is.
+    /// Used in generating error messages.
+    fn log_fmt(&self) -> String {
+        match self {
+            Self::Real(real) => real.to_string(),
+            Self::Str(string) => format!("\"{}\"", string),
         }
     }
 
     pub fn is_truthy(&self) -> bool {
-        self.is_real() && f64::from_bits(self.0) >= 0.5
+        match self {
+            Self::Real(f) => f.into_inner() >= 0.5,
+            Self::Str(_) => false,
+        }
     }
 
     #[inline]
@@ -287,317 +182,253 @@ impl Value {
         self.is_truthy()
     }
 
+    pub fn as_real(&self) -> Option<Real> {
+        match self {
+            Self::Real(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn is_real(&self) -> bool {
+        matches!(self, Self::Real(_))
+    }
+
+    #[inline(always)]
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::Str(_))
+    }
+
+    #[inline(always)]
+    pub fn as_real_raw(&self) -> f64 {
+        match self {
+            Self::Real(r) => r.into_inner(),
+            _ => 0.0,
+        }
+    }
+
+    #[inline(always)]
+    pub fn as_bytes_slice(&self) -> &[u8] {
+        match self {
+            Self::Str(s) => s.as_ref(),
+            _ => b"",
+        }
+    }
+
+    #[inline(always)]
+    pub fn from_real(val: impl Into<Real>) -> Self {
+        Self::Real(val.into())
+    }
+
+    #[inline(always)]
+    pub fn from_string(bytes: impl AsRef<[u8]>) -> Self {
+        Self::Str(bytes.as_ref().into())
+    }
+
+    /// Unary bit complement.
     pub fn complement(self) -> gml::Result<Self> {
-        if self.is_real() {
-            Ok((!(self.round() as u64)).into())
-        } else {
-            invalid_op!(Complement, self)
+        match self {
+            Self::Real(val) => Ok((!val.round().to_u64()).into()),
+            _ => invalid_op!(Complement, self),
         }
     }
 
+    /// GML operator 'div' which gives the whole number of times RHS can go into LHS. In other words floor(lhs/rhs)
     pub fn intdiv(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let r = f64::from_bits(rhs.0);
-            if r == 0.0 {
-                return Ok(Self::from_real(0.0));
-            }
-            Ok(Self::from_real((f64::from_bits(self.0) / r).floor()))
-        } else {
-            invalid_op!(IntDivide, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs / rhs).floor().into()),
+            (x, y) => invalid_op!(IntDivide, x, y),
         }
     }
 
+    /// GML && operator
     pub fn bool_and(self, rhs: Self) -> gml::Result<Self> {
         Ok((self.is_truthy() && rhs.is_truthy()).into())
     }
 
+    /// GML || operator
     pub fn bool_or(self, rhs: Self) -> gml::Result<Self> {
         Ok((self.is_truthy() || rhs.is_truthy()).into())
     }
 
+    /// GML ^^ operator
     pub fn bool_xor(self, rhs: Self) -> gml::Result<Self> {
         Ok((self.is_truthy() != rhs.is_truthy()).into())
     }
 
     pub fn add(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(Self::from_real(f64::from_bits(self.0) + f64::from_bits(rhs.0)))
-        } else if self.is_string() && rhs.is_string() {
-            let l = self.as_bytes_slice();
-            let r = rhs.as_bytes_slice();
-            let mut buf = Vec::with_capacity(l.len() + r.len());
-            buf.extend_from_slice(l);
-            buf.extend_from_slice(r);
-            Ok(Self::from_string(&buf))
-        } else {
-            invalid_op!(Add, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs + rhs).into()),
+            (Self::Str(lhs), Self::Str(rhs)) => {
+                let mut buf = Vec::with_capacity(lhs.as_ref().len() + rhs.as_ref().len());
+                buf.extend_from_slice(lhs.as_ref());
+                buf.extend_from_slice(rhs.as_ref());
+                Ok(buf.into())
+            },
+            (x, y) => invalid_op!(Add, x, y),
         }
     }
 
     pub fn add_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.add(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs += rhs),
+            (Self::Str(lhs), Self::Str(ref rhs)) => {
+                // TODO: a
+                let mut buf = Vec::with_capacity(lhs.as_ref().len() + rhs.as_ref().len());
+                buf.extend_from_slice(lhs.as_ref());
+                buf.extend_from_slice(rhs.as_ref());
+                *lhs = buf.into();
+                Ok(())
+            },
+            (x, y) => invalid_op!(AssignAdd, x.clone(), y),
+        }
     }
 
     pub fn bitand(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(((self.round() as u64) & (rhs.round() as u64)).into())
-        } else {
-            invalid_op!(BitwiseAnd, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs.round().to_u64() & rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(BitwiseAnd, x, y),
         }
     }
 
     pub fn bitand_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.bitand(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs = (lhs.round().to_u64() & rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(AssignBitwiseAnd, x.clone(), y),
+        }
     }
 
     pub fn bitor(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(((self.round() as u64) | (rhs.round() as u64)).into())
-        } else {
-            invalid_op!(BitwiseOr, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs.round().to_u64() | rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(BitwiseOr, x, y),
         }
     }
 
     pub fn bitor_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.bitor(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs = (lhs.round().to_u64() | rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(AssignBitwiseOr, x.clone(), y),
+        }
     }
 
     pub fn bitxor(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(((self.round() as u64) ^ (rhs.round() as u64)).into())
-        } else {
-            invalid_op!(BitwiseXor, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs.round().to_u64() ^ rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(BitwiseXor, x, y),
         }
     }
 
     pub fn bitxor_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.bitxor(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs = (lhs.round().to_u64() ^ rhs.round().to_u64()).into()),
+            (x, y) => invalid_op!(AssignBitwiseXor, x.clone(), y),
+        }
     }
 
     pub fn div(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let r = f64::from_bits(rhs.0);
-            if r == 0.0 {
-                return Ok(Self::from_real(0.0));
-            }
-            Ok(Self::from_real(f64::from_bits(self.0) / r))
-        } else {
-            invalid_op!(Divide, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs / rhs).into()),
+            (x, y) => invalid_op!(Divide, x, y),
         }
     }
 
     pub fn div_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.div(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs /= rhs),
+            (x, y) => invalid_op!(AssignDivide, x.clone(), y),
+        }
     }
 
     pub fn modulo(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let l = f64::from_bits(self.0);
-            let r = f64::from_bits(rhs.0);
-            if r == 0.0 {
-                return Ok(Self::from_real(0.0));
-            }
-            Ok(Self::from_real(l - (l / r).trunc() * r))
-        } else {
-            invalid_op!(Modulo, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(Self::Real(lhs - (lhs / rhs).floor_towards_zero() * rhs)),
+            (x, y) => invalid_op!(Modulo, x, y),
         }
     }
 
     pub fn mul(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(Self::from_real(f64::from_bits(self.0) * f64::from_bits(rhs.0)))
-        } else if self.is_real() && rhs.is_string() {
-            let repeat = self.round();
-            if repeat > 0 {
-                let slice = rhs.as_bytes_slice();
-                Ok(Self::from_string(&slice.repeat(repeat as usize)))
-            } else {
-                Ok(Self::from_string(b""))
-            }
-        } else {
-            invalid_op!(Multiply, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs * rhs).into()),
+            (Self::Real(lhs), Self::Str(rhs)) => Ok({
+                let repeat = lhs.round().to_i32();
+                if repeat > 0 { rhs.as_ref().repeat(repeat as usize).into() } else { "".into() }
+            }),
+            (x, y) => invalid_op!(Multiply, x, y),
         }
     }
 
     pub fn mul_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.mul(rhs)?;
-        Ok(())
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs *= rhs),
+            (x, y) => invalid_op!(AssignMultiply, x.clone(), y),
+        }
     }
 
     pub fn neg(self) -> gml::Result<Self> {
-        if self.is_real() {
-            Ok(Self::from_real(-f64::from_bits(self.0)))
-        } else {
-            invalid_op!(Subtract, self)
+        match self {
+            Self::Real(f) => Ok((-f).into()),
+            Self::Str(_) => invalid_op!(Subtract, self),
         }
     }
 
     pub fn not(self) -> gml::Result<Self> {
-        if self.is_real() {
-            Ok((!self.is_truthy()).into())
-        } else {
-            invalid_op!(Not, self)
+        match self {
+            Self::Real(_) => Ok((!self.is_truthy()).into()),
+            Self::Str(_) => invalid_op!(Not, self),
         }
     }
 
     pub fn shl(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let shift = rhs.round() as i8;
-            Ok(((self.round() as u64).wrapping_shl(shift as u32)).into())
-        } else {
-            invalid_op!(BinaryShiftLeft, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs.round().to_u64() << rhs.round().to_i8()).into()),
+            (x, y) => invalid_op!(BinaryShiftLeft, x, y),
         }
     }
 
     pub fn shr(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let shift = rhs.round() as i8;
-            Ok(((self.round() as u64).wrapping_shr(shift as u32)).into())
-        } else {
-            invalid_op!(BinaryShiftRight, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs.round().to_u64() >> rhs.round().to_i8()).into()),
+            (x, y) => invalid_op!(BinaryShiftRight, x, y),
         }
     }
 
     pub fn sub(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            Ok(Self::from_real(f64::from_bits(self.0) - f64::from_bits(rhs.0)))
-        } else {
-            invalid_op!(Subtract, self, rhs)
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok((lhs - rhs).into()),
+            (x, y) => invalid_op!(Subtract, x, y),
         }
     }
 
     pub fn sub_assign(&mut self, rhs: Self) -> gml::Result<()> {
-        *self = self.sub(rhs)?;
-        Ok(())
-    }
-
-    // Comparison operators (GML returns Value, not bool)
-    pub fn gml_eq(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff.abs() < CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            let eq = (self.0 == rhs.0) || (self.as_bytes_slice() == rhs.as_bytes_slice());
-            Ok(if eq { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(Equal, self, rhs)
-        }
-    }
-
-    pub fn gml_ne(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff.abs() >= CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            let ne = (self.0 != rhs.0) && (self.as_bytes_slice() != rhs.as_bytes_slice());
-            Ok(if ne { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(NotEqual, self, rhs)
-        }
-    }
-
-    pub fn gml_lt(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff <= -CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            Ok(if self.as_bytes_slice() < rhs.as_bytes_slice() { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(LessThan, self, rhs)
-        }
-    }
-
-    pub fn gml_lte(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff < CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            Ok(if self.as_bytes_slice() <= rhs.as_bytes_slice() { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(LessThanOrEqual, self, rhs)
-        }
-    }
-
-    pub fn gml_gt(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff >= CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            Ok(if self.as_bytes_slice() > rhs.as_bytes_slice() { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(GreaterThan, self, rhs)
-        }
-    }
-
-    pub fn gml_gte(self, rhs: Self) -> gml::Result<Self> {
-        if self.is_real() && rhs.is_real() {
-            let diff = f64::from_bits(self.0) - f64::from_bits(rhs.0);
-            Ok(if diff > -CMP_EPSILON { super::TRUE } else { super::FALSE }.into())
-        } else if self.is_string() && rhs.is_string() {
-            Ok(if self.as_bytes_slice() >= rhs.as_bytes_slice() { super::TRUE } else { super::FALSE }.into())
-        } else {
-            invalid_op!(GreaterThanOrEqual, self, rhs)
-        }
-    }
-
-    pub fn max(self, other: Self) -> Self {
-        if self.is_real() && other.is_real() {
-            if f64::from_bits(self.0) > f64::from_bits(other.0) { self } else { other }
-        } else if self.is_real() && other.is_string() {
-            if f64::from_bits(self.0) < 0.0 { other } else { self }
-        } else if self.is_string() && other.is_real() {
-            self
-        } else if self.is_string() && other.is_string() {
-            if self.as_bytes_slice() > other.as_bytes_slice() { self } else { other }
-        } else {
-            self
-        }
-    }
-
-    pub fn min(self, other: Self) -> Self {
-        if self.is_real() && other.is_real() {
-            if f64::from_bits(self.0) > f64::from_bits(other.0) { other } else { self }
-        } else if self.is_real() && other.is_string() {
-            if f64::from_bits(self.0) > 0.0 { other } else { self }
-        } else if self.is_string() && other.is_real() {
-            other
-        } else if self.is_string() && other.is_string() {
-            if self.as_bytes_slice() > other.as_bytes_slice() { other } else { self }
-        } else {
-            other
+        match (self, rhs) {
+            (Self::Real(lhs), Self::Real(rhs)) => Ok(*lhs -= rhs),
+            (x, y) => invalid_op!(AssignSubtract, x.clone(), y),
         }
     }
 
     pub fn repr(&self) -> gml::String {
-        if self.is_real() {
-            let r = Real::from(self.as_real_raw());
-            if r.fract().into_inner() == 0.0 {
-                format!("{:.0}", r).into()
-            } else {
-                format!("{:.2}", r).into()
-            }
-        } else {
-            self.as_string()
+        match self {
+            Self::Real(r) if r.fract().into_inner() == 0.0 => format!("{:.0}", r).into(),
+            Self::Real(r) => format!("{:.2}", r).into(),
+            Self::Str(string) => string.clone(),
         }
     }
 
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(16);
-        if self.is_real() {
-            bytes.resize(4, 0);
-            bytes.extend_from_slice(&self.as_real_raw().to_le_bytes());
-            bytes.resize(16, 0);
-        } else {
-            let slice = self.as_bytes_slice();
-            bytes.push(1);
-            bytes.resize(12, 0);
-            bytes.extend_from_slice(&(slice.len() as u32).to_le_bytes());
-            bytes.extend_from_slice(slice);
+        match self {
+            Self::Real(x) => {
+                bytes.resize(4, 0);
+                bytes.extend_from_slice(&f64::from(*x).to_le_bytes());
+                bytes.resize(16, 0);
+            },
+            Self::Str(s) => {
+                bytes.push(1);
+                bytes.resize(12, 0);
+                bytes.extend_from_slice(&(s.as_ref().len() as u32).to_le_bytes());
+                bytes.extend_from_slice(s.as_ref());
+            },
         }
         bytes
     }
@@ -607,12 +438,12 @@ impl Value {
         reader.read_exact(&mut block).ok()?;
         if block.len() == 16 {
             match u32::from_le_bytes(block[0..4].try_into().unwrap()) {
-                0 => Some(Self::from_real(f64::from_le_bytes(block[4..12].try_into().unwrap()))),
+                0 => Some(f64::from_le_bytes(block[4..12].try_into().unwrap()).into()),
                 1 => {
                     let len = u32::from_le_bytes(block[12..16].try_into().unwrap());
                     let mut buf = vec![0; len as usize];
                     reader.read_exact(&mut buf).ok()?;
-                    Some(Self::from_string(&buf))
+                    Some(buf.into())
                 },
                 _ => None,
             }
@@ -622,157 +453,155 @@ impl Value {
     }
 }
 
-// Conversions
 impl From<f64> for Value {
-    #[inline(always)]
     fn from(value: f64) -> Self {
-        Self::from_real(value)
+        Self::Real(value.into())
     }
 }
 
 impl From<Real> for Value {
-    #[inline(always)]
     fn from(value: Real) -> Self {
-        Self::from_real(value)
+        Self::Real(value)
     }
 }
 
 impl From<i32> for Value {
-    #[inline(always)]
     fn from(value: i32) -> Self {
-        Self::from_real(value as f64)
+        Self::Real(value.into())
     }
 }
 
 impl From<u32> for Value {
-    #[inline(always)]
     fn from(value: u32) -> Self {
-        Self::from_real(value as f64)
+        Self::Real(value.into())
     }
 }
 
 impl From<u64> for Value {
-    #[inline(always)]
     fn from(value: u64) -> Self {
-        Self::from_real(value as f64)
+        (value as f64).into()
     }
 }
 
 impl From<usize> for Value {
-    #[inline(always)]
     fn from(value: usize) -> Self {
-        Self::from_real(value as f64)
+        (value as f64).into()
     }
 }
 
 impl From<u8> for Value {
-    #[inline(always)]
     fn from(value: u8) -> Self {
-        Self::from_real(value as f64)
+        Self::Real(value.into())
     }
 }
 
 impl From<bool> for Value {
-    #[inline(always)]
     fn from(value: bool) -> Self {
-        Self::from_real(if value { gml::TRUE } else { gml::FALSE } as f64)
+        Self::Real(if value { gml::TRUE } else { gml::FALSE }.into())
     }
 }
 
 impl From<gml::String> for Value {
-    #[inline(always)]
     fn from(value: gml::String) -> Self {
-        Self::from_string(value.as_ref())
+        Self::Str(value)
     }
 }
 
 impl From<String> for Value {
-    #[inline(always)]
     fn from(value: String) -> Self {
-        Self::from_string(value.as_bytes())
+        Self::Str(value.into())
     }
 }
 
 impl From<&str> for Value {
-    #[inline(always)]
     fn from(value: &str) -> Self {
-        Self::from_string(value.as_bytes())
+        Self::Str(value.into())
     }
 }
 
 impl From<Vec<u8>> for Value {
-    #[inline(always)]
     fn from(value: Vec<u8>) -> Self {
-        Self::from_string(&value)
+        Self::Str(value.into())
     }
 }
 
 impl From<&[u8]> for Value {
-    #[inline(always)]
     fn from(value: &[u8]) -> Self {
-        Self::from_string(value)
+        Self::Str(value.into())
     }
 }
 
 impl From<Value> for i32 {
-    #[inline(always)]
+    // For lazy-converting a value into an i32.
     fn from(value: Value) -> Self {
-        value.round()
+        match value {
+            Value::Real(r) => r.round().to_i32(),
+            Value::Str(_) => 0,
+        }
     }
 }
 
 impl From<Value> for u32 {
-    #[inline(always)]
+    // For lazy-converting a value into an u32.
     fn from(value: Value) -> Self {
-        if value.is_real() {
-            f64::from_bits(value.0).round() as u32
-        } else {
-            0
+        match value {
+            Value::Real(r) => r.round().to_u32(),
+            Value::Str(_) => 0,
         }
     }
 }
 
 impl From<Value> for f64 {
-    #[inline(always)]
+    // For lazy-converting a value into a f64.
     fn from(value: Value) -> Self {
-        value.as_real_raw()
+        match value {
+            Value::Real(r) => r.into(),
+            Value::Str(_) => 0.0,
+        }
     }
 }
 
 impl From<Value> for Real {
-    #[inline(always)]
+    // For lazy-converting a value into a real.
     fn from(value: Value) -> Self {
-        Real::from(value.as_real_raw())
+        match value {
+            Value::Real(r) => r.into(),
+            Value::Str(_) => Self::from(0.0),
+        }
     }
 }
 
 impl From<Value> for gml::String {
-    #[inline(always)]
+    // For lazy-converting a value into a gml::String.
     fn from(value: Value) -> Self {
-        value.as_string()
+        match value {
+            Value::Real(_) => String::new().into(),
+            Value::Str(s) => s,
+        }
     }
 }
 
 impl<'a> From<&'a Value> for &'a [u8] {
-    #[inline(always)]
+    // For lazy-converting a value into bytes.
     fn from(value: &'a Value) -> Self {
-        value.as_bytes_slice()
+        match value {
+            Value::Real(_) => b"",
+            Value::Str(s) => s.as_ref(),
+        }
     }
 }
 
 impl Default for Value {
-    #[inline(always)]
     fn default() -> Self {
-        Self::from_real(0.0)
+        Self::Real(Real::from(0.0))
     }
 }
 
 impl From<Value> for dll::Value {
     fn from(v: Value) -> Self {
-        if v.is_string() {
-            dll::Value::Str(dll::PascalString::new(v.as_bytes_slice()))
-        } else {
-            dll::Value::Real(v.as_real_raw())
+        match v {
+            Value::Real(r) => dll::Value::Real(r.into()),
+            Value::Str(s) => dll::Value::Str(dll::PascalString::new(s.as_ref())),
         }
     }
 }
@@ -780,8 +609,8 @@ impl From<Value> for dll::Value {
 impl From<dll::Value> for Value {
     fn from(v: dll::Value) -> Self {
         match v {
-            dll::Value::Real(r) => Value::from_real(r),
-            dll::Value::Str(s) => Value::from_string(s.as_slice()),
+            dll::Value::Real(r) => Value::Real(r.into()),
+            dll::Value::Str(s) => s.as_slice().into(),
         }
     }
 }

@@ -355,24 +355,6 @@ impl Compiler {
                     let left = self.compile_ast_expr(&binary_expr.left, locals);
                     let right = self.compile_ast_expr(&binary_expr.right, locals);
 
-                    if op_function == BinaryOperator::And {
-                        if let Node::Literal { value } = &left {
-                            if !value.is_truthy() {
-                                return Node::Literal { value: Value::from(false) };
-                            } else {
-                                return right;
-                            }
-                        }
-                    } else if op_function == BinaryOperator::Or {
-                        if let Node::Literal { value } = &left {
-                            if value.is_truthy() {
-                                return Node::Literal { value: Value::from(true) };
-                            } else {
-                                return right;
-                            }
-                        }
-                    }
-
                     match (left, right) {
                         (Node::Literal { value: lhs @ _ }, Node::Literal { value: rhs @ _ }) => {
                             match op_function.call(lhs, rhs) {
@@ -617,21 +599,6 @@ impl Compiler {
         };
 
         if let Some(var) = mappings::get_instance_variable_by_name(identifier) {
-            if let Node::Literal { value: lit } = &value {
-                if lit.is_real() && matches!(array, ArrayAccessor::None) {
-                    if operator == BinaryOperator::Add {
-                        return Instruction::IncrementVariable {
-                            accessor: VariableAccessor { var: *var, array, owner },
-                            delta: lit.as_real().unwrap(),
-                        };
-                    } else if operator == BinaryOperator::Subtract {
-                        return Instruction::IncrementVariable {
-                            accessor: VariableAccessor { var: *var, array, owner },
-                            delta: -lit.as_real().unwrap(),
-                        };
-                    }
-                }
-            }
             Instruction::SetVariable {
                 accessor: VariableAccessor { var: *var, array: array.clone(), owner: owner.clone() },
                 value: Node::Binary {
@@ -643,21 +610,6 @@ impl Compiler {
             }
         } else {
             let index = self.get_field_id(identifier);
-            if let Node::Literal { value: lit } = &value {
-                if lit.is_real() && matches!(array, ArrayAccessor::None) {
-                    if operator == BinaryOperator::Add {
-                        return Instruction::IncrementField {
-                            accessor: FieldAccessor { index, array, owner },
-                            delta: lit.as_real().unwrap(),
-                        };
-                    } else if operator == BinaryOperator::Subtract {
-                        return Instruction::IncrementField {
-                            accessor: FieldAccessor { index, array, owner },
-                            delta: -lit.as_real().unwrap(),
-                        };
-                    }
-                }
-            }
             Instruction::SetField {
                 accessor: FieldAccessor { index, array: array.clone(), owner: owner.clone() },
                 value: Node::Binary {
@@ -673,18 +625,17 @@ impl Compiler {
     /// Converts an AST node to an InstanceIdentifier.
     fn make_instance_identifier(&mut self, expression: &ast::Expr, locals: &[&[u8]]) -> InstanceIdentifier {
         let node = self.compile_ast_expr(expression, locals);
-        if let Node::Literal { value: v } = &node {
-            if v.is_real() {
-                return match v.round() {
-                    gml::SELF | gml::UNSPECIFIED => InstanceIdentifier::Own,
-                    gml::OTHER => InstanceIdentifier::Other,
-                    gml::GLOBAL => InstanceIdentifier::Global,
-                    gml::LOCAL => InstanceIdentifier::Local,
-                    _ => InstanceIdentifier::Expression(Box::new(node)),
-                };
+        if let Node::Literal { value: v @ Value::Real(_) } = &node {
+            match v.round() {
+                gml::SELF | gml::UNSPECIFIED => InstanceIdentifier::Own,
+                gml::OTHER => InstanceIdentifier::Other,
+                gml::GLOBAL => InstanceIdentifier::Global,
+                gml::LOCAL => InstanceIdentifier::Local,
+                _ => InstanceIdentifier::Expression(Box::new(node)),
             }
+        } else {
+            InstanceIdentifier::Expression(Box::new(node))
         }
-        InstanceIdentifier::Expression(Box::new(node))
     }
 
     /// Converts a list of expressions into an array accessor (or an error message).

@@ -207,8 +207,9 @@ impl Game {
     /// Draws all instances, tiles and backgrounds to the screen, taking all active views into account.
     /// Note that this function runs GML code associated with object draw events, so its usage must match GameMaker 8.
     pub fn draw(&mut self) -> gml::Result<()> {
+        let safe_alpha = if self.interp_alpha.is_finite() { self.interp_alpha.clamp(0.0, 1.0) } else { 1.0 };
         self.renderer.set_interp_amount(if self.render_mode.interpolates() {
-            (1.0 - self.interp_alpha).clamp(0.0, 1.0) as f32
+            (1.0 - safe_alpha) as f32
         } else {
             0.0
         });
