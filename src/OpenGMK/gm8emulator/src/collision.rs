@@ -39,3 +39,4 @@ pub fn check_row_overlap(row_a: u64, row_b: u64, shift_x: u32) -> bool {
     };
     overlap != 0
 }
+

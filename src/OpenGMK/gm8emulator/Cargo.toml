@@ -43,6 +43,7 @@ rust-ini = "0.21"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_with = { version = "3.16.1", features = ["alloc", "macros"], default-features = false }
 time = { version = "0.3.41", features = ["local-offset", "macros"] }
+memmap2 = "0.9"
 
 
 [target.'cfg(all(target_os = "windows"))'.dependencies]

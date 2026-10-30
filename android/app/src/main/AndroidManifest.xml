@@ -14,7 +14,8 @@
         android:hasFragileUserData="true"
         android:allowBackup="true"
         android:largeHeap="true"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:extractNativeLibs="false">
 
         <!-- The launcher UI (Jetpack Compose, Material 3 Expressive). -->
         <activity

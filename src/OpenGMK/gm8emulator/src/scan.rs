@@ -57,6 +57,11 @@ fn walk(dir: &Path, totals: &mut BTreeMap<&'static str, (u32, u32)>, failures: &
 }
 
 fn read(path: &Path) -> Result<Box<[u8]>, String> {
+    if let Ok(file) = std::fs::File::open(path) {
+        if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&file) } {
+            return Ok(mmap[..].to_vec().into_boxed_slice());
+        }
+    }
     std::fs::read(path).map(Vec::into_boxed_slice).map_err(|e| e.to_string())
 }
 

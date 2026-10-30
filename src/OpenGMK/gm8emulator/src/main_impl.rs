@@ -180,55 +180,10 @@ pub fn run_game(args: Vec<String>) -> i32 {
         println!("loading '{}'...", input);
     }
 
-    #[cfg(unix)]
-    struct MmapBuffer {
-        ptr: *mut u8,
-        len: usize,
-    }
-    #[cfg(unix)]
-    impl AsRef<[u8]> for MmapBuffer {
-        fn as_ref(&self) -> &[u8] {
-            unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
-        }
-    }
-    #[cfg(unix)]
-    impl AsMut<[u8]> for MmapBuffer {
-        fn as_mut(&mut self) -> &mut [u8] {
-            unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
-        }
-    }
-    #[cfg(unix)]
-    impl Drop for MmapBuffer {
-        fn drop(&mut self) {
-            if !self.ptr.is_null() && self.len > 0 {
-                unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len); }
-            }
-        }
-    }
+    let mmap_opt = fs::File::open(file_path).ok().and_then(|f| {
+        unsafe { memmap2::MmapOptions::new().map_copy(&f).ok() }
+    });
 
-    #[cfg(unix)]
-    let mut mmap_opt = unsafe {
-        use std::os::unix::io::AsRawFd;
-        fs::File::open(file_path).ok().and_then(|f| {
-            let len = f.metadata().ok()?.len() as usize;
-            if len == 0 { return None; }
-            let ptr = libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE,
-                f.as_raw_fd(),
-                0,
-            );
-            if ptr != libc::MAP_FAILED {
-                Some(MmapBuffer { ptr: ptr as *mut u8, len })
-            } else {
-                None
-            }
-        })
-    };
-
-    #[cfg(unix)]
     let assets = if let Some(mut mmap_buf) = mmap_opt {
         gm8exe::reader::from_exe(
             &mut mmap_buf,
@@ -237,23 +192,6 @@ pub fn run_game(args: Vec<String>) -> i32 {
             multithread,
         )
     } else {
-        let mut file = match fs::read(file_path) {
-            Ok(data) => data,
-            Err(err) => {
-                eprintln!("failed to open '{}': {}", input, err);
-                return EXIT_FAILURE;
-            },
-        };
-        gm8exe::reader::from_exe(
-            &mut file,
-            if verbose { Some(|s: &str| println!("{}", s)) } else { None },
-            strict,
-            multithread,
-        )
-    };
-
-    #[cfg(not(unix))]
-    let assets = {
         let mut file = match fs::read(file_path) {
             Ok(data) => data,
             Err(err) => {

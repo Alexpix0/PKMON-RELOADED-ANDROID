@@ -21,10 +21,13 @@ pub struct Priority {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Grid {
-    grid: Vec<Vec<Value>>,
-    height: usize, // if width is 0, this is inaccessible otherwise
+pub struct DsGrid {
+    pub width: usize,
+    pub height: usize,
+    pub data: Box<[Value]>,
 }
+
+pub type Grid = DsGrid;
 
 #[derive(Debug)]
 pub enum Error {
@@ -107,32 +110,61 @@ impl Priority {
     }
 }
 
-impl Grid {
+impl DsGrid {
     pub fn new(width: usize, height: usize) -> Self {
-        let grid = vec![vec![Value::from(0); height]; width];
-        Self { grid, height }
+        let size = width.saturating_mul(height);
+        let data = vec![Value::from(0); size].into_boxed_slice();
+        Self { width, height, data }
     }
 
     pub fn resize(&mut self, width: usize, height: usize) {
-        self.height = height;
-        self.grid.resize_with(width, || vec![Value::from(0); height]);
-        for column in &mut self.grid {
-            column.resize_with(height, Default::default);
+        if self.width == width && self.height == height {
+            return;
         }
+        let mut new_data = vec![Value::from(0); width.saturating_mul(height)].into_boxed_slice();
+        let copy_w = self.width.min(width);
+        let copy_h = self.height.min(height);
+        for y in 0..copy_h {
+            for x in 0..copy_w {
+                new_data[y * width + x] = self.data[y * self.width + x].clone();
+            }
+        }
+        self.width = width;
+        self.height = height;
+        self.data = new_data;
     }
 
+    #[inline(always)]
+    pub fn get_direct(&self, x: usize, y: usize) -> &Value {
+        &self.data[y * self.width + x]
+    }
+
+    #[inline(always)]
+    pub fn get_mut_direct(&mut self, x: usize, y: usize) -> &mut Value {
+        &mut self.data[y * self.width + x]
+    }
+
+    #[inline(always)]
     pub fn get(&self, x: i32, y: i32) -> Option<&Value> {
-        x.try_into()
-            .ok()
-            .zip(y.try_into().ok())
-            .and_then(|(x, y): (usize, usize)| self.grid.get(x).and_then(|col| col.get(y)))
+        if x >= 0 && y >= 0 {
+            let (ux, uy) = (x as usize, y as usize);
+            if ux < self.width && uy < self.height {
+                return Some(&self.data[uy * self.width + ux]);
+            }
+        }
+        None
     }
 
+    #[inline(always)]
     pub fn get_mut(&mut self, x: i32, y: i32) -> Option<&mut Value> {
-        x.try_into()
-            .ok()
-            .zip(y.try_into().ok())
-            .and_then(move |(x, y): (usize, usize)| self.grid.get_mut(x).and_then(|col| col.get_mut(y)))
+        if x >= 0 && y >= 0 {
+            let (ux, uy) = (x as usize, y as usize);
+            if ux < self.width && uy < self.height {
+                let w = self.width;
+                return Some(&mut self.data[uy * w + ux]);
+            }
+        }
+        None
     }
 
     fn range_x(&self, x1: i32, x2: i32) -> std::ops::Range<usize> {
@@ -149,7 +181,8 @@ impl Grid {
     pub fn region(&self, x1: i32, y1: i32, x2: i32, y2: i32) -> impl Iterator<Item = &Value> {
         let rx = self.range_x(x1, x2);
         let ry = self.range_y(y1, y2);
-        self.grid[rx].iter().map(move |col| &col[ry.clone()]).flatten()
+        let width = self.width;
+        rx.flat_map(move |x| ry.clone().map(move |y| &self.data[y * width + x]))
     }
 
     /// Goes through each column
@@ -162,20 +195,19 @@ impl Grid {
     ) -> impl Iterator<Item = ((usize, usize), &Value)> {
         let rx = self.range_x(x1, x2);
         let ry = self.range_y(y1, y2);
-        self.grid
-            .iter()
-            .enumerate()
-            .take(rx.end)
-            .skip(rx.start)
-            .map(move |(x, col)| col.iter().enumerate().take(ry.end).skip(ry.start).map(move |(y, v)| ((x, y), v)))
-            .flatten()
+        let width = self.width;
+        rx.flat_map(move |x| ry.clone().map(move |y| ((x, y), &self.data[y * width + x])))
     }
 
     /// Goes through each column
     pub fn region_mut(&mut self, x1: i32, y1: i32, x2: i32, y2: i32) -> impl Iterator<Item = &mut Value> {
         let rx = self.range_x(x1, x2);
         let ry = self.range_y(y1, y2);
-        self.grid[rx].iter_mut().map(move |col| &mut col[ry.clone()]).flatten()
+        let width = self.width;
+        let ptr = self.data.as_mut_ptr();
+        rx.flat_map(move |x| {
+            ry.clone().map(move |y| unsafe { &mut *ptr.add(y * width + x) })
+        })
     }
 
     /// Goes through each column
@@ -188,13 +220,11 @@ impl Grid {
     ) -> impl Iterator<Item = ((usize, usize), &mut Value)> {
         let rx = self.range_x(x1, x2);
         let ry = self.range_y(y1, y2);
-        self.grid
-            .iter_mut()
-            .enumerate()
-            .take(rx.end)
-            .skip(rx.start)
-            .map(move |(x, col)| col.iter_mut().enumerate().take(ry.end).skip(ry.start).map(move |(y, v)| ((x, y), v)))
-            .flatten()
+        let width = self.width;
+        let ptr = self.data.as_mut_ptr();
+        rx.flat_map(move |x| {
+            ry.clone().map(move |y| ((x, y), unsafe { &mut *ptr.add(y * width + x) }))
+        })
     }
 
     pub fn disk(&self, xm: Real, ym: Real, r: Real) -> impl Iterator<Item = &Value> {
@@ -241,23 +271,24 @@ impl Grid {
 
     /// Goes through each column
     pub fn all(&self) -> impl Iterator<Item = &Value> {
-        self.grid.iter().flatten()
+        self.data.iter()
     }
 
     /// Goes through each column
     pub fn all_mut(&mut self) -> impl Iterator<Item = &mut Value> {
-        self.grid.iter_mut().flatten()
+        self.data.iter_mut()
     }
 
+    #[inline(always)]
     pub fn width(&self) -> usize {
-        self.grid.len()
+        self.width
     }
 
+    #[inline(always)]
     pub fn height(&self) -> usize {
         self.height
     }
 }
-
 pub fn eq(v1: &Value, v2: &Value, precision: Real) -> bool {
     match (v1, v2) {
         (Value::Real(x), Value::Real(y)) => (*x - *y).abs() <= precision,

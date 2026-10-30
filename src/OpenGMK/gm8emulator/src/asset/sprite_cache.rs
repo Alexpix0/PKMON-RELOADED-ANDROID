@@ -127,8 +127,9 @@ pub fn get_or_load_template(fname: &str) -> Result<Arc<ParsedSpriteTemplate>, St
 
     // 2. Slow path: read from storage and decode once
     let path = resolve_path(fname);
-    let bytes = fs::read(&path).map_err(|e| format!("failed to open '{}' (path: {}): {}", fname, path.display(), e))?;
-    let parsed = crate::gml::kernel::parse_gmspr(&bytes).map_err(|e| format!("failed to parse '{}': {}", fname, e))?;
+    let file = fs::File::open(&path).map_err(|e| format!("failed to open '{}' (path: {}): {}", fname, path.display(), e))?;
+    let mmap = unsafe { memmap2::MmapOptions::new().map(&file).map_err(|e| e.to_string())? };
+    let parsed = crate::gml::kernel::parse_gmspr(&mmap[..]).map_err(|e| format!("failed to parse '{}': {}", fname, e))?;
 
     let (origin_x, origin_y) = (parsed.origin_x, parsed.origin_y);
     let mut frame_data = Vec::with_capacity(parsed.frames.len());

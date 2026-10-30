@@ -242,6 +242,7 @@ pub struct Game {
     pub render_fps: u32,
     pub show_fps: bool,
     pub render_mode: crate::render::RenderMode,
+    pub timestep: crate::timestep::TimeStepController,
     pub interp_alpha: f64,
     pub interp_draw: bool,
     pub interp_update_views: bool,
@@ -1503,6 +1504,7 @@ impl Game {
             render_fps: 0,
             show_fps: false,
             render_mode: crate::render::RenderMode::Native,
+            timestep: crate::timestep::TimeStepController::new(60.0),
             interp_alpha: 1.0,
             interp_draw: false,
             interp_update_views: true,
@@ -2840,32 +2842,20 @@ impl Game {
                     std::thread::sleep(Duration::from_millis(16));
                     continue;
                 }
-                accumulator += now.duration_since(step_clock);
-                step_clock = now;
-
                 #[cfg(target_os = "android")]
                 let speed_mult = crate::touch_controls::fast_forward_multiplier();
                 #[cfg(not(target_os = "android"))]
                 let speed_mult = 1.0f32;
 
                 let effective_speed = self.room.speed.max(1);
-                let base_nanos = 1_000_000_000 / effective_speed as u64;
-                let target_nanos = if speed_mult > 1.0 {
-                    (base_nanos as f32 / speed_mult).max(1_000_000.0) as u64
-                } else {
-                    base_nanos
-                };
-                let duration = Duration::from_nanos(target_nanos);
+                let target_fps = if speed_mult > 1.0 { (effective_speed as f32 * speed_mult) as f64 } else { effective_speed as f64 };
+                self.timestep.set_target_fps(target_fps);
 
-                let max_debt = duration * 3;
-                if accumulator > max_debt {
-                    if log_render {
-                        eprintln!("[render] pausa de {:?}; se descarta el atraso", accumulator);
-                    }
-                    accumulator = duration;
-                }
+                let dt = (now.duration_since(step_clock).as_secs_f64()).min(0.25);
+                step_clock = now;
+                self.timestep.accumulator += dt;
 
-                if accumulator >= duration {
+                while self.timestep.accumulator >= self.timestep.fixed_dt {
                     self.interp_alpha = 0.0;
                     self.interp_draw = false;
                     self.interp_update_views = true;
@@ -2877,9 +2867,10 @@ impl Game {
 
                     if self.reset_accumulator {
                         self.reset_accumulator = false;
-                        accumulator = Duration::ZERO;
+                        self.timestep.reset();
+                        break;
                     } else {
-                        accumulator -= duration;
+                        self.timestep.accumulator -= self.timestep.fixed_dt;
                     }
                     self.capture_recording_frame(&mut current_frame_time, self.room.speed);
                     if let Some(SceneChange::End) = self.scene_change {
@@ -2903,7 +2894,7 @@ impl Game {
                     }
 
                     if let GameClock::SpoofedNanos(t) = &mut self.clock {
-                        *t += duration.as_nanos();
+                        *t += (self.timestep.fixed_dt * 1_000_000_000.0) as u128;
                         self.fps = (self.room.speed as f32 * speed_mult) as u32;
                     } else {
                         if step_clock.duration_since(time_last) >= Duration::from_secs(1) {
@@ -2914,15 +2905,15 @@ impl Game {
                     }
                     self.frame_counter += 1;
                     step_frames += 1;
-                } else {
-                    self.interp_alpha =
-                        (accumulator.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
-                    self.interp_draw = true;
-                    self.interp_update_views = false;
-                    if let Err(e) = self.render_only() {
-                        println!("Runtime error: {} (room {})", e, self.room.id);
-                        return Err(e.into());
-                    }
+                }
+
+                let alpha = (self.timestep.accumulator / self.timestep.fixed_dt).clamp(0.0, 1.0);
+                self.interp_alpha = alpha;
+                self.interp_draw = true;
+                self.interp_update_views = false;
+                if let Err(e) = self.render_only() {
+                    println!("Runtime error: {} (room {})", e, self.room.id);
+                    return Err(e.into());
                 }
 
                 if let Some(fps) = paced_fps {
