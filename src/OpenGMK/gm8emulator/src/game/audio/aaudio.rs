@@ -19,6 +19,7 @@ use std::{
 use udon::source::{ChannelCount, Sample, SampleRate, Source};
 
 use super::mixer::{Mixer, MixerHandle};
+use super::ring_buffer::LockFreeAudioRing;
 
 // aaudio/AAudio.h
 const AAUDIO_OK: i32 = 0;
@@ -48,17 +49,11 @@ static STREAM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::
 static CHANNELS: AtomicU32 = AtomicU32::new(0);
 static RATE: AtomicU32 = AtomicU32::new(0);
 
-const RING_BUFFER_CAPACITY: usize = 16384; // ~170 ms at 48kHz stereo (power of two)
-const RING_BUFFER_MASK: usize = RING_BUFFER_CAPACITY - 1;
-
-/// Lock-free circular audio ring buffer storing f32 sample bits.
-static RING_BUF: [AtomicU32; RING_BUFFER_CAPACITY] = {
-    const INIT: AtomicU32 = AtomicU32::new(0);
-    [INIT; RING_BUFFER_CAPACITY]
-};
-
-static READ_POS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-static WRITE_POS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Lock-free SPSC circular audio ring buffer.
+pub fn ring_buffer() -> &'static LockFreeAudioRing {
+    static RING: std::sync::OnceLock<LockFreeAudioRing> = std::sync::OnceLock::new();
+    RING.get_or_init(|| LockFreeAudioRing::new(16384))
+}
 static STREAM_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FEEDER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -76,8 +71,7 @@ pub fn set_paused(paused: bool) {
             // Drop what is already queued, so the silence arrives now instead of draining first.
             AAudioStream_requestFlush(stream);
             // Reset ring buffer positions so resuming starts with fresh audio
-            READ_POS.store(0, Ordering::Release);
-            WRITE_POS.store(0, Ordering::Release);
+            ring_buffer().reset();
             return
         }
         // Android reclaims streams from background apps. Starting a dead one can block forever
@@ -91,8 +85,7 @@ pub fn set_paused(paused: bool) {
             eprintln!("[aaudio] stream en estado {}, reconstruyendo", state);
             AAudioStream_close(stream);
             STREAM.store(0, Ordering::Relaxed);
-            READ_POS.store(0, Ordering::Release);
-            WRITE_POS.store(0, Ordering::Release);
+            ring_buffer().reset();
             if let Err(error) = reopen_stream() {
                 eprintln!("[aaudio] no pude reconstruir la salida: {}", error);
             }
@@ -139,10 +132,9 @@ unsafe fn create_stream(sample_rate: i32, channel_count: i32) -> Result<*mut c_v
     AAudioStreamBuilder_delete(builder);
     check(result, "AAudioStreamBuilder_openStream")?;
 
-    // Static latency optimization: configure triple-burst (burst * 3) buffer size for rock-solid stability
+    // Ultra-low latency optimization: configure single-burst buffer size for minimum hardware latency
     let burst = AAudioStream_getFramesPerBurst(stream).max(64);
-    let target_buffer_frames = burst * 3;
-    let _ = AAudioStream_setBufferSizeInFrames(stream, target_buffer_frames);
+    let _ = AAudioStream_setBufferSizeInFrames(stream, burst);
 
     Ok(stream)
 }
@@ -221,19 +213,10 @@ extern "C" fn data_callback(
         return AAUDIO_CALLBACK_RESULT_CONTINUE;
     }
 
-    let r = READ_POS.load(Ordering::Relaxed);
-    let w = WRITE_POS.load(Ordering::Acquire);
-    let avail = w.wrapping_sub(r);
-    let to_read = len.min(avail);
-
-    for (i, slot) in buffer[..to_read].iter_mut().enumerate() {
-        let idx = (r.wrapping_add(i)) & RING_BUFFER_MASK;
-        *slot = f32::from_bits(RING_BUF[idx].load(Ordering::Relaxed));
+    let read_count = ring_buffer().read_slice(buffer);
+    if read_count < len {
+        buffer[read_count..].fill(0.0);
     }
-    if to_read < len {
-        buffer[to_read..].fill(0.0);
-    }
-    READ_POS.store(r.wrapping_add(to_read), Ordering::Release);
 
     // Volume control and on-screen mute button toggle support
     let vol = crate::touch_controls::bgm_volume();
@@ -297,10 +280,8 @@ pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, Sampl
                         std::thread::sleep(std::time::Duration::from_millis(15));
                         continue;
                     }
-                    let r = READ_POS.load(Ordering::Acquire);
-                    let w = WRITE_POS.load(Ordering::Relaxed);
-                    let occupied = w.wrapping_sub(r);
-                    let free = RING_BUFFER_CAPACITY.saturating_sub(occupied);
+                    let ring = ring_buffer();
+                    let free = ring.available_write();
 
                     if free >= chunk.len() {
                         let count = if let Ok(mut guard) = MIXER.lock() {
@@ -315,13 +296,9 @@ pub fn open(global_volume: Arc<AtomicU32>) -> Result<(usize, ChannelCount, Sampl
                         if count < chunk.len() {
                             chunk[count..].fill(0.0);
                         }
-                        for (i, &s) in chunk.iter().enumerate() {
-                            let idx = (w.wrapping_add(i)) & RING_BUFFER_MASK;
-                            RING_BUF[idx].store(s.to_bits(), Ordering::Relaxed);
-                        }
-                        WRITE_POS.store(w.wrapping_add(chunk.len()), Ordering::Release);
+                        ring.write_slice(&chunk);
                     } else {
-                        // Buffer has plenty of audio (>150ms), sleep 4ms
+                        // Buffer has plenty of audio, sleep 4ms
                         std::thread::sleep(std::time::Duration::from_millis(4));
                     }
                 }

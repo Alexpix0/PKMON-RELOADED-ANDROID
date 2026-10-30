@@ -2851,6 +2851,19 @@ impl Game {
                 let target_fps = if speed_mult > 1.0 { (effective_speed as f32 * speed_mult) as f64 } else { effective_speed as f64 };
                 self.timestep.set_target_fps(target_fps);
 
+                // Reloj maestro guiado por audio: correccion sutil de deriva temporal (+-0.5%)
+                if let Some((current_fill, capacity)) = crate::game::audio::audio_buffer_status() {
+                    let target_fill = capacity / 2;
+                    let drift_correction = if current_fill > target_fill + 256 {
+                        1.005 // Acelerar ligeramente para drenar buffer
+                    } else if current_fill < target_fill.saturating_sub(256) {
+                        0.995 // Desacelerar ligeramente para prevenir underrun
+                    } else {
+                        1.0
+                    };
+                    self.timestep.fixed_dt *= drift_correction;
+                }
+
                 let dt = (now.duration_since(step_clock).as_secs_f64()).min(0.25);
                 step_clock = now;
                 self.timestep.accumulator += dt;

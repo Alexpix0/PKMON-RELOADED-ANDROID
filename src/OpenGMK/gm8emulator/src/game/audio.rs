@@ -1,4 +1,5 @@
 pub mod midi;
+pub mod ring_buffer;
 #[cfg(target_os = "android")]
 mod aaudio;
 mod mixer;
@@ -27,6 +28,18 @@ use udon::{
 #[cfg(target_os = "android")]
 pub fn sound_started() -> bool {
     aaudio::sound_started()
+}
+
+pub fn audio_buffer_status() -> Option<(usize, usize)> {
+    #[cfg(target_os = "android")]
+    {
+        let ring = aaudio::ring_buffer();
+        Some((ring.available_read(), ring.capacity()))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        None
+    }
 }
 
 pub use self::midi::MidiHandle;
