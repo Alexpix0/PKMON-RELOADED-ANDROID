@@ -24,6 +24,8 @@ const DEFAULT_ALARM: i32 = -1;
 pub enum Instruction {
     SetField { accessor: FieldAccessor, value: Node },
     SetVariable { accessor: VariableAccessor, value: Node },
+    IncrementField { accessor: FieldAccessor, delta: Real },
+    IncrementVariable { accessor: VariableAccessor, delta: Real },
     EvalExpression { node: Node },
     IfElse { cond: Node, if_body: Box<[Instruction]>, else_body: Box<[Instruction]> },
     LoopUntil { cond: Node, body: Box<[Instruction]> },
@@ -72,7 +74,7 @@ pub enum Node {
 }
 
 /// Represents a compiled binary operator
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BinaryOperator {
     Add,
     And,
@@ -97,7 +99,7 @@ pub enum BinaryOperator {
 }
 
 /// Represents a compiled unary operator - does not include + as this isn't compiled
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Neg,
     Not,
@@ -246,6 +248,8 @@ impl fmt::Debug for Instruction {
         match self {
             Instruction::SetField { accessor, value } => write!(f, "SetField({:?}, {:?})", accessor, value),
             Instruction::SetVariable { accessor, value } => write!(f, "SetVariable({:?}, {:?})", accessor, value),
+            Instruction::IncrementField { accessor, delta } => write!(f, "IncrementField({:?}, {:?})", accessor, delta),
+            Instruction::IncrementVariable { accessor, delta } => write!(f, "IncrementVariable({:?}, {:?})", accessor, delta),
             Instruction::EvalExpression { node } => write!(f, "EvalExpression({:?})", node),
             Instruction::IfElse { cond, if_body, else_body } => {
                 write!(f, "IfElse({:?}, if={:?}, else={:?}", cond, if_body, else_body)
@@ -271,8 +275,8 @@ impl fmt::Debug for Node {
         match self {
             Node::Constant { constant_id } => write!(f, "<constant {:?}>", constant_id),
             Node::Literal { value } => match value {
-                Value::Real(r) => write!(f, "{:?}", r),
-                Value::Str(s) => write!(f, "{:?}", s),
+                v => write!(f, "{:?}", v),
+                _ => Ok(()),
             },
             Node::Variable { accessor } => write!(f, "<variable: {:?}>", accessor),
             Node::Field { accessor } => write!(f, "<field: {:?}>", accessor),
@@ -312,6 +316,50 @@ impl fmt::Debug for Node {
 
 impl BinaryOperator {
     pub fn call(&self, lhs: Value, rhs: Value) -> gml::Result<Value> {
+        if lhs.is_real() && rhs.is_real() {
+            let l = f64::from_bits(lhs.0);
+            let r = f64::from_bits(rhs.0);
+            return match self {
+                Self::Add => Ok(Value::from_real(l + r)),
+                Self::Subtract => Ok(Value::from_real(l - r)),
+                Self::Multiply => Ok(Value::from_real(l * r)),
+                Self::Divide => Ok(if r != 0.0 { Value::from_real(l / r) } else { Value::from_real(0.0) }),
+                Self::IntDivide => Ok(if r != 0.0 { Value::from_real((l / r).floor()) } else { Value::from_real(0.0) }),
+                Self::Modulo => Ok(if r != 0.0 { Value::from_real(l - (l / r).trunc() * r) } else { Value::from_real(0.0) }),
+                Self::Equal => {
+                    let diff = l - r;
+                    Ok(if diff.abs() < 0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::NotEqual => {
+                    let diff = l - r;
+                    Ok(if diff.abs() >= 0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::LessThan => {
+                    let diff = l - r;
+                    Ok(if diff <= -0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::LessThanOrEqual => {
+                    let diff = l - r;
+                    Ok(if diff < 0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::GreaterThan => {
+                    let diff = l - r;
+                    Ok(if diff >= 0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::GreaterThanOrEqual => {
+                    let diff = l - r;
+                    Ok(if diff > -0.00001 { super::TRUE } else { super::FALSE }.into())
+                },
+                Self::And => Ok(if (l >= 0.5) && (r >= 0.5) { super::TRUE } else { super::FALSE }.into()),
+                Self::Or => Ok(if (l >= 0.5) || (r >= 0.5) { super::TRUE } else { super::FALSE }.into()),
+                Self::Xor => Ok(if (l >= 0.5) != (r >= 0.5) { super::TRUE } else { super::FALSE }.into()),
+                Self::BitwiseAnd => Ok(((l.round() as u64) & (r.round() as u64)).into()),
+                Self::BitwiseOr => Ok(((l.round() as u64) | (r.round() as u64)).into()),
+                Self::BitwiseXor => Ok(((l.round() as u64) ^ (r.round() as u64)).into()),
+                Self::BinaryShiftLeft => Ok(((l.round() as u64).wrapping_shl(r.round() as u32)).into()),
+                Self::BinaryShiftRight => Ok(((l.round() as u64).wrapping_shr(r.round() as u32)).into()),
+            };
+        }
         let f = match self {
             Self::Add => Value::add,
             Self::And => Value::bool_and,
@@ -340,6 +388,14 @@ impl BinaryOperator {
 
 impl UnaryOperator {
     pub fn call(&self, value: Value) -> gml::Result<Value> {
+        if value.is_real() {
+            let v = f64::from_bits(value.0);
+            return match self {
+                Self::Neg => Ok(Value::from_real(-v)),
+                Self::Not => Ok(if v >= 0.5 { super::FALSE } else { super::TRUE }.into()),
+                Self::Complement => Ok((!(value.round() as u64)).into()),
+            };
+        }
         let f = match self {
             Self::Neg => Value::neg,
             Self::Not => Value::not,
@@ -434,6 +490,85 @@ impl Game {
                             context.locals.vars.insert(accessor.var, Field::new(array_index, value));
                         }
                     },
+                }
+            },
+            Instruction::IncrementField { accessor, delta } => {
+                let target = self.get_target(context, &accessor.owner, self.globalvars.contains(&accessor.index))?;
+                let array_index = self.get_array_index(&accessor.array, context)?;
+                match target {
+                    Target::Single(None) => (),
+                    Target::Single(Some(instance)) => {
+                        self.increment_instance_field(instance, accessor.index, array_index, *delta);
+                    },
+                    Target::Objects(index) => {
+                        let mut iter = self.room.instance_list.iter_by_identity(index);
+                        while let Some(instance) = iter.next(&self.room.instance_list) {
+                            self.increment_instance_field(instance, accessor.index, array_index, *delta);
+                        }
+                    },
+                    Target::All => {
+                        let mut iter = self.room.instance_list.iter_by_drawing();
+                        while let Some(instance) = iter.next(&self.room.instance_list) {
+                            self.increment_instance_field(instance, accessor.index, array_index, *delta);
+                        }
+                    },
+                    Target::Global => {
+                        if let Some(field) = self.globals.fields.get_mut(&accessor.index) {
+                            let cur = field.get(array_index).unwrap_or_default();
+                            let new_v = if cur.is_real() {
+                                Value::from_real(cur.as_real_raw() + delta.into_inner())
+                            } else {
+                                Value::from_real(delta.into_inner())
+                            };
+                            field.set(array_index, new_v);
+                        }
+                    },
+                    Target::Local => {
+                        if let Some(field) = context.locals.fields.get_mut(&accessor.index) {
+                            let cur = field.get(array_index).unwrap_or_default();
+                            let new_v = if cur.is_real() {
+                                Value::from_real(cur.as_real_raw() + delta.into_inner())
+                            } else {
+                                Value::from_real(delta.into_inner())
+                            };
+                            field.set(array_index, new_v);
+                        }
+                    },
+                }
+            },
+            Instruction::IncrementVariable { accessor, delta } => {
+                let target = self.get_target(context, &accessor.owner, false)?;
+                let array_index = self.get_array_index(&accessor.array, context)?;
+                match target {
+                    Target::Single(None) => (),
+                    Target::Single(Some(instance)) => {
+                        let cur = self.get_instance_var(instance, &accessor.var, array_index, context)?;
+                        if cur.is_real() {
+                            let new_val = Value::from_real(cur.as_real_raw() + delta.into_inner());
+                            self.set_instance_var(instance, &accessor.var, array_index, new_val, context)?;
+                        }
+                    },
+                    Target::Objects(index) => {
+                        let mut iter = self.room.instance_list.iter_by_identity(index);
+                        while let Some(instance) = iter.next(&self.room.instance_list) {
+                            let cur = self.get_instance_var(instance, &accessor.var, array_index, context)?;
+                            if cur.is_real() {
+                                let new_val = Value::from_real(cur.as_real_raw() + delta.into_inner());
+                                self.set_instance_var(instance, &accessor.var, array_index, new_val, context)?;
+                            }
+                        }
+                    },
+                    Target::All => {
+                        let mut iter = self.room.instance_list.iter_by_drawing();
+                        while let Some(instance) = iter.next(&self.room.instance_list) {
+                            let cur = self.get_instance_var(instance, &accessor.var, array_index, context)?;
+                            if cur.is_real() {
+                                let new_val = Value::from_real(cur.as_real_raw() + delta.into_inner());
+                                self.set_instance_var(instance, &accessor.var, array_index, new_val, context)?;
+                            }
+                        }
+                    },
+                    _ => (),
                 }
             },
             Instruction::EvalExpression { node } => {
@@ -906,6 +1041,57 @@ impl Game {
                     inst.mru_len.set(len - 1);
                     break;
                 }
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn increment_instance_field(&self, instance: usize, field_id: usize, array_index: u32, delta: Real) {
+        let inst = self.room.instance_list.get(instance);
+        let mut fields = inst.fields.borrow_mut();
+        let val = match fields.entry(field_id) {
+            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                let f = entry.get_mut();
+                let cur = f.get(array_index).unwrap_or_default();
+                let new_v = if cur.is_real() {
+                    Value::from_real(cur.as_real_raw() + delta.into_inner())
+                } else {
+                    Value::from_real(delta.into_inner())
+                };
+                f.set(array_index, new_v);
+                new_v
+            },
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let new_v = Value::from_real(delta.into_inner());
+                entry.insert(Field::new(array_index, new_v));
+                new_v
+            },
+        };
+
+        if array_index == 0 {
+            let mut cache = inst.mru_fields.borrow_mut();
+            let len = inst.mru_len.get();
+            let mut found_idx = None;
+            for i in 0..len {
+                if cache[i].0 == field_id {
+                    found_idx = Some(i);
+                    break;
+                }
+            }
+            if let Some(i) = found_idx {
+                cache[i].1 = val;
+                if i > 0 {
+                    cache.swap(0, i);
+                }
+            } else if len < 4 {
+                cache[len] = (field_id, val);
+                inst.mru_len.set(len + 1);
+                if len > 0 {
+                    cache.swap(0, len);
+                }
+            } else {
+                cache[3] = (field_id, val);
+                cache.swap(0, 3);
             }
         }
     }

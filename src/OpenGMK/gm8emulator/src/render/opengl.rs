@@ -2,7 +2,7 @@ use crate::{
     render::{
         atlas::{AtlasBuilder, AtlasRect, AtlasRef},
         mat4mult, BlendType, Fog, Light, PrimitiveBuilder, PrimitiveShape, PrimitiveType, RendererOptions,
-        RendererTrait, SavedTexture, Scaling, Vertex, VertexBuffer,
+        RendererTrait, SavedTexture, Scaling, Vertex, VertexBuffer, Vertex2D,
     },
     types::Colour,
 };

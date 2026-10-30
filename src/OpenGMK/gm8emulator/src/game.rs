@@ -2164,7 +2164,7 @@ impl Game {
         for (index, opt_field) in self.overlay_pkmn_fields.iter().enumerate() {
             if let Some(field_id) = opt_field {
                 if let Some(field) = self.globals.fields.get(field_id) {
-                    if let Some(crate::gml::Value::Real(n)) = field.get(0) {
+                    if let Some(n) = field.get(0).and_then(|v| v.as_real()) {
                         species[index] = n.into_inner() as i32;
                     }
                 }
@@ -2178,7 +2178,7 @@ impl Game {
     fn global_number(&self, name: &[u8], index: u32) -> Option<i32> {
         let field_id = self.compiler.find_field_id(name)?;
         match self.globals.fields.get(&field_id)?.get(index)? {
-            crate::gml::Value::Real(n) => Some(n.into_inner() as i32),
+            v => v.as_real().map(|n| n.into_inner() as i32),
             _ => None,
         }
     }
@@ -2197,7 +2197,7 @@ impl Game {
             return -1
         };
         match modal {
-            crate::gml::Value::Real(n) => n.into_inner() as i32,
+            v => v.as_real().map(|n| n.into_inner() as i32).unwrap_or(-4),
             _ => -4,
         }
     }
@@ -2220,7 +2220,7 @@ impl Game {
     fn inside_box(&self) -> bool {
         if let Some(field_id) = self.overlay_box_field {
             if let Some(field) = self.globals.fields.get(&field_id) {
-                if let Some(crate::gml::Value::Real(n)) = field.get(0) {
+                if let Some(n) = field.get(0).and_then(|v| v.as_real()) {
                     return n.into_inner() as i32 != 0;
                 }
             }
@@ -2690,12 +2690,12 @@ impl Game {
                 args.iter()
                     .zip(&external.signature.type_args)
                     .map(|(a, t)| match (a, t) {
-                        (gml::Value::Real(x), dll::ValueType::Real) => dll::Value::Real((*x).into()),
-                        (gml::Value::Str(_), dll::ValueType::Real) => dll::Value::Real(0.0),
-                        (gml::Value::Str(s), dll::ValueType::Str) => {
-                            dll::Value::Str(dll::PascalString::new(s.as_ref()))
+                        (a, dll::ValueType::Real) => dll::Value::Real(a.as_real_raw()),
+                        (gml::Value(0), dll::ValueType::Real) => dll::Value::Real(0.0),
+                        (a, dll::ValueType::Str) if a.is_string() => {
+                            dll::Value::Str(dll::PascalString::new(a.as_bytes_slice()))
                         },
-                        (gml::Value::Real(_), dll::ValueType::Str) => dll::Value::Str(dll::PascalString::empty()),
+                        (_, dll::ValueType::Str) => dll::Value::Str(dll::PascalString::empty()),
                     })
                     .collect::<Vec<_>>()
             };
@@ -2903,7 +2903,7 @@ impl Game {
                     }
 
                     if self.close_requested {
-                        break Ok(self.run_game_end_events()?);
+                        return Ok(self.run_game_end_events()?);
                     }
 
                     if let GameClock::SpoofedNanos(t) = &mut self.clock {

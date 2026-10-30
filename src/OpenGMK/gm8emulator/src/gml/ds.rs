@@ -291,23 +291,23 @@ impl DsGrid {
 }
 pub fn eq(v1: &Value, v2: &Value, precision: Real) -> bool {
     match (v1, v2) {
-        (Value::Real(x), Value::Real(y)) => (*x - *y).abs() <= precision,
-        (Value::Str(x), Value::Str(y)) => x == y,
+        (x, y) if x.is_real() && y.is_real() => (x.as_real_raw() - y.as_real_raw()).abs() <= precision.into_inner(),
+        (x, y) if x.is_string() && y.is_string() => x.0 == y.0 || x.as_bytes_slice() == y.as_bytes_slice(),
         _ => false,
     }
 }
 
 pub fn cmp(v1: &Value, v2: &Value, precision: Real) -> Ordering {
     match (v1, v2) {
-        (Value::Real(x), Value::Real(y)) => {
-            if (*x - *y).abs() <= precision {
+        (x, y) if x.is_real() && y.is_real() => {
+            if (x.as_real_raw() - y.as_real_raw()).abs() <= precision.into_inner() {
                 Ordering::Equal
             } else {
-                x.partial_cmp(&y).unwrap()
+                x.as_real_raw().partial_cmp(&y.as_real_raw()).unwrap()
             }
         },
-        (Value::Str(x), Value::Str(y)) => x.cmp(y),
-        (Value::Real(_), Value::Str(_)) => Ordering::Less,
-        (Value::Str(_), Value::Real(_)) => Ordering::Greater,
+        (x, y) if x.is_string() && y.is_string() => x.as_bytes_slice().cmp(y.as_bytes_slice()),
+        (x, _) if x.is_real() => Ordering::Less,
+        _ => Ordering::Greater,
     }
 }

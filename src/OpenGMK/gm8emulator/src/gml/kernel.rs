@@ -3206,7 +3206,7 @@ impl Game {
 
     pub fn action_message(&mut self, args: &[Value]) -> gml::Result<Value> {
         self.show_message(&[match expect_args!(args, [any])? {
-            v @ Value::Str(_) => v,
+            v if v.is_string() => v,
             _ => "".into(),
         }])
     }
@@ -3293,7 +3293,7 @@ impl Game {
 
     pub fn action_if_question(&mut self, args: &[Value]) -> gml::Result<Value> {
         self.show_question(&[match expect_args!(args, [any])? {
-            v @ Value::Str(_) => v,
+            v if v.is_string() => v,
             _ => "".into(),
         }])
     }
@@ -3367,8 +3367,8 @@ impl Game {
             0 | _ => Ordering::Equal,
         };
         Ok(match (lhs, rhs) {
-            (Value::Real(lhs), Value::Real(rhs)) => lhs.partial_cmp(&rhs) == Some(desired),
-            (Value::Str(lhs), Value::Str(rhs)) => lhs.cmp(&rhs) == desired,
+            (lhs, rhs) if lhs.is_real() && rhs.is_real() => lhs.as_real_raw().partial_cmp(&rhs.as_real_raw()) == Some(desired),
+            (lhs, rhs) if lhs.is_string() && rhs.is_string() => lhs.as_bytes_slice().cmp(rhs.as_bytes_slice()) == desired,
             (lhs, rhs) => {
                 return Err(gml::Error::FunctionError(
                     "action_if_variable".to_string(),
@@ -3944,14 +3944,14 @@ impl Game {
 
     pub fn is_real(args: &[Value]) -> gml::Result<Value> {
         match expect_args!(args, [any])? {
-            Value::Real(_) => Ok(gml::TRUE.into()),
+            v if v.is_real() => Ok(gml::TRUE.into()),
             _ => Ok(gml::FALSE.into()),
         }
     }
 
     pub fn is_string(args: &[Value]) -> gml::Result<Value> {
         match expect_args!(args, [any])? {
-            Value::Str(_) => Ok(gml::TRUE.into()),
+            v if v.is_string() => Ok(gml::TRUE.into()),
             _ => Ok(gml::FALSE.into()),
         }
     }
@@ -4131,21 +4131,21 @@ impl Game {
     }
 
     pub fn min(args: &[Value]) -> gml::Result<Value> {
-        Ok(args.iter().reduce(Value::min).cloned().unwrap_or_default())
+        Ok(args.iter().copied().reduce(Value::min).unwrap_or_default())
     }
 
     pub fn max(args: &[Value]) -> gml::Result<Value> {
-        Ok(args.iter().reduce(Value::max).cloned().unwrap_or_default())
+        Ok(args.iter().copied().reduce(Value::max).unwrap_or_default())
     }
 
     pub fn min3(args: &[Value]) -> gml::Result<Value> {
         let (a, b, c) = expect_args!(args, [any, any, any])?;
-        Ok(a.min(&b).min(&c).clone())
+        Ok(a.min(b).min(c))
     }
 
     pub fn max3(args: &[Value]) -> gml::Result<Value> {
         let (a, b, c) = expect_args!(args, [any, any, any])?;
-        Ok(a.max(&b).max(&c).clone())
+        Ok(a.max(b).max(c))
     }
 
     pub fn mean(args: &[Value]) -> gml::Result<Value> {
@@ -4198,12 +4198,12 @@ impl Game {
     pub fn real(&self, args: &[Value]) -> gml::Result<Value> {
         // TODO: Make this function pure.
         expect_args!(args, [any]).and_then(|v| match v {
-            r @ Value::Real(_) => Ok(r),
-            Value::Str(s) => match self.decode_str(s.as_ref()).trim() {
+            r if r.is_real() => Ok(r),
+            _ => match self.decode_str(v.as_bytes_slice()).trim() {
                 x if x.len() == 0 => Ok(Default::default()),
                 x => match x.parse::<f64>() {
                     Ok(r) => Ok(r.into()),
-                    Err(e) => Err(gml::Error::FunctionError("real".into(), format!("can't convert {} - {}", s, e))),
+                    Err(e) => Err(gml::Error::FunctionError("real".into(), format!("can't convert {} - {}", v, e))),
                 },
             },
         })
@@ -4216,8 +4216,9 @@ impl Game {
     pub fn string_format(args: &[Value]) -> gml::Result<Value> {
         let (val, mut tot, mut dec) = expect_args!(args, [any, int, int])?;
         match val {
-            Value::Str(_) => Ok(val),
-            Value::Real(mut x) => {
+            v if v.is_string() => Ok(v),
+            _ => {
+                let mut x = Real::from(val.as_real_raw());
                 dec = dec.min(18);
                 tot = tot.max(0);
                 if dec < 0 {
@@ -6535,8 +6536,8 @@ impl Game {
 
     pub fn file_exists(&self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [any]).map(|x| match x {
-            Value::Str(s) => file::file_exists(file::to_path(&self.decode_str(s.as_ref())).as_ref()).into(),
-            Value::Real(_) => gml::FALSE.into(),
+            x if x.is_string() => file::file_exists(file::to_path(&self.decode_str(x.as_bytes_slice())).as_ref()).into(),
+            _ => gml::FALSE.into(),
         })
     }
 
@@ -6568,8 +6569,8 @@ impl Game {
 
     pub fn directory_exists(&self, args: &[Value]) -> gml::Result<Value> {
         expect_args!(args, [any]).map(|x| match x {
-            Value::Str(s) => file::dir_exists(file::to_path(&self.decode_str(s.as_ref())).as_ref()).into(),
-            Value::Real(_) => gml::FALSE.into(),
+            x if x.is_string() => file::dir_exists(file::to_path(&self.decode_str(x.as_bytes_slice())).as_ref()).into(),
+            _ => gml::FALSE.into(),
         })
     }
 
@@ -7047,7 +7048,7 @@ impl Game {
         #[cfg(target_os = "windows")]
         if self.play_type == PlayType::Normal {
             let path = match args.get(0).clone() {
-                Some(Value::Str(p)) => p.as_ref().get(0).map(|&x| x as char),
+                Some(p) if p.is_string() => p.as_bytes_slice().get(0).map(|&x| x as char),
                 _ => None,
             };
             return Ok(platform::disk_free(path).map(|x| x as f64).unwrap_or(-1f64).into());
@@ -7061,7 +7062,7 @@ impl Game {
         #[cfg(target_os = "windows")]
         if self.play_type == PlayType::Normal {
             let path = match args.get(0).clone() {
-                Some(Value::Str(p)) => p.as_ref().get(0).map(|&x| x as char),
+                Some(p) if p.is_string() => p.as_bytes_slice().get(0).map(|&x| x as char),
                 _ => None,
             };
             return Ok(platform::disk_size(path).map(|x| x as f64).unwrap_or(-1f64).into());
@@ -8068,8 +8069,8 @@ impl Game {
     }
 
     pub fn execute_string(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
-        if let Some(Value::Str(code)) = args.get(0) {
-            match self.compiler.compile(code.as_ref()) {
+        if let Some(code) = args.get(0).and_then(|v| if v.is_string() { Some(v.as_bytes_slice()) } else { None }) {
+            match self.compiler.compile(code) {
                 Ok(instrs) => {
                     let mut new_args: [Value; 16] = Default::default();
                     for (src, dest) in args[1..].iter().zip(new_args.iter_mut()) {
@@ -8089,12 +8090,12 @@ impl Game {
     }
 
     pub fn execute_file(&mut self, context: &mut Context, args: &[Value]) -> gml::Result<Value> {
-        if let Some(Value::Str(path)) = args.get(0) {
+        if let Some(path) = args.get(0).and_then(|v| if v.is_string() { Some(v.as_bytes_slice()) } else { None }) {
             let mut new_args: [Value; 16] = Default::default();
             for (src, dest) in args.iter().zip(new_args.iter_mut()) {
                 *dest = src.clone();
             }
-            match std::fs::read(self.decode_str(path.as_ref()).as_ref()) {
+            match std::fs::read(self.decode_str(path).as_ref()) {
                 Ok(code) => {
                     new_args[0] = code.into();
                     self.execute_string(context, &new_args)
@@ -12658,7 +12659,9 @@ impl Game {
         let (id, x, y, val) = expect_args!(args, [int, int, int, any])?;
         if let Some(grid) = self.grids.get_mut(id) {
             match (grid.get_mut(x, y), val) {
-                (Some(Value::Real(cell)), Value::Real(fac)) => *cell *= fac,
+                (Some(cell), fac) if cell.is_real() && fac.is_real() => {
+                    *cell = Value::from_real(cell.as_real_raw() * fac.as_real_raw());
+                },
                 _ => (),
             }
             Ok(Default::default())
