@@ -1,4 +1,3 @@
-
 struct Light {
     vec4 pos; // padded vec3
     vec4 colour; // padded vec3
@@ -29,31 +28,25 @@ layout(std140) uniform RenderState {
 uniform bool gm81_normalize; // this will never change so we don't need to include it in the state
 uniform float interp_amount;
 
-layout (location = 0) in vec3 pos;
-layout (location = 1) in vec4 blend;
-layout (location = 2) in vec2 tex_coord;
-layout (location = 3) in vec4 atlas_xywh;
-layout (location = 4) in vec2 interp;
+layout (location = 0) in vec2 in_pos;
+layout (location = 1) in vec4 in_color;
+layout (location = 2) in vec2 in_uv;
 
 out vec2 frag_tex_coord;
-out vec4 frag_atlas_xywh;
 out vec4 frag_blend;
 flat out vec4 frag_blend_flat;
 out float fog_z;
 
 void main() {
-    vec4 world_pos = model * vec4(pos, 1.0);
-    frag_atlas_xywh = atlas_xywh;
+    vec4 world_pos = model * vec4(in_pos, 0.0, 1.0);
     frag_blend_flat = vec4(1.0);
 
-    // -1 is the engine's mark for an untextured primitive (its vertices sample the white pixel).
-    // A comparison is safe on every GPU; NaN is not.
-    if (tex_coord.x < 0.0) {
-        frag_tex_coord = vec2(0.0);
-        frag_blend = blend;
+    if (in_uv.x < -0.5) {
+        frag_tex_coord = in_uv;
+        frag_blend = in_color;
     } else {
-        frag_tex_coord = tex_coord;
-        frag_blend = colour_blending ? blend : vec4(1.0);
+        frag_tex_coord = in_uv;
+        frag_blend = colour_blending ? in_color : vec4(1.0);
     }
 
     if (lighting_enabled) {
@@ -86,7 +79,6 @@ void main() {
             frag_blend_flat.rgb += ambient_colour.rgb;
         }
     }
-    world_pos.xy += interp * interp_amount;
     gl_Position = viewproj * world_pos;
     fog_z = gl_Position.z;
 }

@@ -27,10 +27,9 @@ layout(std140) uniform RenderState {
     vec4 fog_colour; // padded vec3
 };
 
-uniform sampler2D tex; // can't put this in the state because it's opaque
+uniform sampler2D tex;
 
 in vec2 frag_tex_coord;
-in vec4 frag_atlas_xywh;
 in vec4 frag_blend;
 flat in vec4 frag_blend_flat;
 in float fog_z;
@@ -42,43 +41,7 @@ void main() {
     if (frag_tex_coord.x < -0.5) {
         tex_col = vec4(1.0);
     } else {
-        vec2 tex_size = vec2(textureSize(tex, 0));
-        vec2 sprite_coord;
-        // get colour from texture
-        // keep in mind: the center of a pixel is where its colour is in full; we get the top-left as input
-        if (repeat) {
-            // get coordinate on sprite but wrapped around (note that fract(x) is equivalent to mod(x, 1.0) and is always positive)
-            sprite_coord = fract(frag_tex_coord) * frag_atlas_xywh.zw;
-            if (lerp) {
-                // get the exact colour of each of the four pixels this coordinate is near, and mix them
-                vec2 floor_coord = floor(sprite_coord - 0.5);
-
-                vec2 topleft = (frag_atlas_xywh.xy + mod(floor_coord + 0.5, frag_atlas_xywh.zw)) / tex_size;
-                vec2 botright = (frag_atlas_xywh.xy + mod(floor_coord + 1.5, frag_atlas_xywh.zw)) / tex_size;
-
-                vec4 sampleTL = texture(tex, topleft);
-                vec4 sampleTR = texture(tex, vec2(botright.x,topleft.y));
-                vec4 sampleBL = texture(tex, vec2(topleft.x,botright.y));
-                vec4 sampleBR = texture(tex, botright);
-
-                vec2 factor = fract(sprite_coord + 0.5);
-                vec4 mix_top = mix(sampleTL, sampleTR, factor.x);
-                vec4 mix_bot = mix(sampleBL, sampleBR, factor.x);
-                tex_col = mix(mix_top, mix_bot, factor.y);
-            } else {
-                // we've already done the wrapping, so clamp to center of edge pixels
-                sprite_coord = clamp(sprite_coord, vec2(0.5), frag_atlas_xywh.zw - 0.5);
-                tex_col = texture(tex, (frag_atlas_xywh.xy + sprite_coord) / tex_size);
-            }
-        } else {
-            // Analytical Sharp Bilinear: crisp pixel-art with zero driver stall (<0.15ms on PowerVR GE8320)
-            vec2 texel = frag_tex_coord * frag_atlas_xywh.zw;
-            vec2 texel_floor = floor(texel);
-            vec2 texel_fract = fract(texel);
-            vec2 sharp_fract = clamp(texel_fract / max(fwidth(texel), vec2(0.0001)), 0.0, 1.0) - 0.5;
-            sprite_coord = clamp(texel_floor + 0.5 + sharp_fract, vec2(0.5), frag_atlas_xywh.zw - 0.5);
-            tex_col = texture(tex, (frag_atlas_xywh.xy + sprite_coord) / tex_size);
-        }
+        tex_col = texture(tex, frag_tex_coord);
     }
     vec4 colour = tex_col * frag_blend * frag_blend_flat;
     // apply fog

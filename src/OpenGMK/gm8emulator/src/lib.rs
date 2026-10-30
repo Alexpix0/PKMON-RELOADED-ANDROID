@@ -20,6 +20,7 @@ mod tile;
 mod types;
 mod util;
 pub mod profile;
+pub mod collision;
 
 #[cfg(target_os = "android")]
 mod android_main;

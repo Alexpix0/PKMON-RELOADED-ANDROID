@@ -208,8 +208,9 @@ pub struct RendererImpl {
     /// because another pass (the touch overlay, for one) may have changed them in between, and on
     /// some drivers — PowerVR among them — drawing with the wrong vertex array produces nothing.
     program: GLuint,
-    vao: GLuint,
-    commands_vbo: GLuint,
+    vao_ping_pong: [GLuint; 2],
+    vbo_ping_pong: [GLuint; 2],
+    active_vbo_index: usize,
     static_quad_ebo: GLuint,
     atlas_packers: Vec<DensePacker>,
     texture_ids: Vec<Option<GLuint>>,
@@ -440,8 +441,8 @@ impl VertexBuffer {
         let old = pack_colour(old.0, old.1);
         let new = pack_colour(new.0, new.1);
         for vert in self.points.iter_mut().chain(&mut self.lines).chain(&mut self.tris) {
-            if vert.blend == old {
-                vert.blend = new;
+            if vert.color == old {
+                vert.color = new;
             }
         }
     }
@@ -685,11 +686,6 @@ impl RendererImpl {
             // Use DX provoking vertex convention
             gl.ProvokingVertex(gl::FIRST_VERTEX_CONVENTION);
 
-            // Create and bind the VBO once
-            let mut commands_vbo: GLuint = 0;
-            gl.GenBuffers(1, &mut commands_vbo);
-            gl.BindBuffer(gl::ARRAY_BUFFER, commands_vbo);
-
             // Precomputar EBO estático para quads con índices [0, 1, 2, 2, 3, 0]
             const MAX_QUADS: usize = 10920;
             let mut quad_indices: Vec<u16> = Vec::with_capacity(MAX_QUADS * 6);
@@ -712,56 +708,38 @@ impl RendererImpl {
                 gl::STATIC_DRAW,
             );
 
-            // layout (location = 0) in vec3 pos;
-            // layout (location = 1) in vec4 blend (normalizado desde u32 ABGR);
-            // layout (location = 2) in vec2 tex_coord;
-            // layout (location = 3) in vec4 atlas_xywh;
-            // layout (location = 4) in vec2 interp;
-            gl.EnableVertexAttribArray(0);
-            gl.VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<Vertex>() as i32,
-                offset_of!(Vertex, pos) as *const _,
-            );
-            gl.EnableVertexAttribArray(1);
-            gl.VertexAttribPointer(
-                1,
-                4,
-                gl::UNSIGNED_BYTE,
-                gl::TRUE,
-                size_of::<Vertex>() as i32,
-                offset_of!(Vertex, blend) as *const _,
-            );
-            gl.EnableVertexAttribArray(2);
-            gl.VertexAttribPointer(
-                2,
-                2,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<Vertex>() as i32,
-                offset_of!(Vertex, tex_coord) as *const _,
-            );
-            gl.EnableVertexAttribArray(3);
-            gl.VertexAttribPointer(
-                3,
-                4,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<Vertex>() as i32,
-                offset_of!(Vertex, atlas_xywh) as *const _,
-            );
-            gl.EnableVertexAttribArray(4);
-            gl.VertexAttribPointer(
-                4,
-                2,
-                gl::FLOAT,
-                gl::FALSE,
-                size_of::<Vertex>() as i32,
-                offset_of!(Vertex, interp) as *const _,
-            );
+            // Double buffering ping-pong VBOs and VAOs preallocated for zero stalls
+            let mut vao_ping_pong: [GLuint; 2] = [0; 2];
+            let mut vbo_ping_pong: [GLuint; 2] = [0; 2];
+            gl.GenVertexArrays(2, vao_ping_pong.as_mut_ptr());
+            gl.GenBuffers(2, vbo_ping_pong.as_mut_ptr());
+
+            const MAX_VERTEX_CAPACITY: usize = 65536 * 20;
+            let stride = std::mem::size_of::<Vertex2D>() as i32; // 20 bytes
+
+            for i in 0..2 {
+                gl.BindVertexArray(vao_ping_pong[i]);
+                gl.BindBuffer(gl::ARRAY_BUFFER, vbo_ping_pong[i]);
+                gl.BufferData(
+                    gl::ARRAY_BUFFER,
+                    MAX_VERTEX_CAPACITY as _,
+                    std::ptr::null(),
+                    gl::DYNAMIC_DRAW,
+                );
+
+                gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, static_quad_ebo);
+
+                // layout (location = 0) in vec2 in_pos (offset 0, 2 floats)
+                gl.EnableVertexAttribArray(0);
+                gl.VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, stride, 0 as *const _);
+                // layout (location = 1) in vec4 in_color (offset 16, 4 unsigned bytes normalized)
+                gl.EnableVertexAttribArray(1);
+                gl.VertexAttribPointer(1, 4, gl::UNSIGNED_BYTE, gl::TRUE, stride, 16 as *const _);
+                // layout (location = 2) in vec2 in_uv (offset 8, 2 floats)
+                gl.EnableVertexAttribArray(2);
+                gl.VertexAttribPointer(2, 2, gl::FLOAT, gl::FALSE, stride, 8 as *const _);
+            }
+            gl.BindVertexArray(vao_ping_pong[0]);
 
             // Use program
             gl.UseProgram(program);
@@ -887,8 +865,9 @@ impl RendererImpl {
             let mut renderer = Self {
                 imp,
                 program,
-                vao,
-                commands_vbo,
+                vao_ping_pong,
+                vbo_ping_pong,
+                active_vbo_index: 0,
                 static_quad_ebo,
                 atlas_packers: vec![],
                 texture_ids: vec![],
@@ -1082,14 +1061,20 @@ impl RendererImpl {
         p2: [f32; 3], uv2: [f32; 2], c2: u32,
         p3: [f32; 3], uv3: [f32; 2], c3: u32,
     ) {
+        let ox = if self.interp_amount != 0.0 { self.draw_offset[0] * self.interp_amount } else { 0.0 };
+        let oy = if self.interp_amount != 0.0 { self.draw_offset[1] * self.interp_amount } else { 0.0 };
+        let v0 = Vertex2D { x: p0[0] + ox, y: p0[1] + oy, u: uv0[0], v: uv0[1], color: c0 };
+        let v1 = Vertex2D { x: p1[0] + ox, y: p1[1] + oy, u: uv1[0], v: uv1[1], color: c1 };
+        let v2 = Vertex2D { x: p2[0] + ox, y: p2[1] + oy, u: uv2[0], v: uv2[1], color: c2 };
+        let v3 = Vertex2D { x: p3[0] + ox, y: p3[1] + oy, u: uv3[0], v: uv3[1], color: c3 };
+
         if self.hud_batch_active {
-            let atlas_xywh = atlas_ref.into();
             if atlas_ref.atlas_id == self.white_pixel.atlas_id {
                 self.hud_quads.reserve(4);
-                self.hud_quads.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, atlas_xywh, blend: c0 });
-                self.hud_quads.push(Vertex { pos: p1, interp: [0.0, 0.0], tex_coord: uv1, atlas_xywh, blend: c1 });
-                self.hud_quads.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, atlas_xywh, blend: c2 });
-                self.hud_quads.push(Vertex { pos: p3, interp: [0.0, 0.0], tex_coord: uv3, atlas_xywh, blend: c3 });
+                self.hud_quads.push(v0);
+                self.hud_quads.push(v1);
+                self.hud_quads.push(v2);
+                self.hud_quads.push(v3);
                 return;
             } else {
                 if !self.hud_sprites.is_empty() && self.hud_sprite_atlas != atlas_ref.atlas_id {
@@ -1100,10 +1085,10 @@ impl RendererImpl {
                 }
                 self.hud_sprite_atlas = atlas_ref.atlas_id;
                 self.hud_sprites.reserve(4);
-                self.hud_sprites.push(Vertex { pos: p0, interp: [0.0, 0.0], tex_coord: uv0, atlas_xywh, blend: c0 });
-                self.hud_sprites.push(Vertex { pos: p1, interp: [0.0, 0.0], tex_coord: uv1, atlas_xywh, blend: c1 });
-                self.hud_sprites.push(Vertex { pos: p2, interp: [0.0, 0.0], tex_coord: uv2, atlas_xywh, blend: c2 });
-                self.hud_sprites.push(Vertex { pos: p3, interp: [0.0, 0.0], tex_coord: uv3, atlas_xywh, blend: c3 });
+                self.hud_sprites.push(v0);
+                self.hud_sprites.push(v1);
+                self.hud_sprites.push(v2);
+                self.hud_sprites.push(v3);
                 return;
             }
         }
@@ -1112,13 +1097,11 @@ impl RendererImpl {
             self.current_atlas = atlas_ref.atlas_id;
         }
         self.setup_queue(atlas_ref.atlas_id, PrimitiveShape::Quad);
-        let atlas_xywh = atlas_ref.into();
-        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
         self.vertex_queue.reserve(4);
-        self.vertex_queue.push(Vertex { pos: p0, interp, tex_coord: uv0, atlas_xywh, blend: c0 });
-        self.vertex_queue.push(Vertex { pos: p1, interp, tex_coord: uv1, atlas_xywh, blend: c1 });
-        self.vertex_queue.push(Vertex { pos: p2, interp, tex_coord: uv2, atlas_xywh, blend: c2 });
-        self.vertex_queue.push(Vertex { pos: p3, interp, tex_coord: uv3, atlas_xywh, blend: c3 });
+        self.vertex_queue.push(v0);
+        self.vertex_queue.push(v1);
+        self.vertex_queue.push(v2);
+        self.vertex_queue.push(v3);
     }
 
     fn push_primitive(&mut self, builder: &PrimitiveBuilder) {
@@ -1140,16 +1123,7 @@ impl RendererImpl {
             }
         }
         self.setup_queue(builder.get_atlas_id(), builder.get_shape());
-        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
-        if interp != [0.0, 0.0] {
-            let start = self.vertex_queue.len();
-            self.vertex_queue.extend_from_slice(builder.get_vertices());
-            for v in &mut self.vertex_queue[start..] {
-                v.interp = interp;
-            }
-        } else {
-            self.vertex_queue.extend_from_slice(builder.get_vertices());
-        }
+        self.vertex_queue.extend_from_slice(builder.get_vertices());
     }
 
     fn draw_buffer(&mut self, atlas_id: u32, shape: PrimitiveShape, buffer: &[Vertex]) {
@@ -1169,9 +1143,9 @@ impl RendererImpl {
                 self.gl.UseProgram(self.program);
                 self.current_program = Some(self.program);
             }
-            self.gl.BindVertexArray(self.vao);
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.commands_vbo);
-            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.static_quad_ebo);
+            let active_idx = self.active_vbo_index;
+            self.gl.BindVertexArray(self.vao_ping_pong[active_idx]);
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo_ping_pong[active_idx]);
 
             let tex_id = self.texture_ids[atlas_id as usize].unwrap();
             let filter_mode = if self.queue_render_state.interpolate_pixels.into() { gl::LINEAR } else { gl::NEAREST };
@@ -1186,15 +1160,14 @@ impl RendererImpl {
                 self.last_filter_mode = Some(filter_mode);
             }
 
-            self.gl.BufferData(
+            self.gl.BufferSubData(
                 gl::ARRAY_BUFFER,
-                (size_of::<Vertex>() * buffer.len()) as _,
+                0,
+                (buffer.len() * std::mem::size_of::<Vertex2D>()) as isize,
                 buffer.as_ptr().cast(),
-                gl::STREAM_DRAW,
             );
             debug_assert_eq!(self.gl.GetError(), 0);
 
-            self.gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.static_quad_ebo);
             self.gl.Uniform1f(self.loc_interp, self.interp_amount);
             if shape == PrimitiveShape::Quad {
                 let quad_count = (buffer.len() / 4).min(10920);
@@ -1207,6 +1180,8 @@ impl RendererImpl {
             } else {
                 self.gl.DrawArrays(shape.into(), 0, buffer.len() as i32);
             }
+
+            self.active_vbo_index = 1 - self.active_vbo_index;
         }
     }
 }
@@ -3922,8 +3897,17 @@ impl RendererTrait for RendererImpl {
         let (tex_left, tex_right) = if part_w < 0.0 { (tex_x1, tex_x0) } else { (tex_x0, tex_x1) };
         let (tex_top, tex_bottom) = if part_h < 0.0 { (tex_y1, tex_y0) } else { (tex_y0, tex_y1) };
 
-        let (tex_left, tex_top, tex_right, tex_bottom) =
-            (tex_left as f32, tex_top as f32, tex_right as f32, tex_bottom as f32);
+        let (atlas_w, atlas_h) = if (atlas_ref.atlas_id as usize) < self.atlas_packers.len() {
+            let (aw, ah) = self.atlas_packers[atlas_ref.atlas_id as usize].size();
+            (aw as f32, ah as f32)
+        } else {
+            (1.0, 1.0)
+        };
+
+        let u0 = (atlas_ref.x as f32 + tex_left as f32 * atlas_ref.w as f32) / atlas_w;
+        let u1 = (atlas_ref.x as f32 + tex_right as f32 * atlas_ref.w as f32) / atlas_w;
+        let v0 = (atlas_ref.y as f32 + tex_top as f32 * atlas_ref.h as f32) / atlas_h;
+        let v1 = (atlas_ref.y as f32 + tex_bottom as f32 * atlas_ref.h as f32) / atlas_h;
 
         let depth = self.depth;
 
@@ -3935,10 +3919,10 @@ impl RendererTrait for RendererImpl {
         // push the vertices directly with zero-allocation batching
         self.push_sprite_quad(
             atlas_ref,
-            rotate(left, top), [tex_left, tex_top], pack_colour(col1, alpha),
-            rotate(right, top), [tex_right, tex_top], pack_colour(col2, alpha),
-            rotate(right, bottom), [tex_right, tex_bottom], pack_colour(col3, alpha),
-            rotate(left, bottom), [tex_left, tex_bottom], pack_colour(col4, alpha),
+            rotate(left, top), [u0, v0], pack_colour(col1, alpha),
+            rotate(right, top), [u1, v0], pack_colour(col2, alpha),
+            rotate(right, bottom), [u1, v1], pack_colour(col3, alpha),
+            rotate(left, bottom), [u0, v1], pack_colour(col4, alpha),
         );
     }
 
@@ -3962,16 +3946,17 @@ impl RendererTrait for RendererImpl {
 
         self.set_texture_repeat(false);
 
-        // get texture corners
-        let tex_left = 0.0;
-        let tex_top = 0.0;
-        let tex_right = tex_left + 1.0;
-        let tex_bottom = tex_top + 1.0;
+        let (atlas_w, atlas_h) = if (atlas_ref.atlas_id as usize) < self.atlas_packers.len() {
+            let (aw, ah) = self.atlas_packers[atlas_ref.atlas_id as usize].size();
+            (aw as f32, ah as f32)
+        } else {
+            (1.0, 1.0)
+        };
+        let u0 = atlas_ref.x as f32 / atlas_w;
+        let u1 = (atlas_ref.x as f32 + atlas_ref.w as f32) / atlas_w;
+        let v0 = atlas_ref.y as f32 / atlas_h;
+        let v1 = (atlas_ref.y as f32 + atlas_ref.h as f32) / atlas_h;
 
-        let (tex_left, tex_top, tex_right, tex_bottom) =
-            (tex_left as f32, tex_top as f32, tex_right as f32, tex_bottom as f32);
-
-        let normal = [0.0, 0.0, 0.0];
         let depth = self.depth;
 
         // correct for gm offset
@@ -3983,10 +3968,10 @@ impl RendererTrait for RendererImpl {
         let c = pack_colour(0xffffff, alpha);
         self.push_sprite_quad(
             atlas_ref,
-            correct(x1, y1), [tex_left, tex_top], c,
-            correct(x2, y2), [tex_right, tex_top], c,
-            correct(x3, y3), [tex_right, tex_bottom], c,
-            correct(x4, y4), [tex_left, tex_bottom], c,
+            correct(x1, y1), [u0, v0], c,
+            correct(x2, y2), [u1, v0], c,
+            correct(x3, y3), [u1, v1], c,
+            correct(x4, y4), [u0, v1], c,
         );
     }
 
@@ -4000,7 +3985,7 @@ impl RendererTrait for RendererImpl {
         let p1 = [x2 as f32, y1 as f32, self.depth];
         let p2 = [x2 as f32, y2 as f32, self.depth];
         let p3 = [x1 as f32, y2 as f32, self.depth];
-        let uv = [0.0, 0.0];
+        let uv = [-1000.0, -1000.0];
         self.push_sprite_quad(self.white_pixel, p0, uv, c, p1, uv, c, p2, uv, c, p3, uv, c);
     }
 
@@ -4045,7 +4030,7 @@ impl RendererTrait for RendererImpl {
             let p1 = [x2 as f32, y1 as f32, self.depth];
             let p2 = [x2 as f32, y2 as f32, self.depth];
             let p3 = [x1 as f32, y2 as f32, self.depth];
-            let uv = [0.0, 0.0];
+            let uv = [-1000.0, -1000.0];
             self.push_sprite_quad(self.white_pixel, p0, uv, col0, p1, uv, col1, p2, uv, col2, p3, uv, col3);
             return;
         }
@@ -4061,13 +4046,14 @@ impl RendererTrait for RendererImpl {
 
     fn draw_point(&mut self, x: f64, y: f64, colour: i32, alpha: f64) {
         self.setup_queue(self.white_pixel.atlas_id, PrimitiveShape::Point);
-        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
-        self.vertex_queue.push(Vertex {
-            pos: [x as f32, y as f32, self.depth],
-            interp,
-            tex_coord: [-1000.0, -1000.0],
-            atlas_xywh: self.white_pixel.into(),
-            blend: pack_colour(colour, alpha),
+        let ox = if self.interp_amount != 0.0 { self.draw_offset[0] * self.interp_amount } else { 0.0 };
+        let oy = if self.interp_amount != 0.0 { self.draw_offset[1] * self.interp_amount } else { 0.0 };
+        self.vertex_queue.push(Vertex2D {
+            x: x as f32 + ox,
+            y: y as f32 + oy,
+            u: -1000.0,
+            v: -1000.0,
+            color: pack_colour(colour, alpha),
         });
     }
 
@@ -4765,8 +4751,8 @@ impl RendererTrait for RendererImpl {
             self.gl.BindVertexArray(self.sharp_vao);
             self.gl.DrawArrays(gl::TRIANGLES, 0, 6);
 
-            self.gl.BindVertexArray(self.vao);
-            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.commands_vbo);
+            self.gl.BindVertexArray(self.vao_ping_pong[self.active_vbo_index]);
+            self.gl.BindBuffer(gl::ARRAY_BUFFER, self.vbo_ping_pong[self.active_vbo_index]);
 
             self.gl.BindFramebuffer(gl::DRAW_FRAMEBUFFER, fb_old as u32);
             self.gl.Enable(gl::BLEND);

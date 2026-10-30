@@ -3522,20 +3522,28 @@ impl Game {
                     let mut offset = 0u32;
                     while offset < total_w {
                         let remaining = total_w - offset;
-                        let mask = if remaining >= 64 {
-                            !0u64
+                        if remaining >= 128 {
+                            let w1_0 = collider1.get_row_u64(y1_loc as u32, (x1_start + offset as i32) as u32);
+                            let w1_1 = collider1.get_row_u64(y1_loc as u32, (x1_start + (offset + 64) as i32) as u32);
+                            let w2_0 = collider2.get_row_u64(y2_loc as u32, (x2_start + offset as i32) as u32);
+                            let w2_1 = collider2.get_row_u64(y2_loc as u32, (x2_start + (offset + 64) as i32) as u32);
+                            if crate::collision::check_overlap_128([w1_0, w1_1], [w2_0, w2_1], [!0u64, !0u64]) {
+                                return true;
+                            }
+                            offset += 128;
                         } else {
-                            (1u64 << remaining) - 1
-                        };
-
-                        let w1 = collider1.get_row_u64(y1_loc as u32, (x1_start + offset as i32) as u32);
-                        let w2 = collider2.get_row_u64(y2_loc as u32, (x2_start + offset as i32) as u32);
-
-                        if ((w1 & w2) & mask) != 0 {
-                            return true;
+                            let mask = if remaining >= 64 {
+                                !0u64
+                            } else {
+                                (1u64 << remaining) - 1
+                            };
+                            let w1 = collider1.get_row_u64(y1_loc as u32, (x1_start + offset as i32) as u32);
+                            let w2 = collider2.get_row_u64(y2_loc as u32, (x2_start + offset as i32) as u32);
+                            if crate::collision::check_overlap_u64(w1, w2, mask) {
+                                return true;
+                            }
+                            offset += 64;
                         }
-
-                        offset += 64;
                     }
                 }
                 return false;

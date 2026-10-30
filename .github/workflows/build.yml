@@ -42,7 +42,7 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
-          RUSTFLAGS: "-C target-feature=+neon,+fp16,+dotprod -C llvm-args=-inline-threshold=500 -C link-arg=-Wl,--gc-sections"
+          RUSTFLAGS: "-C target-feature=+neon,+fp-armv8,+dotprod,+fp16 -C llvm-args=-inline-threshold=500 -C link-arg=-Wl,--gc-sections -C link-arg=-Wl,-Bsymbolic -C link-arg=-Wl,--no-undefined -C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384"
         run: |
           cd src/OpenGMK
           rustup target add aarch64-linux-android

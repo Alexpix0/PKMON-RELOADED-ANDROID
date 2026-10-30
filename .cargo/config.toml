@@ -1,2 +1,9 @@
 [target.aarch64-linux-android]
-rustflags = ["-C", "target-feature=+neon,+fp16,+dotprod"]
+rustflags = [
+    "-C", "target-feature=+neon,+fp-armv8,+dotprod,+fp16",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "link-arg=-Wl,-Bsymbolic",
+    "-C", "link-arg=-Wl,--no-undefined",
+    "-C", "link-arg=-Wl,-z,max-page-size=16384",
+    "-C", "link-arg=-Wl,-z,common-page-size=16384",
+]

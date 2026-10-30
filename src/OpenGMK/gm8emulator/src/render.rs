@@ -233,20 +233,17 @@ impl From<PrimitiveType> for PrimitiveShape {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-#[repr(C)]
-struct Vertex {
-    pub pos: [f32; 3],
-    /// How far this vertex was from where it should be, in world pixels, when it was submitted.
-    ///
-    /// The shader subtracts this by `interp_amount`, so the same frame can be presented at any point
-    /// between the previous game step and the current one without touching the game state.
-    #[serde(skip)]
-    pub interp: [f32; 2],
-    pub tex_coord: [f32; 2],
-    pub atlas_xywh: [f32; 4],
-    pub blend: u32,
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[repr(C, packed)]
+pub struct Vertex2D {
+    pub x: f32,
+    pub y: f32,
+    pub u: f32,
+    pub v: f32,
+    pub color: u32,
 }
+
+pub type Vertex = Vertex2D;
 
 /// A builder to be used for building primitives.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -304,14 +301,15 @@ impl PrimitiveBuilder {
 
     #[inline(always)]
     fn push_vertex(&mut self, pos: [f32; 3], tex_coord: [f32; 2], blend: u32) -> &mut Self {
-        let tex_coord = if self.textured { tex_coord } else { [-1000.0, -1000.0] };
-        let interp = if self.interp_amount != 0.0 { self.draw_offset } else { [0.0, 0.0] };
-        self.push_vertex_raw(Vertex {
-            pos,
-            interp,
-            tex_coord,
-            atlas_xywh: self.atlas_ref.into(),
-            blend,
+        let (u, v) = if self.textured { (tex_coord[0], tex_coord[1]) } else { (-1000.0, -1000.0) };
+        let ox = if self.interp_amount != 0.0 { self.draw_offset[0] * self.interp_amount } else { 0.0 };
+        let oy = if self.interp_amount != 0.0 { self.draw_offset[1] * self.interp_amount } else { 0.0 };
+        self.push_vertex_raw(Vertex2D {
+            x: pos[0] + ox,
+            y: pos[1] + oy,
+            u,
+            v,
+            color: blend,
         });
         self
     }

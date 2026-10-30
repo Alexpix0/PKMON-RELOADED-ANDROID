@@ -43,7 +43,7 @@ pub struct Collider {
     pub bbox_bottom: u32,
     pub data: Box<[bool]>,
     #[serde(default)]
-    pub bitmask: Vec<u64>,
+    pub bitmask: Box<[u64]>,
     #[serde(default)]
     pub is_empty_mask: bool,
     #[serde(default)]
@@ -160,9 +160,9 @@ fn make_bbox(coll: impl Fn(u32, u32) -> bool, frame_width: u32, frame_height: u3
 }
 
 /// Packs boolean pixel data into 64-bit word rows for SIMD/u64 bitwise collision acceleration.
-pub fn build_bitmask_from_data(data: &[bool], width: u32, height: u32) -> Vec<u64> {
+pub fn build_bitmask_from_data(data: &[bool], width: u32, height: u32) -> Box<[u64]> {
     if width == 0 || height == 0 {
-        return Vec::new();
+        return Vec::new().into_boxed_slice();
     }
     let words_per_row = ((width + 63) / 64) as usize;
     let mut bitmask = vec![0u64; words_per_row * height as usize];
@@ -177,7 +177,7 @@ pub fn build_bitmask_from_data(data: &[bool], width: u32, height: u32) -> Vec<u6
             }
         }
     }
-    bitmask
+    bitmask.into_boxed_slice()
 }
 
 /// Creates a collider from the given collision data and dimensions, giving it an appropriate bounding box.
